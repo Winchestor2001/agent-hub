@@ -179,3 +179,21 @@ export interface TaskCreate {
   milestone?: string;
   acceptance_criteria: string[];
 }
+
+export interface SessionOptions {
+  agents: string[];
+  /** `{task_id}` o'rinbosari bor; vazifa tanlansa prompt shu matn bilan boshlanadi. */
+  prompt_template: string;
+}
+
+export interface SessionStart {
+  agent: string;
+  cwd?: string;
+  task_id?: string;
+  prompt: string;
+}
+
+export interface SessionResume {
+  agent: string;
+  session_id: string;
+}

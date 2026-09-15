@@ -7,6 +7,10 @@ import type {
   Project,
   ProjectCreate,
   ProjectsResponse,
+  LivePane,
+  SessionOptions,
+  SessionResume,
+  SessionStart,
   SessionsResponse,
   TaskCreate,
   TaskDetail,
@@ -22,7 +26,8 @@ export const queryKeys = {
   health: ["health"],
   projects: ["projects"],
   liveSessions: ["sessions", "live"],
-  pastSessions: ["sessions", "past"],
+  pastSessions: (projectId: string) => ["sessions", "past", projectId] as const,
+  sessionOptions: ["sessions", "options"],
   board: (projectId: string) => ["board", projectId] as const,
   tasks: (projectId: string) => ["task", projectId] as const,
   task: (projectId: string, taskId: string) => ["task", projectId, taskId] as const,
@@ -75,13 +80,25 @@ export function useLiveSessions() {
   });
 }
 
-export function usePastSessions() {
+/** Tanlangan loyihaning o'tgan sessiyalari (davom ettirish loyiha nomidan bo'ladi). */
+export function usePastSessions(projectId: string) {
   return useQuery({
-    queryKey: queryKeys.pastSessions,
+    queryKey: queryKeys.pastSessions(projectId),
     queryFn: ({ signal }) =>
-      apiFetch<SessionsResponse>(`/api/sessions?past_limit=${String(PAST_LIMIT)}`, { signal }),
+      apiFetch<SessionsResponse>(
+        `/api/sessions?project=${enc(projectId)}&past_limit=${String(PAST_LIMIT)}`,
+        { signal },
+      ),
     select: (data) => data.past,
     refetchInterval: PAST_POLL_MS,
+  });
+}
+
+export function useSessionOptions() {
+  return useQuery({
+    queryKey: queryKeys.sessionOptions,
+    queryFn: ({ signal }) => apiFetch<SessionOptions>("/api/sessions/options", { signal }),
+    staleTime: Infinity,
   });
 }
 
@@ -166,5 +183,38 @@ export function useRemoveProject() {
       client.removeQueries({ queryKey: queryKeys.tasks(projectId) });
       return client.invalidateQueries({ queryKey: queryKeys.projects });
     },
+  });
+}
+
+/** Yangi pane: jonli ro'yxat, loyiha hisoblagichlari va doska kartochkalari yangilanadi. */
+function useInvalidateSessions() {
+  const client = useQueryClient();
+  return (projectId: string) =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: ["sessions"] }),
+      client.invalidateQueries({ queryKey: queryKeys.projects }),
+      client.invalidateQueries({ queryKey: queryKeys.board(projectId) }),
+      client.invalidateQueries({ queryKey: queryKeys.tasks(projectId) }),
+    ]);
+}
+
+export function useStartSession(projectId: string) {
+  const invalidate = useInvalidateSessions();
+  return useMutation({
+    mutationFn: (body: SessionStart) =>
+      apiFetch<LivePane>(`/api/projects/${enc(projectId)}/sessions`, { method: "POST", body }),
+    onSuccess: () => invalidate(projectId),
+  });
+}
+
+export function useResumeSession(projectId: string) {
+  const invalidate = useInvalidateSessions();
+  return useMutation({
+    mutationFn: (body: SessionResume) =>
+      apiFetch<LivePane>(`/api/projects/${enc(projectId)}/sessions/resume`, {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => invalidate(projectId),
   });
 }

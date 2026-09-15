@@ -16,11 +16,20 @@ import { useI18n } from "../i18n/context";
 import { CreateTaskDialog } from "./CreateTaskDialog";
 import { ErrorText } from "./ErrorText";
 import { Panel } from "./Panel";
+import { StateBadge } from "./SessionBits";
 import { TaskDetailDrawer } from "./TaskDetailDrawer";
 
 const DRAG_TYPE = "application/x-agent-hub-task";
 
-export function BoardPanel({ project }: { project: ProjectItem | null }) {
+interface BoardPanelProps {
+  project: ProjectItem | null;
+  openTaskId: string | null;
+  onOpenTask: (taskId: string | null) => void;
+  /** Yangi sessiya dialogi; vazifa detalidan chaqirilsa vazifa oldindan tanlanadi. */
+  onStartSession: (taskId: string | null) => void;
+}
+
+export function BoardPanel({ project, openTaskId, onOpenTask, onStartSession }: BoardPanelProps) {
   const { t } = useI18n();
 
   if (!project) {
@@ -40,19 +49,24 @@ export function BoardPanel({ project }: { project: ProjectItem | null }) {
       {project.error ? (
         <ErrorText error={project.error} />
       ) : (
-        // Loyiha almashsa filtr, tanlangan vazifa va dialoglar tozalanadi.
-        <BoardView key={project.id} projectId={project.id} />
+        // Loyiha almashsa filtr va dialoglar tozalanadi.
+        <BoardView
+          key={project.id}
+          projectId={project.id}
+          openTaskId={openTaskId}
+          onOpenTask={onOpenTask}
+          onStartSession={onStartSession}
+        />
       )}
     </Panel>
   );
 }
 
-function BoardView({ projectId }: { projectId: string }) {
+function BoardView({ projectId, openTaskId, onOpenTask, onStartSession }: Omit<BoardPanelProps, "project"> & { projectId: string }) {
   const { t } = useI18n();
   const board = useBoard(projectId);
   const setStatus = useSetStatus(projectId);
   const [filter, setFilter] = useState<BoardFilter>(EMPTY_FILTER);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   if (!board.data) {
@@ -84,7 +98,7 @@ function BoardView({ projectId }: { projectId: string }) {
         filter={filter}
         openTaskId={openTaskId}
         pendingTaskId={setStatus.isPending ? setStatus.variables.taskId : null}
-        onOpen={setOpenTaskId}
+        onOpen={onOpenTask}
         onMove={(taskId, status) => {
           setStatus.mutate({ taskId, status });
         }}
@@ -95,9 +109,10 @@ function BoardView({ projectId }: { projectId: string }) {
           projectId={projectId}
           taskId={openTaskId}
           board={board.data}
-          onOpen={setOpenTaskId}
+          onOpen={onOpenTask}
+          onStartSession={onStartSession}
           onClose={() => {
-            setOpenTaskId(null);
+            onOpenTask(null);
           }}
         />
       )}
@@ -108,7 +123,7 @@ function BoardView({ projectId }: { projectId: string }) {
           onClose={() => {
             setCreating(false);
           }}
-          onCreated={setOpenTaskId}
+          onCreated={onOpenTask}
         />
       )}
     </div>
@@ -314,6 +329,16 @@ function TaskCard({ task, open, pending, onOpen, onDragStart, onDragEnd }: TaskC
         {task.assignees.length > 0 && <span className="card-assignee">{task.assignees.join(", ")}</span>}
       </span>
       <span className="card-title">{task.title}</span>
+      {task.sessions.length > 0 && (
+        <span className="card-sessions" title={t("card.sessions_title")}>
+          {task.sessions.map((pane) => (
+            <span key={pane.id} className="card-session">
+              <span className="mono">{pane.agent}</span>
+              <StateBadge state={pane.state} approximate={pane.approximate} />
+            </span>
+          ))}
+        </span>
+      )}
       {(task.labels.length > 0 || task.acceptance_criteria_count > 0 || task.dod_count > 0) && (
         <span className="card-meta">
           {task.labels.map((label) => (

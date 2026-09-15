@@ -82,6 +82,24 @@ def resume_session_id(argv: Sequence[str]) -> str | None:
     return None
 
 
+def open_session_ids(panes: Iterable[Pane]) -> set[str]:
+    """Tirik pane'larda ochiq sessiyalar: hook bergan `session_id` va `--resume` qilingan ID.
+
+    KanBot sessiyani faqat fayl yaqinda yozilganda `active` deydi; jim turgan pane'dagi sessiya
+    ham ochiq — uni ikkinchi marta davom ettirib bo'lmaydi.
+    """
+    ids: set[str] = set()
+    for pane in panes:
+        if not pane.alive:
+            continue
+        if pane.session_id:
+            ids.add(pane.session_id)
+        resumed = resume_session_id(pane.argv)
+        if resumed:
+            ids.add(resumed)
+    return ids
+
+
 def is_valid_session_id(session_id: str) -> bool:
     return bool(_SESSION_ID_RE.match(session_id))
 

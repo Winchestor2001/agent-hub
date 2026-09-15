@@ -4,17 +4,27 @@ import { useAddLabels, useSetStatus, useTaskDetail } from "../api/queries";
 import type { Board, ChecklistItem, TaskDetail } from "../api/types";
 import { collectLabels, milestoneTitle, splitList } from "../board/model";
 import { useI18n } from "../i18n/context";
+import { paneActivity } from "../sessions/model";
 import { ErrorText } from "./ErrorText";
+import { Ago, StateBadge } from "./SessionBits";
 
 interface TaskDetailDrawerProps {
   projectId: string;
   taskId: string;
   board: Board;
   onOpen: (taskId: string) => void;
+  onStartSession: (taskId: string) => void;
   onClose: () => void;
 }
 
-export function TaskDetailDrawer({ projectId, taskId, board, onOpen, onClose }: TaskDetailDrawerProps) {
+export function TaskDetailDrawer({
+  projectId,
+  taskId,
+  board,
+  onOpen,
+  onStartSession,
+  onClose,
+}: TaskDetailDrawerProps) {
   const { t } = useI18n();
   const detail = useTaskDetail(projectId, taskId);
 
@@ -36,6 +46,16 @@ export function TaskDetailDrawer({ projectId, taskId, board, onOpen, onClose }: 
       <header className="drawer-header">
         <span className="card-id mono">{task?.id ?? taskId}</span>
         <h3 className="drawer-title">{task?.title}</h3>
+        <button
+          type="button"
+          className="button button-small"
+          title={t("task.start_session_title")}
+          onClick={() => {
+            onStartSession(task?.id ?? taskId);
+          }}
+        >
+          {t("task.start_session")}
+        </button>
         <button type="button" className="icon-button" aria-label={t("common.close")} onClick={onClose}>
           ×
         </button>
@@ -140,6 +160,25 @@ function DetailBody({ projectId, task, board, onOpen }: DetailBodyProps) {
           </>
         )}
       </dl>
+
+      <DetailSection title={t("task.sessions")} count={task.sessions.length}>
+        {task.sessions.length > 0 ? (
+          <ul className="links">
+            {task.sessions.map((pane) => (
+              <li key={pane.id} className="link-row" title={pane.cwd}>
+                <StateBadge state={pane.state} approximate={pane.approximate} />
+                <span className="mono">{pane.agent}</span>
+                <span className="link-row-title">{pane.title || pane.cwd}</span>
+                <Ago timestamp={paneActivity(pane)} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="muted">
+            {task.kanbot_available ? t("task.no_sessions") : t("sessions.unavailable")}
+          </span>
+        )}
+      </DetailSection>
 
       <Section title={t("task.description")} text={task.description} />
       <Checklist title={t("task.acceptance")} items={task.acceptance_criteria} />

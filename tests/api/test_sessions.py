@@ -48,6 +48,40 @@ def test_list_sessions(api: ApiEnv) -> None:
     )
 
 
+def test_session_open_in_live_pane_is_active(api: ApiEnv) -> None:
+    """KanBot fayl jim turgani uchun `active=False` desa ham, tirik pane'dagi sessiya ochiq."""
+    hooked = api.session(session_id="aaaaaaaa-hook")
+    resumed = api.session(session_id="bbbbbbbb-resume")
+    closed = api.session(session_id="cccccccc-closed")
+    dead = api.session(session_id="dddddddd-dead")
+    api.pane(session_id=hooked["session_id"])
+    api.pane(argv=["codex", "resume", resumed["session_id"]])
+    api.pane(session_id=dead["session_id"], state="done", alive=False)
+
+    past = api.client.get("/api/sessions").json()["past"]
+    active = {s["session_id"]: s["active"] for s in past}
+    assert active == {
+        hooked["session_id"]: True,
+        resumed["session_id"]: True,
+        closed["session_id"]: False,
+        dead["session_id"]: False,
+    }
+    url = "/api/projects/leveling/sessions/resume"
+    for session in (hooked, resumed):
+        body = {"agent": "codex", "session_id": session["session_id"]}
+        assert_error(api.client.post(url, json=body), 409, "session_active")
+    assert api.started == []
+
+
+def test_session_options_work_without_kanbot(api: ApiEnv) -> None:
+    api.kanbot_down = True
+    resp = api.client.get("/api/sessions/options")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"agents": ["claude", "codex"], "prompt_template": SESSION_PROMPT_TEMPLATE}
+    assert "{task_id}" in data["prompt_template"]
+
+
 def test_list_sessions_without_kanbot_is_503(api: ApiEnv) -> None:
     api.kanbot_down = True
     body = assert_error(api.client.get("/api/sessions"), 503, "kanbot_unavailable")

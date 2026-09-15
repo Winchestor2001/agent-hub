@@ -900,3 +900,142 @@ button.link-row:hover {
   justify-content: flex-end;
   gap: 6px;
 }
+
+/* --- sessiyalar --- */
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.state .dot {
+  background: var(--muted);
+}
+
+.state-blocked {
+  color: var(--danger);
+}
+
+.state-blocked .dot {
+  background: var(--danger);
+}
+
+.state-working .dot {
+  background: var(--ok);
+}
+
+.state-idle .dot {
+  background: var(--warn);
+}
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+.session:hover {
+  background: var(--panel-raised);
+}
+
+.session-top,
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.session-top .ago {
+  margin-left: auto;
+}
+
+.session-agent {
+  color: var(--fg);
+}
+
+.session-title {
+  overflow: hidden;
+  color: var(--fg-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-meta > .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-resume {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.section-blocked {
+  padding: 4px;
+  border: 1px solid #6b2a28;
+  border-radius: var(--radius);
+  background: var(--danger-bg);
+}
+
+.section-blocked .section-title {
+  color: var(--danger);
+}
+
+.section-blocked .session:hover {
+  background: rgb(248 81 73 / 10%);
+}
+
+.task-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.task-link:hover {
+  border-color: var(--accent);
+}
+
+.card-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.card-session {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.prompt-prefix {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  color: var(--muted);
+  font: 11px/1.4 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

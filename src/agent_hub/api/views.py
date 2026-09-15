@@ -136,7 +136,7 @@ def sort_panes(views: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def past_session_view(
-    session: AgentSession, project_id: str | None, task: TaskSummary | None
+    session: AgentSession, project_id: str | None, task: TaskSummary | None, *, active: bool
 ) -> dict[str, Any]:
     return {
         "agent": session.agent,
@@ -148,7 +148,7 @@ def past_session_view(
         "turns": session.turns,
         "started_at": session.started_at,
         "mtime": session.mtime,
-        "active": session.active,
+        "active": active,
         "runner_id": session.runner_id,
         "project_id": project_id,
         "task": task_ref(task),

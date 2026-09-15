@@ -8,9 +8,10 @@ from typing import Any
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from agent_hub.kanbot_client import SESSION_AGENTS
 from agent_hub.registry import Project
-from agent_hub.services.linking import project_for_path
-from agent_hub.services.sessions import TaskInfo, session_title
+from agent_hub.services.linking import open_session_ids, project_for_path
+from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE, TaskInfo, session_title
 
 from .deps import Hub, HubDep
 from .errors import ApiError
@@ -47,6 +48,12 @@ async def _indexes(hub: Hub, projects: list[Project]) -> dict[str, TaskIndex | N
     return {project.id: index for project, index in zip(projects, loaded, strict=True)}
 
 
+@router.get("/api/sessions/options")
+async def session_options() -> dict[str, Any]:
+    """Yangi sessiya dialogi uchun: ruxsat etilgan agentlar va prompt prefiksi (`{task_id}`)."""
+    return {"agents": list(SESSION_AGENTS), "prompt_template": SESSION_PROMPT_TEMPLATE}
+
+
 @router.get("/api/sessions")
 async def list_sessions(
     hub: HubDep,
@@ -74,6 +81,7 @@ async def list_sessions(
             pane_view(pane, live.states.get(pane.id), owner.id if owner else None, task)
         )
 
+    open_ids = open_session_ids(live.panes)
     past_views = []
     for session in live.sessions:
         # Loyihadan tashqaridagi sessiyani davom ettirib bo'lmaydi — ro'yxatga ham kirmaydi.
@@ -81,9 +89,9 @@ async def list_sessions(
         if owner is None or (project is not None and owner.id != project):
             continue
         index = indexes.get(owner.id)
-        past_views.append(
-            past_session_view(session, owner.id, index.for_session(session) if index else None)
-        )
+        task = index.for_session(session) if index else None
+        active = session.active or session.session_id in open_ids
+        past_views.append(past_session_view(session, owner.id, task, active=active))
     past_views.sort(key=lambda view: view["mtime"], reverse=True)
 
     return {"live": sort_panes(live_views), "past": past_views[:past_limit]}
@@ -108,13 +116,14 @@ async def start_session(hub: HubDep, project_id: str, body: SessionStart) -> dic
 @router.post("/api/projects/{project_id}/sessions/resume", status_code=201)
 async def resume_session(hub: HubDep, project_id: str, body: SessionResume) -> dict[str, Any]:
     project = hub.project(project_id)
-    sessions = await hub.kanbot.list_agent_sessions()
+    live = await hub.live()
     session = next(
-        (s for s in sessions if s.agent == body.agent and s.session_id == body.session_id), None
+        (s for s in live.sessions if s.agent == body.agent and s.session_id == body.session_id),
+        None,
     )
     if session is None:
         raise ApiError(404, "session_not_found", agent=body.agent, session_id=body.session_id)
-    if session.active:
+    if session.active or session.session_id in open_session_ids(live.panes):
         raise ApiError(409, "session_active", session_id=session.session_id)
     index = await TaskIndex.load_or_none(hub.backlog(project))
     task = index.for_session(session) if index else None

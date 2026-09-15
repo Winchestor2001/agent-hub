@@ -1,79 +1,225 @@
 import type { ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
-import { useLiveSessions, usePastSessions } from "../api/queries";
+import { useLiveSessions, usePastSessions, useResumeSession } from "../api/queries";
+import type { LivePane, PastSession, ProjectItem, TaskRef } from "../api/types";
 import { useI18n } from "../i18n/context";
+import { baseName, groupLive, paneActivity } from "../sessions/model";
 import { ErrorText } from "./ErrorText";
 import { Panel } from "./Panel";
+import { Ago, StateBadge } from "./SessionBits";
 
-interface Row {
-  key: string;
-  title: string;
-  meta: string;
+export type OpenTask = (projectId: string, taskId: string) => void;
+
+interface SessionsPanelProps {
+  project: ProjectItem | null;
+  projects: readonly ProjectItem[] | undefined;
+  onOpenTask: OpenTask;
+  onNewSession: () => void;
+}
+
+export function SessionsPanel({ project, projects, onOpenTask, onNewSession }: SessionsPanelProps) {
+  const { t } = useI18n();
+  const live = useLiveSessions();
+  const names = new Map(projects?.map((p) => [p.id, p.name]));
+  // Xatoda eski ro'yxat ko'rsatilmaydi: KanBot o'chsa "javob kutmoqda" ham yo'qoladi.
+  const groups = live.data && !live.error ? groupLive(live.data) : null;
+
+  return (
+    <Panel
+      title={t("panel.sessions")}
+      className="panel-sessions"
+      aside={
+        <button
+          type="button"
+          className="button button-small"
+          title={t("sessions.new_title")}
+          disabled={!project}
+          onClick={onNewSession}
+        >
+          {t("sessions.new")}
+        </button>
+      }
+    >
+      {groups && groups.blocked.length > 0 && (
+        <Section title={t("sessions.blocked")} count={groups.blocked.length} className="section-blocked">
+          <LiveList panes={groups.blocked} names={names} onOpenTask={onOpenTask} />
+        </Section>
+      )}
+      <Section title={t("sessions.live")} count={groups?.others.length}>
+        <QueryBody error={live.error} loaded={groups !== null} empty={groups?.others.length === 0}>
+          {groups && <LiveList panes={groups.others} names={names} onOpenTask={onOpenTask} />}
+        </QueryBody>
+      </Section>
+      {project ? (
+        <PastSection key={project.id} project={project} onOpenTask={onOpenTask} />
+      ) : (
+        <Section title={t("sessions.past")}>
+          <p className="muted">{t("sessions.no_project")}</p>
+        </Section>
+      )}
+    </Panel>
+  );
 }
 
 function Section({
   title,
-  rows,
-  error,
+  count,
+  className,
+  children,
 }: {
   title: string;
-  rows: Row[] | undefined;
-  error: ApiError | null;
+  count?: number | undefined;
+  className?: string;
+  children: ReactNode;
 }) {
-  const { t } = useI18n();
-  let body: ReactNode;
-  if (error?.code === "kanbot_unavailable") {
-    body = <p className="muted">{t("sessions.unavailable")}</p>;
-  } else if (error && !rows) {
-    body = <ErrorText error={error} />;
-  } else if (!rows) {
-    body = <p className="muted">{t("sessions.loading")}</p>;
-  } else if (rows.length === 0) {
-    body = <p className="muted">{t("sessions.none")}</p>;
-  } else {
-    body = (
-      <ul className="list">
-        {rows.map((row) => (
-          <li key={row.key} className="list-item list-item-static">
-            <span className="list-item-title">{row.title}</span>
-            <span className="muted">{row.meta}</span>
-          </li>
-        ))}
-      </ul>
-    );
-  }
   return (
-    <div className="section">
+    <div className={className ? `section ${className}` : "section"}>
       <h3 className="section-title">
         {title}
-        {rows && !error && <span className="count">{rows.length}</span>}
+        {count !== undefined && <span className="count">{count}</span>}
       </h3>
-      {body}
+      {children}
     </div>
   );
 }
 
-export function SessionsPanel() {
+/** KanBot o'chiq, xato, yuklanish va bo'sh holatlar — bitta joyda. */
+function QueryBody({
+  error,
+  loaded,
+  empty,
+  children,
+}: {
+  error: ApiError | null;
+  loaded: boolean;
+  empty: boolean | undefined;
+  children: ReactNode;
+}) {
   const { t } = useI18n();
-  const live = useLiveSessions();
-  const past = usePastSessions();
+  if (error?.code === "kanbot_unavailable") return <p className="muted">{t("sessions.unavailable")}</p>;
+  if (error && !loaded) return <ErrorText error={error} />;
+  if (!loaded) return <p className="muted">{t("sessions.loading")}</p>;
+  if (empty) return <p className="muted">{t("sessions.none")}</p>;
+  return children;
+}
 
-  const liveRows = live.data?.map((pane) => ({
-    key: pane.id,
-    title: pane.title || pane.agent,
-    meta: `${pane.agent} · ${pane.state}${pane.approximate ? " ≈" : ""}`,
-  }));
-  const pastRows = past.data?.map((session) => ({
-    key: `${session.agent}:${session.session_id}`,
-    title: session.title || session.name || session.session_id,
-    meta: session.agent,
-  }));
+function LiveList({
+  panes,
+  names,
+  onOpenTask,
+}: {
+  panes: LivePane[];
+  names: Map<string, string>;
+  onOpenTask: OpenTask;
+}) {
+  const { t } = useI18n();
+  return (
+    <ul className="list">
+      {panes.map((pane) => (
+        <li key={pane.id} className={`session session-${pane.state}`}>
+          <div className="session-top">
+            <StateBadge state={pane.state} approximate={pane.approximate} />
+            <span className="session-agent mono">{pane.agent}</span>
+            <Ago timestamp={paneActivity(pane)} />
+          </div>
+          <div className="session-title" title={pane.title || pane.cwd}>
+            {pane.title || baseName(pane.cwd)}
+          </div>
+          <div className="session-meta">
+            <span className="muted" title={pane.cwd}>
+              {pane.project_id
+                ? (names.get(pane.project_id) ?? pane.project_id)
+                : t("sessions.outside_project")}
+            </span>
+            {pane.project_id && pane.task && (
+              <TaskLink projectId={pane.project_id} task={pane.task} onOpenTask={onOpenTask} />
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TaskLink({ projectId, task, onOpenTask }: { projectId: string; task: TaskRef; onOpenTask: OpenTask }) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      className="task-link"
+      title={`${t("sessions.task_title")}: ${task.title}`}
+      onClick={() => {
+        onOpenTask(projectId, task.id);
+      }}
+    >
+      <span className="mono">{task.id}</span>
+      <span className="chip">{task.status}</span>
+    </button>
+  );
+}
+
+function PastSection({ project, onOpenTask }: { project: ProjectItem; onOpenTask: OpenTask }) {
+  const { t } = useI18n();
+  const past = usePastSessions(project.id);
+  const resume = useResumeSession(project.id);
+  const sessions = past.error ? undefined : past.data;
+  const pendingKey = resume.isPending ? sessionKey(resume.variables) : null;
+  const failedKey = resume.error ? sessionKey(resume.variables) : null;
 
   return (
-    <Panel title={t("panel.sessions")} className="panel-sessions">
-      <Section title={t("sessions.live")} rows={liveRows} error={live.error} />
-      <Section title={t("sessions.past")} rows={pastRows} error={past.error} />
-    </Panel>
+    <Section title={t("sessions.past_project", { project: project.name })} count={sessions?.length}>
+      <QueryBody error={past.error} loaded={sessions !== undefined} empty={sessions?.length === 0}>
+        <ul className="list">
+          {sessions?.map((session) => {
+            const key = sessionKey(session);
+            return (
+              <li key={key} className="session">
+                <div className="session-top">
+                  <span className="session-agent mono">{session.agent}</span>
+                  <Ago timestamp={session.mtime} />
+                  {session.turns > 0 && (
+                    <span className="muted">{t("sessions.turns", { count: session.turns })}</span>
+                  )}
+                </div>
+                <div className="session-title" title={session.recap ?? session.title ?? session.name}>
+                  {pastTitle(session)}
+                </div>
+                <div className="session-meta">
+                  <span className="muted mono" title={session.cwd}>
+                    {baseName(session.cwd)}
+                  </span>
+                  {session.task && <TaskLink projectId={project.id} task={session.task} onOpenTask={onOpenTask} />}
+                  <button
+                    type="button"
+                    className="button button-small session-resume"
+                    disabled={session.active || resume.isPending}
+                    title={
+                      session.active
+                        ? t("sessions.resume_active")
+                        : t("sessions.resume_title", { cwd: session.cwd })
+                    }
+                    onClick={() => {
+                      resume.mutate({ agent: session.agent, session_id: session.session_id });
+                    }}
+                  >
+                    {pendingKey === key ? t("sessions.resuming") : t("sessions.resume")}
+                  </button>
+                </div>
+                {failedKey === key && resume.error && <ErrorText error={resume.error} />}
+              </li>
+            );
+          })}
+        </ul>
+      </QueryBody>
+    </Section>
   );
+}
+
+function sessionKey(session: { agent: string; session_id: string }): string {
+  return `${session.agent}:${session.session_id}`;
+}
+
+function pastTitle(session: PastSession): string {
+  return session.title || session.name || session.recap || session.session_id;
 }

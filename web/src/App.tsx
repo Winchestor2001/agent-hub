@@ -4,17 +4,32 @@ import { collectBanners } from "./api/banners";
 import { useHealth, useProjects } from "./api/queries";
 import { Banners } from "./components/Banners";
 import { BoardPanel } from "./components/BoardPanel";
+import { NewSessionDialog } from "./components/NewSessionDialog";
 import { ProjectsPanel } from "./components/ProjectsPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
 import { TopBar } from "./components/TopBar";
+
+interface TaskTarget {
+  projectId: string;
+  taskId: string;
+}
 
 export function App() {
   const health = useHealth();
   const projects = useProjects();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Sessiyalar panelidan ham ochiladi, shuning uchun doskadan yuqorida saqlanadi.
+  const [openTask, setOpenTask] = useState<TaskTarget | null>(null);
+  const [newSession, setNewSession] = useState<{ projectId: string; taskId: string | null } | null>(null);
 
   const items = projects.data?.projects;
   const selected = items?.find((p) => p.id === selectedId) ?? items?.[0] ?? null;
+  const sessionProject = newSession && items?.find((p) => p.id === newSession.projectId);
+
+  function selectProject(projectId: string) {
+    setSelectedId(projectId);
+    setOpenTask(null);
+  }
 
   const banners = useMemo(
     () =>
@@ -36,11 +51,39 @@ export function App() {
           projects={items}
           error={projects.error}
           selectedId={selected?.id ?? null}
-          onSelect={setSelectedId}
+          onSelect={selectProject}
         />
-        <BoardPanel project={selected} />
-        <SessionsPanel />
+        <BoardPanel
+          project={selected}
+          openTaskId={openTask && openTask.projectId === selected?.id ? openTask.taskId : null}
+          onOpenTask={(taskId) => {
+            setOpenTask(selected && taskId ? { projectId: selected.id, taskId } : null);
+          }}
+          onStartSession={(taskId) => {
+            if (selected) setNewSession({ projectId: selected.id, taskId });
+          }}
+        />
+        <SessionsPanel
+          project={selected}
+          projects={items}
+          onOpenTask={(projectId, taskId) => {
+            setSelectedId(projectId);
+            setOpenTask({ projectId, taskId });
+          }}
+          onNewSession={() => {
+            if (selected) setNewSession({ projectId: selected.id, taskId: null });
+          }}
+        />
       </main>
+      {newSession && sessionProject && (
+        <NewSessionDialog
+          project={sessionProject}
+          initialTaskId={newSession.taskId}
+          onClose={() => {
+            setNewSession(null);
+          }}
+        />
+      )}
     </div>
   );
 }
