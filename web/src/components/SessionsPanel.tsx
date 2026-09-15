@@ -1,10 +1,17 @@
+import { useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
-import { useLiveSessions, usePastSessions, useRemoveSessions, useResumeSession } from "../api/queries";
+import {
+  useDeleteSessions,
+  useLiveSessions,
+  usePastSessions,
+  useRemoveSessions,
+  useResumeSession,
+} from "../api/queries";
 import type { LivePane, PastSession, ProjectItem, TaskRef } from "../api/types";
 import { useI18n } from "../i18n/context";
-import { baseName, groupLive, paneActivity } from "../sessions/model";
+import { baseName, groupLive, paneActivity, pruneSelection, sessionKey, toggleKey } from "../sessions/model";
 import { focusIndex } from "../sessions/navigation";
 import { ErrorText } from "./ErrorText";
 import { Panel } from "./Panel";
@@ -106,11 +113,14 @@ function Section({
   title,
   count,
   className,
+  action,
   children,
 }: {
   title: string;
   count?: number | undefined;
   className?: string;
+  /** Sarlavha o'ng tomonidagi tugma. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -118,6 +128,7 @@ function Section({
       <h3 className="section-title">
         {title}
         {count !== undefined && <span className="count">{count}</span>}
+        {action}
       </h3>
       {children}
     </div>
@@ -316,19 +327,122 @@ function PastSection({ project, onOpenTask }: { project: ProjectItem; onOpenTask
   const { t } = useI18n();
   const past = usePastSessions(project.id);
   const resume = useResumeSession(project.id);
+  const remove = useDeleteSessions(project.id);
+  const [selecting, setSelecting] = useState(false);
+  const [rawSelected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
   const sessions = past.error ? undefined : past.data;
+  // Ro'yxat yangilanganda yo'qolgan yoki ochilib qolgan sessiyalar tanlovdan tushadi.
+  const selected = pruneSelection(rawSelected, sessions ?? []);
+  const deletable = sessions?.filter((session) => !session.active) ?? [];
+  const allSelected = deletable.length > 0 && selected.size === deletable.length;
   const pendingKey = resume.isPending ? sessionKey(resume.variables) : null;
   const failedKey = resume.error ? sessionKey(resume.variables) : null;
 
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+    setConfirming(false);
+    remove.reset();
+  }
+
+  function deleteSelected() {
+    const items = (sessions ?? [])
+      .filter((session) => selected.has(sessionKey(session)))
+      .map(({ agent, session_id }) => ({ agent, session_id }));
+    remove.mutate({ sessions: items }, { onSuccess: stopSelecting });
+  }
+
+  const action = sessions && sessions.length > 0 && (
+    <button
+      type="button"
+      className="button button-small section-action"
+      title={selecting ? undefined : t("sessions.select_title")}
+      onClick={() => {
+        if (selecting) stopSelecting();
+        else setSelecting(true);
+      }}
+    >
+      {selecting ? t("common.cancel") : t("sessions.select")}
+    </button>
+  );
+
   return (
-    <Section title={t("sessions.past_project", { project: project.name })} count={sessions?.length}>
+    <Section title={t("sessions.past_project", { project: project.name })} count={sessions?.length} action={action}>
+      {selecting && sessions && sessions.length > 0 && (
+        <div className="select-bar">
+          <label className="select-all">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              disabled={deletable.length === 0 || confirming}
+              onChange={() => {
+                setSelected(allSelected ? new Set() : new Set(deletable.map(sessionKey)));
+              }}
+            />
+            {t("sessions.select_all")}
+          </label>
+          <span className="muted">{t("sessions.selected", { count: selected.size })}</span>
+          <button
+            type="button"
+            className="button button-small button-danger section-action"
+            disabled={selected.size === 0 || confirming}
+            onClick={() => {
+              setConfirming(true);
+            }}
+          >
+            {t("sessions.delete")}
+          </button>
+        </div>
+      )}
+      {selecting && confirming && (
+        <div className="confirm" role="alertdialog" aria-label={t("sessions.delete")}>
+          <p>{t("sessions.delete_confirm", { count: selected.size })}</p>
+          {remove.error && <ErrorText error={remove.error} />}
+          <div className="form-actions">
+            <button
+              type="button"
+              className="button button-small"
+              disabled={remove.isPending}
+              onClick={() => {
+                setConfirming(false);
+                remove.reset();
+              }}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              className="button button-small button-danger"
+              disabled={remove.isPending || selected.size === 0}
+              onClick={deleteSelected}
+            >
+              {remove.isPending ? t("sessions.deleting") : t("sessions.delete_yes")}
+            </button>
+          </div>
+        </div>
+      )}
       <QueryBody error={past.error} loaded={sessions !== undefined} empty={sessions?.length === 0}>
         <ul className="list">
           {sessions?.map((session) => {
             const key = sessionKey(session);
+            const checked = selected.has(key);
             return (
-              <li key={key} className="session">
+              <li key={key} className={`session${checked ? " session-selected" : ""}`}>
                 <div className="session-top">
+                  {selecting && (
+                    <input
+                      type="checkbox"
+                      className="session-check"
+                      checked={checked}
+                      disabled={session.active || confirming}
+                      aria-label={pastTitle(session)}
+                      title={session.active ? t("sessions.delete_active") : undefined}
+                      onChange={() => {
+                        setSelected(toggleKey(selected, key));
+                      }}
+                    />
+                  )}
                   <span className="session-agent mono">{session.agent}</span>
                   <Ago timestamp={session.mtime} />
                   {session.turns > 0 && (
@@ -343,21 +457,23 @@ function PastSection({ project, onOpenTask }: { project: ProjectItem; onOpenTask
                     {baseName(session.cwd)}
                   </span>
                   {session.task && <TaskLink projectId={project.id} task={session.task} onOpenTask={onOpenTask} />}
-                  <button
-                    type="button"
-                    className="button button-small session-resume"
-                    disabled={session.active || resume.isPending}
-                    title={
-                      session.active
-                        ? t("sessions.resume_active")
-                        : t("sessions.resume_title", { cwd: session.cwd })
-                    }
-                    onClick={() => {
-                      resume.mutate({ agent: session.agent, session_id: session.session_id });
-                    }}
-                  >
-                    {pendingKey === key ? t("sessions.resuming") : t("sessions.resume")}
-                  </button>
+                  {!selecting && (
+                    <button
+                      type="button"
+                      className="button button-small session-resume"
+                      disabled={session.active || resume.isPending}
+                      title={
+                        session.active
+                          ? t("sessions.resume_active")
+                          : t("sessions.resume_title", { cwd: session.cwd })
+                      }
+                      onClick={() => {
+                        resume.mutate({ agent: session.agent, session_id: session.session_id });
+                      }}
+                    >
+                      {pendingKey === key ? t("sessions.resuming") : t("sessions.resume")}
+                    </button>
+                  )}
                 </div>
                 {failedKey === key && resume.error && <ErrorText error={resume.error} />}
               </li>
@@ -367,10 +483,6 @@ function PastSection({ project, onOpenTask }: { project: ProjectItem; onOpenTask
       </QueryBody>
     </Section>
   );
-}
-
-function sessionKey(session: { agent: string; session_id: string }): string {
-  return `${session.agent}:${session.session_id}`;
 }
 
 function pastTitle(session: PastSession): string {

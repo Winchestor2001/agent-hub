@@ -13,6 +13,7 @@ import type {
   LivePane,
   SessionOptions,
   SessionResume,
+  SessionsDelete,
   SessionStart,
   SessionsResponse,
   TaskCreate,
@@ -249,6 +250,15 @@ export function useResumeSession(projectId: string) {
         method: "POST",
         body,
       }),
+    onSuccess: () => invalidate(projectId),
+  });
+}
+
+export function useDeleteSessions(projectId: string) {
+  const invalidate = useInvalidateSessions();
+  return useMutation({
+    mutationFn: (body: SessionsDelete) =>
+      apiFetch<{ deleted: number }>(`/api/projects/${enc(projectId)}/sessions/delete`, { method: "POST", body }),
     onSuccess: () => invalidate(projectId),
   });
 }

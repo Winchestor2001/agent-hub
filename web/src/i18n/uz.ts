@@ -180,6 +180,15 @@ export const uz = {
   "sessions.remove_all": "Tozalash",
   "sessions.remove_all_title": "Tugagan sessiyalarning barchasini ro'yxatdan olib tashlash",
   "sessions.shortcut_hint": "Alt+Shift+↑/↓ — sessiyalar orasida o'tish",
+  "sessions.select": "Tanlash",
+  "sessions.select_title": "O'chirish uchun sessiyalarni tanlash",
+  "sessions.select_all": "Hammasi",
+  "sessions.selected": "{count} ta tanlandi",
+  "sessions.delete": "O'chirish",
+  "sessions.delete_confirm": "{count} ta sessiyaning transkript fayllari diskdan butunlay o'chiriladi. Ularni qaytarib ham, davom ettirib ham bo'lmaydi.",
+  "sessions.delete_yes": "Butunlay o'chirish",
+  "sessions.deleting": "O'chirilmoqda…",
+  "sessions.delete_active": "Ochiq sessiyani o'chirib bo'lmaydi",
 
   "notify.blocked_title": "{agent} javob kutmoqda",
   "notify.enable": "Bildirishnomalar",
@@ -255,6 +264,7 @@ export const uz = {
   "error.cwd_outside_project": "Papka «{project}» loyihasiga tegishli emas: {cwd}",
   "error.session_not_found": "Sessiya topilmadi",
   "error.session_active": "Sessiya hozir ochiq",
+  "error.session_file_not_found": "Sessiya fayli bu kompyuterda topilmadi (sessiya boshqa runner'da bo'lishi mumkin): {session_id}",
   "error.pane_alive": "Sessiya hali ishlayapti — olib tashlanmaydi",
   "error.session_id_invalid": "Sessiya ID noto'g'ri",
 

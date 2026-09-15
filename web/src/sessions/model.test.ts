@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import type { LivePane, TaskItem } from "../api/types";
-import { agentChoices, baseName, elapsed, groupLive, paneActivity, promptPrefix, sessionTasks } from "./model";
+import type { LivePane, PastSession, TaskItem } from "../api/types";
+import {
+  agentChoices,
+  baseName,
+  elapsed,
+  groupLive,
+  paneActivity,
+  promptPrefix,
+  pruneSelection,
+  sessionKey,
+  sessionTasks,
+  toggleKey,
+} from "./model";
 
 function pane(id: string, overrides: Partial<LivePane> = {}): LivePane {
   return {
@@ -105,5 +116,39 @@ describe("prompt va tanlovlar", () => {
   it("papka nomi", () => {
     expect(baseName("/a/b/web/")).toBe("web");
     expect(baseName("/")).toBe("/");
+  });
+});
+
+describe("o'tgan sessiyalar tanlovi", () => {
+  function past(session_id: string, overrides: Partial<PastSession> = {}): PastSession {
+    return {
+      agent: "claude",
+      session_id,
+      cwd: "/repo",
+      name: "repo",
+      title: null,
+      recap: null,
+      turns: 1,
+      started_at: null,
+      mtime: 1,
+      active: false,
+      runner_id: "r1",
+      project_id: "p",
+      task: null,
+      ...overrides,
+    };
+  }
+
+  it("kalit va almashtirish", () => {
+    expect(sessionKey(past("a"))).toBe("claude:a");
+    const once = toggleKey(new Set(), "claude:a");
+    expect([...once]).toEqual(["claude:a"]);
+    expect([...toggleKey(once, "claude:a")]).toEqual([]);
+  });
+
+  it("yo'qolgan va ochiq sessiyalar tanlovdan chiqadi", () => {
+    const sessions = [past("a"), past("b", { active: true }), past("c", { agent: "codex" })];
+    const selected = new Set(["claude:a", "claude:b", "codex:c", "claude:gone"]);
+    expect([...pruneSelection(selected, sessions)]).toEqual(["claude:a", "codex:c"]);
   });
 });

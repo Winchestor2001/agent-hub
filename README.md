@@ -146,6 +146,17 @@ ko'rish uchun ochiladi. `×` bitta pane'ni, **Tozalash** hammasini KanBot ro'yxa
 terminali yopiladi. Hali ishlayotgan pane olib tashlanmaydi. Suhbat tarixi o'chmaydi: sessiya «O'tgan
 sessiyalar» dan davom ettiriladi.
 
+**O'tgan sessiyalar.** Tanlangan loyihaning Claude va Codex sessiyalari (oxirgi 50 tasi), ular agentlarning
+o'z transkript fayllaridan olinadi. Claude Code 30 kundan eski transkriptlarni o'zi o'chiradi
+(`cleanupPeriodDays`), Codex o'chirmaydi. Keraksizlarini qo'lda o'chirish uchun bo'lim sarlavhasidagi
+**Tanlash** ni bosing, sessiyalarni (yoki **Hammasi** ni) belgilang, **O'chirish** → **Butunlay o'chirish**:
+
+- transkript fayli diskdan o'chadi: Claude — `~/.claude/projects/<papka>/<id>.jsonl` va yonidagi `<id>/`
+  papka (subagent'lar, tool natijalari), Codex — `~/.codex/sessions/…/rollout-…-<id>.jsonl`;
+- buni qaytarib bo'lmaydi, sessiyani endi davom ettirib ham bo'lmaydi;
+- ochiq sessiya (jonli pane'da yoki oxirgi 45 s da yozilgan) tanlanmaydi;
+- bittasi o'chirib bo'lmasa (ochilib qolgan, topilmagan), hech biri o'chirilmaydi.
+
 ## Yangilash
 
 **Agent Hub** (kod yangilangandan keyin):
@@ -220,6 +231,9 @@ Servis ishga tushmasa: `make status`, keyin tegishli log. Tez-tez uchraydigan sa
 - Bir vaqtda faqat bitta runner: `kanbot up` yoki ikkinchi `kanbot runner` ni servislar bilan birga
   ishlatmang (`make status` buni tekshiradi).
 - Agentlar sizning foydalanuvchi huquqlaringiz bilan loyiha papkalarida ishlaydi.
+- Sessiyani o'chirishda fayl yo'li KanBot'dan keladi, lekin unga ishonilmaydi: fayl `CLAUDE_CONFIG_DIR`
+  (yoki `~/.claude`)`/projects` yoki `~/.codex/sessions` ichida, `.jsonl` va nomi sessiya ID'siga mos
+  bo'lishi shart (symlink'lar ochilib tekshiriladi). Boshqa runner mashinasidagi sessiya o'chirilmaydi.
 - Papka brauzeri (`/api/folders`) faqat uy papkasi ichidagi papka nomlarini ko'rsatadi (symlink'lar ochilib
   tekshiriladi), fayllar va yashirin papkalar chiqmaydi.
 - Plist'larda token va API kalitlari yo'q. KanBot tokeni faqat `~/.kanbot/config.json` da qoladi, runner uni

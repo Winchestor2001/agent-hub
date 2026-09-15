@@ -200,6 +200,11 @@ export interface SessionResume {
   session_id: string;
 }
 
+/** O'tgan sessiyalar transkriptlari diskdan butunlay o'chiriladi. */
+export interface SessionsDelete {
+  sessions: SessionResume[];
+}
+
 export interface FolderEntry {
   name: string;
   path: string;

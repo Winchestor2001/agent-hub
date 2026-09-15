@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -48,6 +48,8 @@ class Hub:
         self.state = StateResolver.for_kanbot(kanbot)
         self._backlog_factory = backlog_factory
         self._backlogs: dict[Path, BacklogClient] = {}
+        # Fayli o'chirilgan (agent, session_id): runner qayta skanerlaguncha KanBot ko'rsataveradi.
+        self._deleted_sessions: set[tuple[str, str]] = set()
 
     def project(self, project_id: str) -> Project:
         return self.registry.get(project_id)
@@ -68,11 +70,18 @@ class Hub:
     def forget_backlog(self, project: Project) -> None:
         self._backlogs.pop(project.backlog_dir, None)
 
+    def mark_sessions_deleted(self, keys: Iterable[tuple[str, str]]) -> None:
+        self._deleted_sessions.update(keys)
+
     async def live(self) -> LiveData:
         """KanBot ishlamasa `KanbotError` (odatda `KanbotUnavailable`)."""
-        panes, sessions = await asyncio.gather(
+        panes, reported = await asyncio.gather(
             self.kanbot.list_panes(), self.kanbot.list_agent_sessions()
         )
+        keys = {(s.agent, s.session_id) for s in reported}
+        # KanBot endi ko'rsatmayotganlari unutiladi — to'plam o'smaydi.
+        self._deleted_sessions &= keys
+        sessions = [s for s in reported if (s.agent, s.session_id) not in self._deleted_sessions]
         # resolve_all doim hamma pane'lar bilan: ro'yxatda yo'qlarning xotirasi tozalanadi.
         states = await self.state.resolve_all(panes)
         return LiveData(panes, states, sessions)

@@ -1,4 +1,4 @@
-import type { LivePane, TaskItem } from "../api/types";
+import type { LivePane, PastSession, TaskItem } from "../api/types";
 
 /** `blocked` — agent foydalanuvchidan javob kutmoqda; ro'yxatda alohida va tepada. */
 export const BLOCKED = "blocked";
@@ -70,4 +70,19 @@ export function sessionTasks(
 export function baseName(path: string): string {
   const trimmed = path.replace(/\/+$/, "");
   return trimmed.slice(trimmed.lastIndexOf("/") + 1) || path;
+}
+
+export function sessionKey(session: { agent: string; session_id: string }): string {
+  return `${session.agent}:${session.session_id}`;
+}
+
+/** Tanlovdan ro'yxatda qolmagan va ochiq (o'chirib bo'lmaydigan) sessiyalar chiqariladi. */
+export function pruneSelection(selected: ReadonlySet<string>, sessions: readonly PastSession[]): Set<string> {
+  return new Set(sessions.filter((s) => !s.active && selected.has(sessionKey(s))).map(sessionKey));
+}
+
+export function toggleKey(selected: ReadonlySet<string>, key: string): Set<string> {
+  const next = new Set(selected);
+  if (!next.delete(key)) next.add(key);
+  return next;
 }

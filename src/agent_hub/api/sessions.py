@@ -1,4 +1,4 @@
-"""Agent sessiyalari: jonli pane'lar, o'tgan sessiyalar, ishga tushirish, davom ettirish."""
+"""Agent sessiyalari: jonli pane'lar, o'tgan sessiyalar, boshlash, davom ettirish, o'chirish."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_hub.kanbot_client import SESSION_AGENTS
 from agent_hub.registry import Project
+from agent_hub.services import transcripts
 from agent_hub.services.linking import live_session_ids, project_for_path
 from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE, TaskInfo, session_title
 
@@ -20,6 +21,7 @@ from .views import TaskIndex, pane_view, past_session_view, sort_panes
 router = APIRouter()
 
 MAX_PROMPT = 20_000
+MAX_DELETE = 100
 
 
 class SessionStart(BaseModel):
@@ -38,6 +40,12 @@ class SessionResume(BaseModel):
 
     agent: str = Field(max_length=20)
     session_id: str = Field(max_length=64)
+
+
+class SessionsDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sessions: list[SessionResume] = Field(min_length=1, max_length=MAX_DELETE)
 
 
 async def _indexes(hub: Hub, projects: list[Project]) -> dict[str, TaskIndex | None]:
@@ -137,6 +145,35 @@ async def resume_session(hub: HubDep, project_id: str, body: SessionResume) -> d
     title = session_title(TaskInfo(task.id, task.title)) if task else (session.title or "")
     pane = await hub.sessions.resume(project, session, title=title)
     return pane_view(pane, None, project.id, task)
+
+
+@router.post("/api/projects/{project_id}/sessions/delete")
+async def delete_sessions(hub: HubDep, project_id: str, body: SessionsDelete) -> dict[str, Any]:
+    """O'tgan sessiyalar transkriptlarini diskdan butunlay o'chiradi.
+
+    Avval hammasi tekshiriladi; bittasi mos kelmasa hech narsa o'chirilmaydi.
+    """
+    project = hub.project(project_id)
+    projects = hub.registry.load()
+    live = await hub.live()
+    by_key = {(s.agent, s.session_id): s for s in live.sessions}
+    open_ids = live_session_ids(live.panes, live.sessions)
+    keys = list(dict.fromkeys((item.agent, item.session_id) for item in body.sessions))
+    found: list[transcripts.Transcript] = []
+    for item in keys:
+        session = by_key.get(item)
+        owner = project_for_path(session.cwd, projects) if session else None
+        if session is None or owner is None or owner.id != project.id:
+            raise ApiError(404, "session_not_found", agent=item[0], session_id=item[1])
+        if session.active or session.session_id in open_ids:
+            raise ApiError(409, "session_active", session_id=session.session_id)
+        try:
+            found.append(transcripts.locate(session, hub.settings.transcript_roots))
+        except transcripts.TranscriptError as exc:
+            raise ApiError(404, exc.code, session_id=session.session_id) from exc
+    transcripts.delete(found)
+    hub.mark_sessions_deleted(keys)
+    return {"deleted": len(found)}
 
 
 @router.post("/api/sessions/{pane_id}/kill")

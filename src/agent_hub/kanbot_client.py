@@ -172,6 +172,8 @@ class AgentSession(_Model):
     mtime: float = 0.0
     active: bool = False
     runner_id: str = ""
+    # Transkript fayli runner mashinasida (o'chirish uchun; brauzerga chiqarilmaydi).
+    path: str = ""
 
 
 # --- yordamchilar --------------------------------------------------------------------------

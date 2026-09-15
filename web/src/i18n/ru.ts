@@ -180,6 +180,15 @@ export const ru: Dictionary = {
   "sessions.remove_all": "Очистить",
   "sessions.remove_all_title": "Убрать из списка все завершённые сессии",
   "sessions.shortcut_hint": "Alt+Shift+↑/↓ — переход между сессиями",
+  "sessions.select": "Выбрать",
+  "sessions.select_title": "Выбрать сессии для удаления",
+  "sessions.select_all": "Все",
+  "sessions.selected": "выбрано: {count}",
+  "sessions.delete": "Удалить",
+  "sessions.delete_confirm": "Файлы транскриптов выбранных сессий ({count}) будут безвозвратно удалены с диска. Восстановить или продолжить их будет нельзя.",
+  "sessions.delete_yes": "Удалить навсегда",
+  "sessions.deleting": "Удаление…",
+  "sessions.delete_active": "Открытую сессию нельзя удалить",
 
   "notify.blocked_title": "{agent} ждёт ответа",
   "notify.enable": "Уведомления",
@@ -254,6 +263,7 @@ export const ru: Dictionary = {
   "error.cwd_outside_project": "Папка не относится к проекту «{project}»: {cwd}",
   "error.session_not_found": "Сессия не найдена",
   "error.session_active": "Сессия сейчас открыта",
+  "error.session_file_not_found": "Файл сессии не найден на этом компьютере (возможно, сессия на другом раннере): {session_id}",
   "error.pane_alive": "Сессия ещё работает — убрать нельзя",
   "error.session_id_invalid": "Неверный ID сессии",
 

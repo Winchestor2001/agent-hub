@@ -68,3 +68,13 @@ def test_projects_root(tmp_path: Path) -> None:
     assert Settings.load(_env(tmp_path)).projects_root == Path.home() / "code"
     env = _env(tmp_path, AGENT_HUB_PROJECTS_ROOT=str(tmp_path / "src"))
     assert Settings.load(env).projects_root == tmp_path / "src"
+
+
+def test_transcript_roots(tmp_path: Path) -> None:
+    roots = Settings.load(_env(tmp_path)).transcript_roots
+    assert roots == {
+        "claude": Path.home() / ".claude" / "projects",
+        "codex": Path.home() / ".codex" / "sessions",
+    }
+    env = _env(tmp_path, CLAUDE_CONFIG_DIR=str(tmp_path / "claude"))
+    assert Settings.load(env).transcript_roots["claude"] == tmp_path / "claude" / "projects"

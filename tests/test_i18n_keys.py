@@ -27,6 +27,7 @@ CODE_ARG = {
     "ApiError": 1,
     "RegistryError": 0,
     "FolderError": 0,
+    "TranscriptError": 0,
     "SessionError": 0,
     "Problem": 0,
     "error_response": 1,

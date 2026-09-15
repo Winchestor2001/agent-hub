@@ -1,6 +1,8 @@
 """Ilova sozlamalari: env > ~/.config/agent-hub/config.yaml > default.
 
 `projects_root` — "Loyiha qo'shish" oynasi papka takliflarini qidiradigan joy (~/my-projects).
+`transcript_roots` — Claude/Codex sessiya fayllari papkalari (KanBot runner shu yerlarni o'qiydi);
+o'tgan sessiyani o'chirishda fayl faqat shu papkalar ichida bo'lsa o'chiriladi.
 
 Host doim `127.0.0.1` — sozlab bo'lmaydi. KanBot manzili ham faqat loopback bo'lishi mumkin.
 """
@@ -37,11 +39,19 @@ class Settings:
     extra_origins: tuple[str, ...] = ()
     home: Path = field(default_factory=Path.home)
     projects_root: Path = field(default_factory=lambda: Path.home() / "my-projects")
+    # CLAUDE_CONFIG_DIR; bo'lmasa ~/.claude.
+    claude_home: Path | None = None
     host: str = field(default=HOST, init=False)
 
     @property
     def projects_file(self) -> Path:
         return self.config_dir / "projects.yaml"
+
+    @property
+    def transcript_roots(self) -> dict[str, Path]:
+        """Agent → sessiya fayllari papkasi (KanBot runner discovery bilan bir xil)."""
+        claude_home = self.claude_home or self.home / ".claude"
+        return {"claude": claude_home / "projects", "codex": self.home / ".codex" / "sessions"}
 
     @classmethod
     def load(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -56,6 +66,7 @@ class Settings:
         kanbot_url = str(url_raw or DEFAULT_KANBOT_URL)
         origins = environ.get("AGENT_HUB_EXTRA_ORIGINS", "")
         root_raw = environ.get("AGENT_HUB_PROJECTS_ROOT") or file_values.get("projects_root")
+        claude_raw = environ.get("CLAUDE_CONFIG_DIR")
         home = Path.home()
         return cls(
             config_dir=config_dir,
@@ -65,6 +76,7 @@ class Settings:
             extra_origins=tuple(o.strip() for o in origins.split(",") if o.strip()),
             home=home,
             projects_root=Path(str(root_raw)).expanduser() if root_raw else home / "my-projects",
+            claude_home=Path(claude_raw).expanduser() if claude_raw else None,
         )
 
 

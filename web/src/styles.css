@@ -1241,3 +1241,32 @@ button.session-open:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* --- o'tgan sessiyalarni tanlab o'chirish --- */
+
+.select-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.session-check {
+  margin: 0;
+  cursor: pointer;
+}
+
+.session-selected {
+  border-color: #7a2a28;
+  background: var(--danger-bg);
+}

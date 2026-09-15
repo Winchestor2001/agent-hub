@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -244,3 +245,83 @@ def test_kill_session(api: ApiEnv) -> None:
     api.kanbot_down = True
     assert_error(api.client.post("/api/sessions/p1/kill"), 503, "kanbot_unavailable")
     assert api.killed == ["p1"]
+
+
+def _transcript(api: ApiEnv, session_id: str, agent: str = "claude") -> Path:
+    root = api.backend.parent
+    if agent == "claude":
+        path = root / ".claude" / "projects" / "-leveling" / f"{session_id}.jsonl"
+    else:
+        path = root / ".codex" / "sessions" / "2026" / f"rollout-2026-05-01-{session_id}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{}\n")
+    return path
+
+
+def test_delete_past_sessions(api: ApiEnv) -> None:
+    claude_file = _transcript(api, "aaaaaaaa-0001")
+    codex_file = _transcript(api, "aaaaaaaa-0002", agent="codex")
+    kept_file = _transcript(api, "aaaaaaaa-0003")
+    api.session(agent="claude", session_id="aaaaaaaa-0001", path=str(claude_file))
+    api.session(agent="codex", session_id="aaaaaaaa-0002", cwd=str(api.web), path=str(codex_file))
+    api.session(agent="claude", session_id="aaaaaaaa-0003", path=str(kept_file))
+
+    body = {
+        "sessions": [
+            {"agent": "claude", "session_id": "aaaaaaaa-0001"},
+            {"agent": "codex", "session_id": "aaaaaaaa-0002"},
+            {"agent": "claude", "session_id": "aaaaaaaa-0001"},
+        ]
+    }
+    resp = api.client.post("/api/projects/leveling/sessions/delete", json=body)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"deleted": 2}
+    assert not claude_file.exists() and not codex_file.exists() and kept_file.exists()
+
+    # Runner qayta skanerlaguncha KanBot eski ro'yxatni beradi — Agent Hub ularni ko'rsatmaydi.
+    past = api.client.get("/api/sessions?project=leveling").json()["past"]
+    assert [s["session_id"] for s in past] == ["aaaaaaaa-0003"]
+    assert "path" not in past[0]
+    assert_error(
+        api.client.post("/api/projects/leveling/sessions/resume", json=body["sessions"][0]),
+        404,
+        "session_not_found",
+    )
+
+
+def test_delete_past_sessions_rejected(api: ApiEnv) -> None:
+    files = {sid: _transcript(api, sid) for sid in ("bbbbbbbb-0001", "bbbbbbbb-0002")}
+    api.session(agent="claude", session_id="bbbbbbbb-0001", path=str(files["bbbbbbbb-0001"]))
+    active = api.session(agent="claude", session_id="bbbbbbbb-0002", active=True)
+    active["path"] = str(files["bbbbbbbb-0002"])
+    outside = api.session(agent="claude", session_id="bbbbbbbb-0003", cwd=str(api.outside))
+    open_pane = api.session(agent="claude", session_id="bbbbbbbb-0004")
+    api.pane(agent="claude", argv=["claude", "--resume", open_pane["session_id"]])
+    stray = api.backend.parent / "stray" / "bbbbbbbb-0005.jsonl"
+    stray.parent.mkdir()
+    stray.write_text("{}\n")
+    api.session(agent="claude", session_id="bbbbbbbb-0005", path=str(stray))
+    url = "/api/projects/leveling/sessions/delete"
+
+    def delete(*session_ids: str) -> Any:
+        items = [{"agent": "claude", "session_id": sid} for sid in session_ids]
+        return api.client.post(url, json={"sessions": items})
+
+    # Bittasi mos kelmasa, oldingi to'g'ri sessiya ham o'chirilmaydi.
+    assert_error(delete("bbbbbbbb-0001", "bbbbbbbb-0002"), 409, "session_active")
+    assert_error(delete("bbbbbbbb-0001", "bbbbbbbb-0004"), 409, "session_active")
+    assert_error(delete("bbbbbbbb-0001", outside["session_id"]), 404, "session_not_found")
+    assert_error(delete("bbbbbbbb-0001", "missing"), 404, "session_not_found")
+    body = assert_error(delete("bbbbbbbb-0001", "bbbbbbbb-0005"), 404, "session_file_not_found")
+    assert body["params"] == {"session_id": "bbbbbbbb-0005"}
+    assert all(path.exists() for path in files.values()) and stray.exists()
+
+    assert_error(api.client.post(url, json={"sessions": []}), 422, "validation_error")
+    assert_error(
+        api.client.post(
+            "/api/projects/nope/sessions/delete",
+            json={"sessions": [{"agent": "claude", "session_id": "bbbbbbbb-0001"}]},
+        ),
+        404,
+        "project_not_found",
+    )
