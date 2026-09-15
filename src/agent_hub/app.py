@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 
 from agent_hub import __version__
 from agent_hub.kanbot_client import KanbotClient, KanbotError
-from agent_hub.kanbot_safety import Problem, check_config, check_runners
+from agent_hub.kanbot_safety import Problem, check_config, check_runners, check_version
 from agent_hub.registry import Registry
 from agent_hub.security import HostOriginGuard
 from agent_hub.settings import Settings
@@ -62,6 +62,7 @@ def create_app(
                 runners_online=sum(1 for r in runners if r.online),
                 agents=sorted({a for r in runners if r.online for a in r.capabilities}),
             )
+            problems.extend(check_version(kb_health.version))
             problems.extend(check_runners(runners))
         return {
             "ok": not any(p.severity == "error" for p in problems),

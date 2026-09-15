@@ -1,0 +1,54 @@
+{
+  "panes": [
+    {
+      "id": "a1b2c3d4",
+      "agent": "claude",
+      "title": "TASK-12 · Login sahifasi",
+      "cwd": "/Users/dev/my-projects/leveling-backend",
+      "argv": [
+        "claude",
+        "--settings",
+        "{\"hooks\": {\"UserPromptSubmit\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"/Users/dev/.local/share/uv/tools/kanbot/bin/python -m kanbot _hook working\"}]}]}}",
+        "Работай только над TASK-12."
+      ],
+      "interactive": true,
+      "session_id": "",
+      "card_id": "",
+      "state": "blocked",
+      "state_source": "hook",
+      "pid": 4242,
+      "rows": 40,
+      "cols": 140,
+      "started_at": 1789459200.5,
+      "last_output_at": 1789459260.25,
+      "ended_at": null,
+      "exit_code": null,
+      "alive": true,
+      "runner_id": "r1",
+      "runner_name": "mac",
+      "future_field": {"x": 1}
+    },
+    {
+      "id": "e5f6a7b8",
+      "agent": "codex",
+      "title": "codex",
+      "cwd": "/Users/dev/my-projects/leveling-backend",
+      "argv": ["codex", "resume", "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"],
+      "interactive": true,
+      "session_id": null,
+      "card_id": null,
+      "state": "done",
+      "state_source": "exit",
+      "pid": 4343,
+      "rows": 40,
+      "cols": 140,
+      "started_at": 1789459000.0,
+      "last_output_at": 1789459100.0,
+      "ended_at": 1789459100.0,
+      "exit_code": 0,
+      "alive": false,
+      "runner_id": "r1",
+      "runner_name": "mac"
+    }
+  ]
+}

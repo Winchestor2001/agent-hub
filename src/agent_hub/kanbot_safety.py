@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from agent_hub.kanbot_client import Runner
+from agent_hub.kanbot_client import SUPPORTED_VERSION_PREFIX, Runner, is_supported_version
 
 FORBIDDEN_AGENTS: tuple[str, ...] = ("shell", "glm", "kimi")
 
@@ -63,6 +63,13 @@ def check_config(path: Path) -> list[Problem]:
     if config.get("auto_approve", False):
         problems.append(Problem("auto_approve_enabled", "error", {"source": "config"}))
     return problems
+
+
+def check_version(version: str) -> list[Problem]:
+    if is_supported_version(version):
+        return []
+    params = {"version": version, "supported": f"{SUPPORTED_VERSION_PREFIX}x"}
+    return [Problem("kanbot_version_unsupported", "warning", params)]
 
 
 def check_runners(runners: list[Runner]) -> list[Problem]:

@@ -48,8 +48,8 @@ def _health(config_path: Path) -> dict[str, Any]:
     return data
 
 
-def _mock_kanbot(mock: respx.Router, runners: list[dict[str, Any]]) -> None:
-    mock.get("/api/health").respond(json={"ok": True, "version": "0.8.2", "runners": 1})
+def _mock_kanbot(mock: respx.Router, runners: list[dict[str, Any]], version: str = "0.8.2") -> None:
+    mock.get("/api/health").respond(json={"ok": True, "version": version, "runners": 1})
     mock.get("/api/runners").respond(json={"runners": runners})
 
 
@@ -146,3 +146,17 @@ def test_config_unreadable_is_error(respx_mock: respx.Router, config_path: Path)
     data = _health(config_path)
     assert data["ok"] is False
     assert _codes(data) == ["kanbot_config_unreadable"]
+
+
+@respx.mock(base_url=KANBOT)
+def test_unsupported_version_is_warning(respx_mock: respx.Router, config_path: Path) -> None:
+    _mock_kanbot(respx_mock, [_runner()], version="0.9.0")
+    data = _health(config_path)
+    assert data["ok"] is True
+    assert data["problems"] == [
+        {
+            "code": "kanbot_version_unsupported",
+            "severity": "warning",
+            "params": {"version": "0.9.0", "supported": "0.8.x"},
+        }
+    ]
