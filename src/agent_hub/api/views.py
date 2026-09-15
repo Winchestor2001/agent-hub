@@ -80,6 +80,7 @@ def project_view(project: Project) -> dict[str, Any]:
         "name": project.name,
         "backlog_dir": str(project.backlog_dir),
         "repos": [str(repo) for repo in project.repos],
+        "dirs": [str(directory) for directory in project.dirs],
     }
 
 

@@ -275,3 +275,10 @@ def test_live_session_ids_known_ids_and_several_panes(tree: dict[str, Path]) -> 
         "first-session",
         "second-session",
     }
+
+
+def test_backlog_dir_links_even_if_not_in_repos(tree: dict[str, Path]) -> None:
+    project = Project(id="p", name="p", backlog_dir=tree["proj"], repos=(tree["api"],))
+    assert project.dirs == (tree["proj"], tree["api"])
+    assert project_for_path(tree["proj"] / "src", [project]) is project
+    assert project_for_path(tree["api"], [project]) is project

@@ -31,7 +31,10 @@ export interface Project {
   id: string;
   name: string;
   backlog_dir: string;
+  /** Bekloq papkasiga qo'shimcha repo papkalari. */
   repos: string[];
+  /** Barcha loyiha papkalari: bekloq papkasi birinchi, keyin `repos`. */
+  dirs: string[];
 }
 
 export interface ProjectSummary {

@@ -96,8 +96,10 @@ def dirs(tmp_path: Path) -> dict[str, Path]:
 
 @pytest.fixture
 def project(dirs: dict[str, Path]) -> Project:
-    repos = (dirs["backend"], dirs["web"])
-    return Project(id="leveling", name="Leveling", backlog_dir=repos[0], repos=repos)
+    # Bekloq papkasi repos'da takrorlanmaydi, lekin baribir birinchi (standart) loyiha papkasi.
+    return Project(
+        id="leveling", name="Leveling", backlog_dir=dirs["backend"], repos=(dirs["web"],)
+    )
 
 
 def _service(*runners: Runner) -> tuple[SessionService, FakeKanbot]:

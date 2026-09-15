@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 import threading
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -36,15 +37,24 @@ class Project(BaseModel):
     id: str
     name: str
     backlog_dir: Path
+    # Bekloq papkasiga qo'shimcha repo papkalari (masalan web, admin).
     repos: tuple[Path, ...] = Field(default_factory=tuple)
 
     @property
     def dirs(self) -> tuple[Path, ...]:
-        return self.repos or (self.backlog_dir,)
+        """Loyiha papkalari: bekloq papkasi har doim birinchi, keyin qo'shimcha repolar."""
+        return tuple(dict.fromkeys((self.backlog_dir, *self.repos)))
 
 
 def _expand(path: str | Path) -> Path:
     return Path(os.path.abspath(Path(path).expanduser()))
+
+
+def _extra_repos(backlog_dir: Path, repos: Iterable[str | Path]) -> tuple[Path, ...]:
+    """Normallashtirilgan qo'shimcha repolar: bekloq papkasi va takrorlar olib tashlanadi."""
+    return tuple(
+        path for path in dict.fromkeys(_expand(repo) for repo in repos) if path != backlog_dir
+    )
 
 
 def has_backlog(directory: Path) -> bool:
@@ -52,7 +62,7 @@ def has_backlog(directory: Path) -> bool:
 
 
 def validate_project(
-    project_id: str, name: str, backlog_dir: str | Path, repos: list[str] | list[Path] | None = None
+    project_id: str, name: str, backlog_dir: str | Path, repos: Iterable[str | Path] = ()
 ) -> Project:
     """Foydalanuvchi kiritgan loyihani tekshiradi va normallashtiradi."""
     if not PROJECT_ID_RE.fullmatch(project_id):
@@ -64,7 +74,7 @@ def validate_project(
         raise RegistryError("path_invalid", path=str(backlog_path))
     if not has_backlog(backlog_path):
         raise RegistryError("backlog_not_found", path=str(backlog_path))
-    repo_paths = tuple(_expand(repo) for repo in repos or ()) or (backlog_path,)
+    repo_paths = _extra_repos(backlog_path, repos)
     for repo in repo_paths:
         if not repo.is_dir():
             raise RegistryError("path_invalid", path=str(repo))
@@ -136,7 +146,7 @@ class Registry:
         except ValidationError as exc:
             raise RegistryError("registry_invalid", path=str(self.path), error=str(exc)) from exc
         backlog_dir = _expand(project.backlog_dir)
-        repos = tuple(_expand(repo) for repo in project.repos) or (backlog_dir,)
+        repos = _extra_repos(backlog_dir, project.repos)
         return project.model_copy(update={"backlog_dir": backlog_dir, "repos": repos})
 
     def _save_locked(self, projects: list[Project]) -> None:

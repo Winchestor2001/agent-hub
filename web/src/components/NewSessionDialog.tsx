@@ -23,7 +23,7 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
   const startSession = useStartSession(project.id);
 
   const choices = agentChoices(options.data?.agents ?? [], health.data?.kanbot.agents);
-  const dirs = project.repos.length > 0 ? project.repos : [project.backlog_dir];
+  const dirs = project.dirs;
   const tasks = board.data ? sessionTasks(board.data.tasks, board.data.statuses, initialTaskId) : [];
 
   const [agent, setAgent] = useState<string | null>(null);

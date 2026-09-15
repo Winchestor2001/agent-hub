@@ -22,7 +22,8 @@ def test_creates_default_leveling(tmp_path: Path) -> None:
     leveling = projects[0]
     assert leveling.name == "Leveling"
     assert leveling.backlog_dir == Path.home() / "my-projects" / "leveling-backend"
-    assert leveling.repos == (leveling.backlog_dir,)
+    assert leveling.repos == ()
+    assert leveling.dirs == (leveling.backlog_dir,)
     saved = yaml.safe_load(path.read_text())
     assert saved["projects"][0]["backlog_dir"] == str(leveling.backlog_dir)
     assert not list(path.parent.glob(".projects-*"))
@@ -42,7 +43,7 @@ def test_validate_backlog_layouts(tmp_path: Path, layout: str) -> None:
     directory = _backlog_project(tmp_path, "proj", layout)
     project = validate_project("proj", " Proj ", directory)
     assert project.name == "Proj"
-    assert project.repos == (directory,)
+    assert project.repos == ()
     assert project.dirs == (directory,)
 
 
@@ -86,7 +87,9 @@ def test_add_get_remove_roundtrip(tmp_path: Path) -> None:
     backend = _backlog_project(tmp_path, "proj")
     (tmp_path / "web").mkdir()
     reg.add(validate_project("proj", "Proj", backend, [backend, tmp_path / "web"]))
-    assert Registry(path).get("proj").repos == (backend, tmp_path / "web")
+    saved = Registry(path).get("proj")
+    assert saved.repos == (tmp_path / "web",)
+    assert saved.dirs == (backend, tmp_path / "web")
     with pytest.raises(RegistryError) as exc:
         reg.add(validate_project("proj", "Proj", backend))
     assert exc.value.code == "project_exists"
@@ -123,7 +126,33 @@ def test_empty_repos_in_file_default_to_backlog_dir(tmp_path: Path) -> None:
     path.write_text("projects:\n- id: a\n  name: A\n  backlog_dir: ~/somewhere\n  repos: []\n")
     project = Registry(path).get("a")
     assert project.backlog_dir == Path.home() / "somewhere"
-    assert project.repos == (project.backlog_dir,)
+    assert project.repos == ()
+    assert project.dirs == (project.backlog_dir,)
+
+
+def test_backlog_dir_always_first_in_dirs(tmp_path: Path) -> None:
+    """Eski fayl: repos bekloq papkasisiz (NamSoft holati) yoki uni takror bilan saqlagan."""
+    path = tmp_path / "projects.yaml"
+    path.write_text(
+        "projects:\n"
+        "- id: a\n  name: A\n  backlog_dir: /b\n  repos: [/admin, /web]\n"
+        "- id: c\n  name: C\n  backlog_dir: /c\n  repos: [/web, /c, /web/]\n"
+    )
+    a, c = Registry(path).load()
+    assert a.repos == (Path("/admin"), Path("/web"))
+    assert a.dirs == (Path("/b"), Path("/admin"), Path("/web"))
+    assert c.repos == (Path("/web"),)
+    assert c.dirs == (Path("/c"), Path("/web"))
+
+
+def test_validate_strips_backlog_dir_from_repos(tmp_path: Path) -> None:
+    backend = _backlog_project(tmp_path, "backend")
+    (tmp_path / "web").mkdir()
+    project = validate_project(
+        "p", "P", backend, [tmp_path / "web", backend, str(tmp_path / "web")]
+    )
+    assert project.repos == (tmp_path / "web",)
+    assert project.dirs == (backend, tmp_path / "web")
 
 
 @pytest.mark.parametrize(

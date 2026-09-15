@@ -46,7 +46,6 @@ export function AddProjectDialog({ project, onClose, onSaved }: AddProjectDialog
   // null — ID nomdan avtomatik olinadi; foydalanuvchi tahrirlasa o'shani saqlaymiz.
   const [customId, setCustomId] = useState<string | null>(project?.id ?? null);
   const [backlogDir, setBacklogDir] = useState(project?.backlog_dir ?? "");
-  // Tahrirlashda saqlangani (bekloq papkasi ham) ko'rinadi: yangi papka qo'shilganda u jimgina tushib qolmasin.
   const [repos, setRepos] = useState<string[]>(project?.repos ?? []);
   const [picker, setPicker] = useState<"backlog" | "repo" | null>(null);
   const [confirmInit, setConfirmInit] = useState(false);

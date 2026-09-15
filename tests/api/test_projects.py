@@ -17,7 +17,9 @@ def test_list_projects_with_summary(api: ApiEnv) -> None:
     assert data["kanbot_available"] is True
     leveling, broken = data["projects"]
     assert leveling["id"] == "leveling"
-    assert leveling["repos"] == [str(api.backend), str(api.web)]
+    # Faylda repos bekloq papkasini ham takrorlaydi — API'da faqat qo'shimchalar qoladi.
+    assert leveling["repos"] == [str(api.web)]
+    assert leveling["dirs"] == [str(api.backend), str(api.web)]
     assert leveling["error"] is None
     assert leveling["summary"] == {
         "status_counts": [
@@ -72,7 +74,8 @@ def test_add_and_remove_project(api: ApiEnv, tmp_path: Path) -> None:
         "id": "shop",
         "name": "Shop",
         "backlog_dir": str(new),
-        "repos": [str(new)],
+        "repos": [],
+        "dirs": [str(new)],
     }
     ids = [p["id"] for p in api.client.get("/api/projects").json()["projects"]]
     assert ids == ["leveling", "broken", "shop"]
@@ -120,17 +123,18 @@ def test_update_project(api: ApiEnv, tmp_path: Path) -> None:
         "name": "Fixed",
         "backlog_dir": str(fixed),
         "repos": [str(api.outside)],
+        "dirs": [str(fixed), str(api.outside)],
     }
     leveling, broken = api.client.get("/api/projects").json()["projects"]
     assert (leveling["id"], broken["name"], broken["error"]) == ("leveling", "Fixed", None)
     assert broken["summary"]["active_sessions"] == 1
     assert fixed in api.backlog.cwds
 
-    # Repo papkalari kamaysa, ulardan tashqaridagi sessiyalar loyihadan chiqadi.
+    # Qo'shimcha repo olib tashlansa, undagi sessiyalar loyihadan chiqadi.
     api.pane(id="p2", cwd=str(api.web), state="working")
     assert _active_sessions(api, "leveling") == 1
     body = {"name": "Leveling", "backlog_dir": str(api.backend), "repos": []}
-    assert api.client.put("/api/projects/leveling", json=body).json()["repos"] == [str(api.backend)]
+    assert api.client.put("/api/projects/leveling", json=body).json()["dirs"] == [str(api.backend)]
     assert _active_sessions(api, "leveling") == 0
 
 

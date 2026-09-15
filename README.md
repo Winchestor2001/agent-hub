@@ -95,9 +95,10 @@ Maydonlar nima uchun kerak:
 
 - **Bekloq papkasi** — vazifalar shu papkadagi `.backlog/` yoki `backlog/` dan o'qiladi, `backlog`
   buyruqlari ham shu yerda bajariladi. Odatda asosiy repo.
-- **Repo papkalari** — agent sessiyalari ish papkasi (cwd) bo'yicha loyihaga bog'lanadi: shu papkalar
-  ichida ochilgan sessiyalar loyihada ko'rinadi, yangi sessiya ham ulardan birida boshlanadi. Loyiha bir
-  nechta repodan iborat bo'lsa (masalan backend va web), hammasini qo'shing; bo'sh qolsa bekloq papkasi olinadi.
+- **Qo'shimcha repo papkalari** — agent sessiyalari ish papkasi (cwd) bo'yicha loyihaga bog'lanadi.
+  Bekloq papkasi har doim loyihaga kiradi va yangi sessiya oynasida birinchi (standart) turadi; loyiha
+  boshqa repolardan ham iborat bo'lsa (masalan admin va web), ularni shu yerga qo'shing. Shu papkalar
+  ichida ochilgan sessiyalar loyihada ko'rinadi, yangi sessiya ham ulardan birida boshlanadi.
 
 Tanlangan papkada bekloq bo'lmasa, oyna **Bekloq yaratish** tugmasini taklif qiladi. Tasdiqlagandan keyin
 `backlog init <nom> --defaults --backlog-dir .backlog --integration-mode none` bajariladi (git bo'lmagan
@@ -107,7 +108,7 @@ avtomatik yaratmaydi.
 
 **Tahrirlash (✎).** Loyiha qatori ustiga kelganda × ostida chiqadi: nom, bekloq papkasi va repo papkalarini
 o'zgartirish mumkin (ID o'zgarmaydi). Tekshiruvlar qo'shishdagi bilan bir xil. Saqlangach doska yangi bekloq
-papkasidan o'qiladi, sessiyalar esa yangi repo papkalari bo'yicha qayta bog'lanadi.
+papkasidan o'qiladi, sessiyalar esa yangi loyiha papkalari bo'yicha qayta bog'lanadi.
 
 **Ro'yxatdan olib tashlash** faqat Agent Hub ro'yxatini o'zgartiradi, bekloq va fayllarga tegmaydi.
 
@@ -330,10 +331,11 @@ projects:
   name: Leveling
   backlog_dir: /Users/<siz>/my-projects/leveling-backend
   repos:
-  - /Users/<siz>/my-projects/leveling-backend
+  - /Users/<siz>/my-projects/leveling-web
 ```
 
-`repos` bo'sh bo'lsa `backlog_dir` olinadi. `backlog_dir` da `.backlog/config.yml`, `backlog/config.yml`
+Loyiha papkalari — `backlog_dir` (har doim birinchi) va `repos` dagi qo'shimcha papkalar; `repos` bo'sh
+bo'lishi mumkin. `repos` da `backlog_dir` yoki takror yozilgan bo'lsa, o'qishda e'tiborsiz qoldiriladi. `backlog_dir` da `.backlog/config.yml`, `backlog/config.yml`
 yoki `backlog.config.yml` bo'lishi kerak.
 
 ## Tekshiruvlar
