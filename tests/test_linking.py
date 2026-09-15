@@ -11,6 +11,7 @@ from agent_hub.services.linking import (
     find_task_keys,
     index_task_ids,
     is_within,
+    live_session_ids,
     pane_task_key,
     panes_for_project,
     project_for_path,
@@ -195,3 +196,82 @@ def test_panes_for_project(tree: dict[str, Path]) -> None:
     ]
     assert [p.id for p in panes_for_project(panes, leveling, [leveling, other])] == ["a"]
     assert [p.id for p in panes_for_project(panes, other, [leveling, other])] == ["b"]
+
+
+# --- tirik pane ↔ sessiya -------------------------------------------------------------------
+
+
+def _live_pane(pane_id: str, cwd: Path, started_at: float, **overrides: object) -> Pane:
+    data: dict[str, object] = {
+        "id": pane_id,
+        "agent": "claude",
+        "cwd": str(cwd),
+        "argv": ["claude"],
+        "started_at": started_at,
+        "alive": True,
+        "runner_id": "r1",
+    }
+    data.update(overrides)
+    return Pane.model_validate(data)
+
+
+def _session(
+    session_id: str, cwd: Path, started_at: float | None, **overrides: object
+) -> AgentSession:
+    data: dict[str, object] = {
+        "agent": "claude",
+        "session_id": session_id,
+        "cwd": str(cwd),
+        "started_at": started_at,
+        "runner_id": "r1",
+    }
+    data.update(overrides)
+    return AgentSession.model_validate(data)
+
+
+def test_live_session_ids_guesses_session_of_pane_without_id(tree: dict[str, Path]) -> None:
+    proj = tree["proj"]
+    before = _session("old-before-pane", proj, 90.0)
+    current = _session("current-session", proj, 130.0)
+    cleared = _session("cleared-earlier", proj, 110.0)
+    # Symlink orqali ochilgan pane ham o'sha papka.
+    pane = _live_pane("p1", tree["link"], 100.0)
+    assert live_session_ids([pane], [before, cleared, current]) == {"current-session"}
+    # Soat yumaloqlanishi: pane'dan bir necha soniya oldin yozilgan sessiya ham uniki.
+    assert live_session_ids([pane], [_session("rounded-clock", proj, 97.0)]) == {"rounded-clock"}
+
+
+def test_live_session_ids_does_not_hide_foreign_sessions(tree: dict[str, Path]) -> None:
+    proj = tree["proj"]
+    pane = _live_pane("p1", proj, 100.0)
+    foreign = [
+        _session("other-folder", tree["proj2"], 120.0),
+        _session("subfolder", proj / "src", 120.0),
+        _session("other-agent", proj, 120.0, agent="codex"),
+        _session("other-runner", proj, 120.0, runner_id="r2"),
+        _session("before-pane", proj, 50.0),
+        _session("no-start-time", proj, None),
+    ]
+    assert live_session_ids([pane], foreign) == set()
+    dead = _live_pane("p2", proj, 100.0, alive=False)
+    assert live_session_ids([dead], [_session("after-dead", proj, 120.0)]) == set()
+
+
+def test_live_session_ids_known_ids_and_several_panes(tree: dict[str, Path]) -> None:
+    proj = tree["proj"]
+    hooked = _live_pane("hook", proj, 10.0, session_id="aaaaaaaa-hook")
+    resumed = _live_pane("res", proj, 20.0, argv=["claude", "--resume", "bbbbbbbb-resume"])
+    first = _live_pane("first", proj, 100.0)
+    second = _live_pane("second", proj, 200.0)
+    sessions = [
+        _session("aaaaaaaa-hook", proj, 300.0),
+        _session("bbbbbbbb-resume", proj, 5.0),
+        _session("first-session", proj, 110.0),
+        _session("second-session", proj, 210.0),
+    ]
+    assert live_session_ids([hooked, resumed, first, second], sessions) == {
+        "aaaaaaaa-hook",
+        "bbbbbbbb-resume",
+        "first-session",
+        "second-session",
+    }

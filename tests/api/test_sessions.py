@@ -56,29 +56,39 @@ def test_list_sessions(api: ApiEnv) -> None:
     )
 
 
-def test_session_open_in_live_pane_is_active(api: ApiEnv) -> None:
-    """KanBot fayl jim turgani uchun `active=False` desa ham, tirik pane'dagi sessiya ochiq."""
+def test_session_open_in_live_pane_is_not_past(api: ApiEnv) -> None:
+    """Tirik pane'dagi sessiya «Jonli agentlar»da — o'tganlarda takrorlanmaydi va resume qilinmaydi.
+
+    KanBot fayl jim turgani uchun `active=False` desa ham u ochiq.
+    """
     hooked = api.session(session_id="aaaaaaaa-hook")
     resumed = api.session(session_id="bbbbbbbb-resume")
     closed = api.session(session_id="cccccccc-closed")
     dead = api.session(session_id="dddddddd-dead")
+    # Qo'lda ochilgan claude pane: session_id bo'sh, sessiya papka/vaqt bo'yicha topiladi.
+    guessed = api.session(session_id="eeeeeeee-guess", agent="claude", started_at=1010.0)
     api.pane(session_id=hooked["session_id"])
-    api.pane(argv=["codex", "resume", resumed["session_id"]])
+    api.pane(argv=["codex", "resume", resumed["session_id"]], agent="codex")
     api.pane(session_id=dead["session_id"], state="done", alive=False)
+    manual = api.pane(id="manual", started_at=1000.0)
 
     past = api.client.get("/api/sessions").json()["past"]
-    active = {s["session_id"]: s["active"] for s in past}
-    assert active == {
-        hooked["session_id"]: True,
-        resumed["session_id"]: True,
+    assert {s["session_id"]: s["active"] for s in past} == {
         closed["session_id"]: False,
         dead["session_id"]: False,
     }
     url = "/api/projects/leveling/sessions/resume"
-    for session in (hooked, resumed):
-        body = {"agent": "codex", "session_id": session["session_id"]}
+    for session in (hooked, resumed, guessed):
+        body = {"agent": session["agent"], "session_id": session["session_id"]}
         assert_error(api.client.post(url, json=body), 409, "session_active")
     assert api.started == []
+
+    # Pane tugagach sessiya o'tganlarga qaytadi va davom ettiriladi.
+    manual["alive"] = False
+    past_ids = [s["session_id"] for s in api.client.get("/api/sessions").json()["past"]]
+    assert guessed["session_id"] in past_ids
+    body = {"agent": "claude", "session_id": guessed["session_id"]}
+    assert api.client.post(url, json=body).status_code == 201
 
 
 def test_session_options_work_without_kanbot(api: ApiEnv) -> None:

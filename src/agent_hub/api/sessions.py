@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_hub.kanbot_client import SESSION_AGENTS
 from agent_hub.registry import Project
-from agent_hub.services.linking import open_session_ids, project_for_path
+from agent_hub.services.linking import live_session_ids, project_for_path
 from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE, TaskInfo, session_title
 
 from .deps import Hub, HubDep
@@ -81,17 +81,19 @@ async def list_sessions(
         (live_views if pane.alive else finished_views).append(view)
     finished_views.sort(key=lambda view: view["ended_at"] or 0.0, reverse=True)
 
-    open_ids = open_session_ids(live.panes)
+    # Tirik pane'dagi sessiya «Jonli agentlar»da turibdi — o'tganlarda takrorlanmaydi.
+    open_ids = live_session_ids(live.panes, live.sessions)
     past_views = []
     for session in live.sessions:
+        if session.session_id in open_ids:
+            continue
         # Loyihadan tashqaridagi sessiyani davom ettirib bo'lmaydi — ro'yxatga ham kirmaydi.
         owner = project_for_path(session.cwd, projects)
         if owner is None or (project is not None and owner.id != project):
             continue
         index = indexes.get(owner.id)
         task = index.for_session(session) if index else None
-        active = session.active or session.session_id in open_ids
-        past_views.append(past_session_view(session, owner.id, task, active=active))
+        past_views.append(past_session_view(session, owner.id, task, active=session.active))
     past_views.sort(key=lambda view: view["mtime"], reverse=True)
 
     return {
@@ -127,7 +129,7 @@ async def resume_session(hub: HubDep, project_id: str, body: SessionResume) -> d
     )
     if session is None:
         raise ApiError(404, "session_not_found", agent=body.agent, session_id=body.session_id)
-    if session.active or session.session_id in open_session_ids(live.panes):
+    if session.active or session.session_id in live_session_ids(live.panes, live.sessions):
         raise ApiError(409, "session_active", session_id=session.session_id)
     index = await TaskIndex.load_or_none(hub.backlog(project))
     task = index.for_session(session) if index else None

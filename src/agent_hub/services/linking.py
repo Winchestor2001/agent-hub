@@ -13,13 +13,15 @@ from collections.abc import Iterable, Sequence
 from functools import lru_cache
 from pathlib import Path
 
-from agent_hub.kanbot_client import HOOKS_PLACEHOLDER, Pane
+from agent_hub.kanbot_client import HOOKS_PLACEHOLDER, AgentSession, Pane
 from agent_hub.registry import Project
 
 # Oldida harf/raqam/`-`/`_` bo'lmasa (masalan `subtask-1` emas); oxirida ID davom etmasa.
 _ID_TEMPLATE = r"(?<![\w-]){prefix}-(\d{{1,9}}(?:\.\d{{1,9}})*)(?![\w-]|\.\d)"
 _RESUME_FLAGS = ("--resume", "-r")
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{7,63}$")
+# Sessiya faylining birinchi yozuvi pane'dan keyin; soat yumaloqlanishi uchun zaxira.
+PANE_SESSION_SLACK_S = 5.0
 
 
 @lru_cache(maxsize=64)
@@ -98,6 +100,45 @@ def open_session_ids(panes: Iterable[Pane]) -> set[str]:
         if resumed:
             ids.add(resumed)
     return ids
+
+
+def live_session_ids(panes: Iterable[Pane], sessions: Iterable[AgentSession]) -> set[str]:
+    """Tirik pane'larga tegishli sessiyalar: `open_session_ids` + ID'si noma'lum pane'lar.
+
+    Qo'lda ochilgan pane'da KanBot `session_id` bermaydi va argv'da `--resume` yo'q. Bunday pane
+    uchun sessiya taxmin qilinadi: agent, papka va runner bir xil, sessiya pane'dan keyin
+    boshlangan. Pane'lar eng yangisidan ko'riladi va har biri hali band bo'lmagan eng yangi
+    nomzodni oladi — `/clear` dan keyingi joriy sessiya va bir papkadagi bir nechta pane uchun.
+    """
+    alive = [pane for pane in panes if pane.alive]
+    ids = open_session_ids(alive)
+    unknown = [
+        pane
+        for pane in alive
+        if not pane.session_id and not resume_session_id(pane.argv) and pane.started_at is not None
+    ]
+    if not unknown:
+        return ids
+    candidates = [s for s in sessions if s.session_id not in ids and s.started_at is not None]
+    for pane in sorted(unknown, key=lambda p: p.started_at or 0.0, reverse=True):
+        match = max(
+            (s for s in candidates if s.session_id not in ids and _pane_owns(pane, s)),
+            key=lambda s: s.started_at or 0.0,
+            default=None,
+        )
+        if match is not None:
+            ids.add(match.session_id)
+    return ids
+
+
+def _pane_owns(pane: Pane, session: AgentSession) -> bool:
+    if session.agent != pane.agent or not pane.cwd or not session.cwd:
+        return False
+    if pane.runner_id and session.runner_id and pane.runner_id != session.runner_id:
+        return False
+    if (session.started_at or 0.0) < (pane.started_at or 0.0) - PANE_SESSION_SLACK_S:
+        return False
+    return real_path(pane.cwd) == real_path(session.cwd)
 
 
 def is_valid_session_id(session_id: str) -> bool:
