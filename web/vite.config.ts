@@ -14,8 +14,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/api": { target: backend },
-      "/ws": { target: backend, ws: true },
+      // changeOrigin: Host backend manziliga almashtiriladi (Agent Hub Host'ni tekshiradi).
+      // Origin o'zgartirilmaydi — `make dev` 5173 ni AGENT_HUB_EXTRA_ORIGINS ga qo'shadi.
+      "/api": { target: backend, changeOrigin: true },
+      "/ws": { target: backend, ws: true, changeOrigin: true },
     },
   },
 });

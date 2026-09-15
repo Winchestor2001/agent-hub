@@ -39,7 +39,8 @@ test-integration: ## Haqiqiy CLI bilan integratsion testlar
 check: lint typecheck test ## Barcha tekshiruvlar
 
 dev: build ## Agent Hub backend (127.0.0.1:$(AGENT_HUB_PORT))
-	AGENT_HUB_PORT=$(AGENT_HUB_PORT) $(UV) run python -m agent_hub
+	AGENT_HUB_PORT=$(AGENT_HUB_PORT) AGENT_HUB_EXTRA_ORIGINS=http://127.0.0.1:5173,http://localhost:5173 \
+		$(UV) run python -m agent_hub
 
 dev-web: ## Vite dev server (127.0.0.1:5173, /api -> backend)
 	cd web && AGENT_HUB_PORT=$(AGENT_HUB_PORT) $(NPM) run dev

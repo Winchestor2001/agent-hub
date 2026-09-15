@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from agent_hub.app import create_app
 from agent_hub.kanbot_client import KanbotClient
+from agent_hub.settings import Settings
 
 KANBOT = "http://kanbot.test"
 SAFE_CONFIG = {"disabled_agents": ["shell", "glm", "kimi"], "auto_approve": False}
@@ -38,7 +39,8 @@ def config_path(tmp_path: Path) -> Path:
 
 
 def _health(config_path: Path) -> dict[str, Any]:
-    app = create_app(kanbot=KanbotClient(KANBOT), kanbot_config=config_path)
+    settings = Settings(config_dir=config_path.parent / "hub", kanbot_config=config_path)
+    app = create_app(settings, kanbot=KanbotClient(KANBOT))
     with TestClient(app) as client:
         resp = client.get("/api/health")
     assert resp.status_code == 200

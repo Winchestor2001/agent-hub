@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,8 +11,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from agent_hub import __version__
-from agent_hub.kanbot_client import DEFAULT_KANBOT_URL, KanbotClient, KanbotError
-from agent_hub.kanbot_safety import Problem, check_config, check_runners, kanbot_config_path
+from agent_hub.kanbot_client import KanbotClient, KanbotError
+from agent_hub.kanbot_safety import Problem, check_config, check_runners
+from agent_hub.registry import Registry
+from agent_hub.security import HostOriginGuard
+from agent_hub.settings import Settings
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -22,14 +24,17 @@ _RESERVED_PREFIXES = ("api/", "ws/")
 
 
 def create_app(
+    settings: Settings,
     static_dir: Path = STATIC_DIR,
     kanbot: KanbotClient | None = None,
-    kanbot_config: Path | None = None,
 ) -> FastAPI:
-    client = kanbot or KanbotClient(os.environ.get("AGENT_HUB_KANBOT_URL", DEFAULT_KANBOT_URL))
+    """FastAPI ilovasi (testlar uchun). Serverga `create_asgi_app` beriladi."""
+    client = kanbot or KanbotClient(settings.kanbot_url)
+    registry = Registry(settings.projects_file)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        registry.load()  # projects.yaml yo'q bo'lsa shu yerda yaratiladi
         try:
             yield
         finally:
@@ -38,10 +43,12 @@ def create_app(
     app = FastAPI(
         title="Agent Hub", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan
     )
+    app.state.settings = settings
+    app.state.registry = registry
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
-        problems: list[Problem] = list(check_config(kanbot_config or kanbot_config_path()))
+        problems: list[Problem] = list(check_config(settings.kanbot_config))
         kanbot_info: dict[str, Any] = {"url": client.base_url, "reachable": False}
         try:
             kb_health = await client.health()
@@ -87,3 +94,8 @@ def create_app(
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
+
+
+def create_asgi_app(settings: Settings, static_dir: Path = STATIC_DIR) -> HostOriginGuard:
+    """Host/Origin himoyasi bilan o'ralgan ilova."""
+    return HostOriginGuard(create_app(settings, static_dir), settings.port, settings.extra_origins)
