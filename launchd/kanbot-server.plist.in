@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- KanBot server, Host/Origin himoyasi bilan (scripts/kanbot_guarded_server.py). scripts/render_launchd.py render qiladi. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>@LABEL_PREFIX@.kanbot-server</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@KANBOT_PYTHON@</string>
+		<string>@REPO@/scripts/kanbot_guarded_server.py</string>
+		<string>--port</string>
+		<string>@KANBOT_PORT@</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>@REPO@</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>@PATH@</string>
+		<key>LANG</key>
+		<string>en_US.UTF-8</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Standard</string>
+	<key>StandardOutPath</key>
+	<string>@LOG_DIR@/kanbot-server.log</string>
+	<key>StandardErrorPath</key>
+	<string>@LOG_DIR@/kanbot-server.log</string>
+</dict>
+</plist>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Agent Hub backend (127.0.0.1). Loyiha venv python'i: `uv run` ishga tushishda sync qilmasin. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>@LABEL_PREFIX@.backend</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@BACKEND_PYTHON@</string>
+		<string>-m</string>
+		<string>agent_hub</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>@REPO@</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>@PATH@</string>
+		<key>LANG</key>
+		<string>en_US.UTF-8</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+		<key>AGENT_HUB_PORT</key>
+		<string>@AGENT_HUB_PORT@</string>
+		<key>AGENT_HUB_KANBOT_URL</key>
+		<string>http://127.0.0.1:@KANBOT_PORT@</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Standard</string>
+	<key>StandardOutPath</key>
+	<string>@LOG_DIR@/backend.log</string>
+	<key>StandardErrorPath</key>
+	<string>@LOG_DIR@/backend.log</string>
+</dict>
+</plist>
