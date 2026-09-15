@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+web/node_modules/
+web/*.tsbuildinfo
+src/agent_hub/static/
+
+# OS / editor
+.DS_Store
+*.log

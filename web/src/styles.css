@@ -1,0 +1,22 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --fg: #d7dae0;
+  --muted: #7d8590;
+  --danger: #f85149;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.shell {
+  padding: 12px 16px;
+}
+
+.error {
+  color: var(--danger);
+}
