@@ -179,6 +179,8 @@ textarea {
 }
 
 .panels {
+  /* Banner bo'lmasa ham oxirgi (1fr) qatorda qoladi. */
+  grid-row: -2;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 340px;
   min-height: 0;
