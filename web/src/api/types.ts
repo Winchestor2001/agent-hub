@@ -102,3 +102,80 @@ export interface SessionsResponse {
   live: LivePane[];
   past: PastSession[];
 }
+
+export interface ChecklistItem {
+  index: number;
+  text: string;
+  checked: boolean;
+}
+
+export interface Milestone {
+  id: string;
+  title: string;
+  done: number;
+  total: number;
+  completed: boolean;
+}
+
+/** `backlog task list --json` elementi + DoD progressi va bog'langan tirik pane'lar. */
+export interface TaskItem {
+  id: string;
+  title: string;
+  status: string;
+  type: string | null;
+  priority: string | null;
+  assignees: string[];
+  labels: string[];
+  milestone: string | null;
+  parent_task_id: string | null;
+  acceptance_criteria_completed: number;
+  acceptance_criteria_count: number;
+  ordinal: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  is_ready: boolean;
+  dod_completed: number;
+  dod_count: number;
+  sessions: LivePane[];
+}
+
+export interface Board {
+  project: Project;
+  task_prefix: string;
+  statuses: string[];
+  labels: string[];
+  milestones: Milestone[];
+  tasks: TaskItem[];
+  kanbot_available: boolean;
+}
+
+export interface TaskDetail extends TaskItem {
+  description: string | null;
+  dependencies: string[];
+  subtasks: { id: string; title: string }[];
+  references: string[];
+  documentation: string[];
+  acceptance_criteria: ChecklistItem[];
+  definition_of_done: ChecklistItem[];
+  implementation_plan: string | null;
+  implementation_notes: string | null;
+  final_summary: string | null;
+  kanbot_available: boolean;
+}
+
+export interface ProjectCreate {
+  id: string;
+  name: string;
+  backlog_dir: string;
+  repos: string[];
+}
+
+export interface TaskCreate {
+  title: string;
+  description?: string;
+  status?: string;
+  labels: string[];
+  assignees: string[];
+  milestone?: string;
+  acceptance_criteria: string[];
+}
