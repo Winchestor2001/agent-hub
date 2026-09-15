@@ -34,7 +34,7 @@ class FakeBacklogCli:
         self.calls: list[list[str]] = []
         self.cwds: list[Path] = []
         # ("task", "edit") kabi kalit bo'yicha majburiy javob (xatolarni sinash uchun).
-        self.overrides: dict[tuple[str, str], CliResult] = {}
+        self.overrides: dict[tuple[str, str] | str, CliResult] = {}
 
     def commands(self, *prefix: str) -> list[list[str]]:
         return [call for call in self.calls if tuple(call[: len(prefix)]) == prefix]
@@ -44,8 +44,12 @@ class FakeBacklogCli:
         self.calls.append(args)
         self.cwds.append(cwd)
         key = (args[0], args[1])
-        if key in self.overrides:
-            return self.overrides[key]
+        if key in self.overrides or args[0] in self.overrides:
+            return self.overrides.get(key) or self.overrides[args[0]]
+        if args[0] == "init":
+            (cwd / ".backlog").mkdir()
+            (cwd / ".backlog" / "config.yml").write_text(f'project_name: "{args[1]}"\n')
+            return CliResult(0, "Initialized\n", "")
         if key == ("task", "list"):
             return CliResult(0, fixture_text("backlog/task_list.json"), "")
         if key == ("task", "view"):
@@ -207,7 +211,12 @@ def api(tmp_path: Path) -> Iterator[ApiEnv]:
     ]
     (config_dir / "projects.yaml").write_text(yaml.safe_dump({"projects": projects}))
 
-    settings = Settings(config_dir=config_dir, kanbot_config=tmp_path / "kanbot.json")
+    settings = Settings(
+        config_dir=config_dir,
+        kanbot_config=tmp_path / "kanbot.json",
+        home=tmp_path,
+        projects_root=tmp_path,
+    )
     cli = FakeBacklogCli()
     app = create_app(
         settings,

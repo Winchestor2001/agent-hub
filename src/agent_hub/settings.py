@@ -1,5 +1,7 @@
 """Ilova sozlamalari: env > ~/.config/agent-hub/config.yaml > default.
 
+`projects_root` — "Loyiha qo'shish" oynasi papka takliflarini qidiradigan joy (~/my-projects).
+
 Host doim `127.0.0.1` — sozlab bo'lmaydi. KanBot manzili ham faqat loopback bo'lishi mumkin.
 """
 
@@ -33,6 +35,8 @@ class Settings:
     kanbot_url: str = DEFAULT_KANBOT_URL
     kanbot_config: Path = field(default_factory=kanbot_config_path)
     extra_origins: tuple[str, ...] = ()
+    home: Path = field(default_factory=Path.home)
+    projects_root: Path = field(default_factory=lambda: Path.home() / "my-projects")
     host: str = field(default=HOST, init=False)
 
     @property
@@ -51,12 +55,16 @@ class Settings:
         url_raw = environ.get("AGENT_HUB_KANBOT_URL") or file_values.get("kanbot_url")
         kanbot_url = str(url_raw or DEFAULT_KANBOT_URL)
         origins = environ.get("AGENT_HUB_EXTRA_ORIGINS", "")
+        root_raw = environ.get("AGENT_HUB_PROJECTS_ROOT") or file_values.get("projects_root")
+        home = Path.home()
         return cls(
             config_dir=config_dir,
             port=_parse_port(port_raw),
             kanbot_url=_parse_loopback_url(kanbot_url),
             kanbot_config=kanbot_config_path(environ),
             extra_origins=tuple(o.strip() for o in origins.split(",") if o.strip()),
+            home=home,
+            projects_root=Path(str(root_raw)).expanduser() if root_raw else home / "my-projects",
         )
 
 

@@ -1,8 +1,11 @@
-import { QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, apiFetch } from "./client";
 import type {
+  BacklogInit,
   Board,
+  FolderListing,
+  FolderSuggestions,
   Health,
   Project,
   ProjectCreate,
@@ -31,6 +34,9 @@ export const queryKeys = {
   board: (projectId: string) => ["board", projectId] as const,
   tasks: (projectId: string) => ["task", projectId] as const,
   task: (projectId: string, taskId: string) => ["task", projectId, taskId] as const,
+  folders: ["folders"],
+  folderSuggestions: ["folders", "suggestions"],
+  folder: (path: string) => ["folders", "browse", path] as const,
 };
 
 const enc = encodeURIComponent;
@@ -172,6 +178,32 @@ export function useAddProject() {
   return useMutation({
     mutationFn: (body: ProjectCreate) => apiFetch<Project>("/api/projects", { method: "POST", body }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.projects }),
+  });
+}
+
+export function useFolderSuggestions() {
+  return useQuery({
+    queryKey: queryKeys.folderSuggestions,
+    queryFn: ({ signal }) => apiFetch<FolderSuggestions>("/api/folders/suggestions", { signal }),
+  });
+}
+
+/** `path` bo'sh bo'lsa server ~/my-projects (yoki uy papkasi)ni ochadi. */
+export function useFolder(path: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.folder(path),
+    queryFn: ({ signal }) => apiFetch<FolderListing>(`/api/folders?path=${enc(path)}`, { signal }),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useInitBacklog() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BacklogInit) =>
+      apiFetch<{ path: string; has_backlog: boolean }>("/api/folders/init-backlog", { method: "POST", body }),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.folders }),
   });
 }
 

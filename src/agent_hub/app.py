@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from agent_hub import __version__
-from agent_hub.api import events, health, projects, sessions, tasks, terminal
+from agent_hub.api import events, folders, health, projects, sessions, tasks, terminal
 from agent_hub.api.deps import BacklogFactory, Hub
 from agent_hub.api.errors import error_response, install_error_handlers
 from agent_hub.backlog_client import BacklogClient
@@ -53,7 +53,7 @@ def create_app(
     app.state.hub = Hub(settings, registry, client, backlog_factory)
     app.state.events = event_hub
     install_error_handlers(app)
-    routers = (health, projects, tasks, sessions, terminal, events)
+    routers = (health, projects, folders, tasks, sessions, terminal, events)
     for module in routers:
         app.include_router(module.router)
 

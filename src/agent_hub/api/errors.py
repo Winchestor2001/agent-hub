@@ -40,6 +40,7 @@ _BACKLOG_STATUS = {
     "task_not_found": 404,
     "backlog_locked": 409,
     "backlog_timeout": 504,
+    "backlog_exists": 409,
 }
 _KANBOT_STATUS = {
     "kanbot_unavailable": 503,

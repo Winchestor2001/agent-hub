@@ -266,6 +266,10 @@ def parse_created_id(stdout: str) -> str:
     return match.group(1)
 
 
+INIT_BACKLOG_DIR = ".backlog"
+INIT_TIMEOUT = 60.0
+
+
 class BacklogClient:
     def __init__(
         self,
@@ -309,6 +313,31 @@ class BacklogClient:
         raise BacklogCliError(
             message, command=" ".join(args[:2]), returncode=result.returncode, detail=message
         )
+
+    async def init(self, project_name: str, *, git: bool) -> None:
+        """`root`da `.backlog/` yaratadi: agent yo'riqnoma fayllarisiz va commit'siz.
+
+        Git bo'lmagan papkada `--no-git` shart: aks holda CLI savol berib, hech narsa yaratmasdan
+        0 kod bilan chiqadi. Shu sabab natija config.yml borligi bilan tekshiriladi.
+        """
+        if any((self.root / candidate).is_file() for candidate in BACKLOG_CONFIG_CANDIDATES):
+            raise BacklogCliError("bekloq bor", code="backlog_exists", path=str(self.root))
+        argv = [
+            self.executable, "init", project_name, "--defaults",
+            "--backlog-dir", INIT_BACKLOG_DIR, "--integration-mode", "none",
+        ]  # fmt: skip
+        if not git:
+            argv.append("--no-git")
+        result = await self._runner(argv, self.root, INIT_TIMEOUT)
+        if result.returncode != 0 or not (self.root / INIT_BACKLOG_DIR / "config.yml").is_file():
+            message = (result.stderr.strip() or result.stdout.strip())[:500]
+            raise BacklogCliError(
+                message or "config.yml yaratilmadi",
+                code="backlog_init_failed",
+                path=str(self.root),
+                detail=message,
+            )
+        self.invalidate()
 
     async def _cached(self, key: str, loader: Callable[[], Awaitable[Any]]) -> Any:
         fingerprint = compute_fingerprint(self.root).digest

@@ -1152,3 +1152,92 @@ button.session-open:focus-visible {
 .terminal-screen .xterm {
   height: 100%;
 }
+
+/* --- papka tanlash --- */
+
+.input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.input-row > input {
+  flex: 1;
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.picker-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.picker-entry {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 8px;
+}
+
+.chip-ok {
+  border-color: #1f5a2c;
+  color: #7ee29a;
+}
+
+.field-ok {
+  font-size: 11px;
+  color: var(--ok);
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #5c4613;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+}
+
+.confirm-neutral {
+  border-color: #2f5fb3;
+  background: #111c2e;
+}
+
+.repo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 1px 8px;
+  min-width: 0;
+}
+
+.repo-row > .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

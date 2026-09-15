@@ -284,6 +284,46 @@ async def test_generic_cli_error(project: Path) -> None:
     assert len(runner.calls) == 1
 
 
+def _init_handler(root: Path, create: bool = True) -> Handler:
+    def handler(args: list[str]) -> CliResult:
+        assert args[0] == "init"
+        if create:
+            (root / ".backlog").mkdir()
+            (root / ".backlog" / "config.yml").write_text('project_name: "New"\n')
+        return ok("Initialized\n")
+
+    return handler
+
+
+@pytest.mark.parametrize(("git", "tail"), [(True, []), (False, ["--no-git"])])
+async def test_init(tmp_path: Path, git: bool, tail: list[str]) -> None:
+    client, runner = make_client(tmp_path, _init_handler(tmp_path))
+    await client.init("New app", git=git)
+    base = ["init", "New app", "--defaults", "--backlog-dir", ".backlog", "--integration-mode"]
+    assert runner.calls == [[*base, "none", *tail]]
+    assert runner.cwds == [tmp_path]
+
+
+async def test_init_rejects_existing_backlog(project: Path) -> None:
+    client, runner = make_client(project, _init_handler(project))
+    with pytest.raises(BacklogCliError) as exc:
+        await client.init("P", git=True)
+    assert exc.value.code == "backlog_exists"
+    assert runner.calls == []
+
+
+async def test_init_without_config_fails(tmp_path: Path) -> None:
+    client, _ = make_client(tmp_path, _init_handler(tmp_path, create=False))
+    with pytest.raises(BacklogCliError) as exc:
+        await client.init("New", git=False)
+    assert exc.value.code == "backlog_init_failed"
+    client, _ = make_client(tmp_path, lambda args: fail("boom"))
+    with pytest.raises(BacklogCliError) as exc:
+        await client.init("New", git=False)
+    assert exc.value.code == "backlog_init_failed"
+    assert exc.value.params["detail"] == "boom"
+
+
 @pytest.mark.parametrize(
     "stdout", ["not json", '{"kind": "other"}', '{"kind": "task-list", "tasks": [{}]}']
 )

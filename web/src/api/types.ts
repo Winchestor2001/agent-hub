@@ -199,3 +199,28 @@ export interface SessionResume {
   agent: string;
   session_id: string;
 }
+
+export interface FolderEntry {
+  name: string;
+  path: string;
+  has_backlog: boolean;
+}
+
+export interface FolderListing extends FolderEntry {
+  home: string;
+  parent: string | null;
+  in_git: boolean;
+  entries: FolderEntry[];
+  truncated: boolean;
+}
+
+export interface FolderSuggestions {
+  root: string;
+  home: string;
+  folders: FolderEntry[];
+}
+
+export interface BacklogInit {
+  path: string;
+  name: string;
+}

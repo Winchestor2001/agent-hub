@@ -60,3 +60,11 @@ def test_invalid_config_file(tmp_path: Path, content: str) -> None:
     (tmp_path / "config.yaml").write_text(content)
     with pytest.raises(SettingsError):
         Settings.load(_env(tmp_path))
+
+
+def test_projects_root(tmp_path: Path) -> None:
+    assert Settings.load(_env(tmp_path)).projects_root == Path.home() / "my-projects"
+    (tmp_path / "config.yaml").write_text("projects_root: ~/code\n")
+    assert Settings.load(_env(tmp_path)).projects_root == Path.home() / "code"
+    env = _env(tmp_path, AGENT_HUB_PROJECTS_ROOT=str(tmp_path / "src"))
+    assert Settings.load(env).projects_root == tmp_path / "src"

@@ -61,6 +61,10 @@ class Hub:
             )
         return client
 
+    def backlog_at(self, directory: Path) -> BacklogClient:
+        """Registrga kirmagan papka uchun keshsiz klient (masalan, `init`)."""
+        return self._backlog_factory(directory)
+
     def forget_backlog(self, project: Project) -> None:
         self._backlogs.pop(project.backlog_dir, None)
 

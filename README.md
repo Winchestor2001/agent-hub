@@ -84,10 +84,28 @@ xuddi shu qiymatlarni bering).
 
 ## Loyiha qo'shish
 
-UI'da chap paneldagi **+ Loyiha** tugmasi: nomi, ID (kichik lotin harflari, raqam va `-`), bekloq papkasi
-(`backlog/` yoki `.backlog/` joylashgan papka) va ixtiyoriy repo papkalari. Repo papkalari sessiyalarni
-loyihaga bog'lash uchun ishlatiladi; bo'sh qolsa bekloq papkasi olinadi. **Ro'yxatdan olib tashlash** faqat
-Agent Hub ro'yxatini o'zgartiradi, bekloq va fayllarga tegmaydi.
+UI'da chap paneldagi **+ Loyiha** tugmasi. Yo'llarni yodda tutish shart emas:
+
+- Oynaning tepasida `~/my-projects` dagi hali qo'shilmagan papkalar chiqadi (bekloqlilari birinchi,
+  «bekloq bor/yo'q» belgisi bilan). Birini bosish bekloq papkasini, nomni va ID'ni to'ldiradi.
+- **Tanlash…** va **+ Papka qo'shish** uy papkasi ichidagi papka brauzerini ochadi (faqat papkalar;
+  uydan tashqariga chiqib bo'lmaydi).
+
+Maydonlar nima uchun kerak:
+
+- **Bekloq papkasi** — vazifalar shu papkadagi `.backlog/` yoki `backlog/` dan o'qiladi, `backlog`
+  buyruqlari ham shu yerda bajariladi. Odatda asosiy repo.
+- **Repo papkalari** — agent sessiyalari ish papkasi (cwd) bo'yicha loyihaga bog'lanadi: shu papkalar
+  ichida ochilgan sessiyalar loyihada ko'rinadi, yangi sessiya ham ulardan birida boshlanadi. Loyiha bir
+  nechta repodan iborat bo'lsa (masalan backend va web), hammasini qo'shing; bo'sh qolsa bekloq papkasi olinadi.
+
+Tanlangan papkada bekloq bo'lmasa, oyna **Bekloq yaratish** tugmasini taklif qiladi. Tasdiqlagandan keyin
+`backlog init <nom> --defaults --backlog-dir .backlog --integration-mode none` bajariladi (git bo'lmagan
+papkada `--no-git` bilan): faqat `.backlog/` yaratiladi, `CLAUDE.md`/`AGENTS.md` qo'shilmaydi va commit
+qilinmaydi. Bekloq allaqachon bor papkada yaratish rad etiladi. Agent Hub hech qachon bekloqni o'zi
+avtomatik yaratmaydi.
+
+**Ro'yxatdan olib tashlash** faqat Agent Hub ro'yxatini o'zgartiradi, bekloq va fayllarga tegmaydi.
 
 Loyihalarni `~/.config/agent-hub/projects.yaml` da qo'lda ham tahrirlash mumkin (format "Sozlamalar"
 bo'limida). Backend fayl o'zgarishini keyingi so'rovda o'qiydi.
@@ -202,6 +220,8 @@ Servis ishga tushmasa: `make status`, keyin tegishli log. Tez-tez uchraydigan sa
 - Bir vaqtda faqat bitta runner: `kanbot up` yoki ikkinchi `kanbot runner` ni servislar bilan birga
   ishlatmang (`make status` buni tekshiradi).
 - Agentlar sizning foydalanuvchi huquqlaringiz bilan loyiha papkalarida ishlaydi.
+- Papka brauzeri (`/api/folders`) faqat uy papkasi ichidagi papka nomlarini ko'rsatadi (symlink'lar ochilib
+  tekshiriladi), fayllar va yashirin papkalar chiqmaydi.
 - Plist'larda token va API kalitlari yo'q. KanBot tokeni faqat `~/.kanbot/config.json` da qoladi, runner uni
   o'zi o'qiydi. `claude` va `codex` obuna avtorizatsiyasidan foydalanadi.
 
@@ -276,6 +296,7 @@ Agent Hub doim faqat `127.0.0.1` da tinglaydi. Qolgan qiymatlar env'dan, keyin
 | `AGENT_HUB_KANBOT_URL` | `kanbot_url` | `http://127.0.0.1:8787` (faqat loopback) |
 | `AGENT_HUB_CONFIG_DIR` | — | `~/.config/agent-hub` |
 | `AGENT_HUB_EXTRA_ORIGINS` | — | bo'sh (vergul bilan ajratilgan Origin'lar) |
+| `AGENT_HUB_PROJECTS_ROOT` | `projects_root` | `~/my-projects` (papka takliflari shu yerdan) |
 | `KANBOT_HOME` | — | `~/.kanbot` (faqat o'qiladi) |
 
 Loyihalar `~/.config/agent-hub/projects.yaml` da saqlanadi (atomar yoziladi):
