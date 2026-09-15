@@ -11,7 +11,16 @@ import {
 } from "../api/queries";
 import type { LivePane, PastSession, ProjectItem, TaskRef } from "../api/types";
 import { useI18n } from "../i18n/context";
-import { baseName, groupLive, paneActivity, pruneSelection, sessionKey, toggleKey } from "../sessions/model";
+import {
+  BLOCKED,
+  baseName,
+  groupLive,
+  paneActivity,
+  pruneSelection,
+  sessionKey,
+  splitByProject,
+  toggleKey,
+} from "../sessions/model";
 import { focusIndex } from "../sessions/navigation";
 import { ErrorText } from "./ErrorText";
 import { Panel } from "./Panel";
@@ -24,6 +33,9 @@ interface SessionsPanelProps {
   projects: readonly ProjectItem[] | undefined;
   onOpenTask: OpenTask;
   onNewSession: () => void;
+  /** `false` — faqat tanlangan loyiha sessiyalari; boshqalarining soni ko'rsatiladi. */
+  showAll: boolean;
+  onToggleShowAll: () => void;
   /** Markazda ochiq terminal (ro'yxatda belgilanadi). */
   terminalPaneId: string | null;
   onOpenTerminal: (paneId: string) => void;
@@ -36,6 +48,8 @@ export function SessionsPanel({
   projects,
   onOpenTask,
   onNewSession,
+  showAll,
+  onToggleShowAll,
   terminalPaneId,
   onOpenTerminal,
   onSessionsRemoved,
@@ -43,9 +57,11 @@ export function SessionsPanel({
   const { t } = useI18n();
   const live = useLiveSessions();
   const names = new Map(projects?.map((p) => [p.id, p.name]));
+  const projectId = showAll ? null : (project?.id ?? null);
   // Xatoda eski ro'yxat ko'rsatilmaydi: KanBot o'chsa "javob kutmoqda" ham yo'qoladi.
-  const groups = live.data && !live.error ? groupLive(live.data.live) : null;
-  const finished = live.error ? [] : (live.data?.finished ?? []);
+  const split = live.data && !live.error ? splitByProject(live.data.live, projectId) : null;
+  const groups = split ? groupLive(split.mine) : null;
+  const finished = live.error ? [] : splitByProject(live.data?.finished ?? [], projectId).mine;
 
   return (
     <Panel
@@ -73,6 +89,9 @@ export function SessionsPanel({
         <QueryBody error={live.error} loaded={groups !== null} empty={groups?.others.length === 0}>
           {groups && <LiveList panes={groups.others} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />}
         </QueryBody>
+        {split && project && (
+          <ScopeHint project={project} showAll={showAll} others={split.others} onToggle={onToggleShowAll} />
+        )}
         {groups && <p className="muted session-hint">{t("sessions.shortcut_hint")}</p>}
       </Section>
       {finished.length > 0 && (
@@ -94,6 +113,42 @@ export function SessionsPanel({
       )}
       </div>
     </Panel>
+  );
+}
+
+/** Boshqa loyihalardagi jonli sessiyalar soni va "hammasi / faqat shu loyiha" almashtirgichi. */
+function ScopeHint({
+  project,
+  showAll,
+  others,
+  onToggle,
+}: {
+  project: ProjectItem;
+  showAll: boolean;
+  others: readonly LivePane[];
+  onToggle: () => void;
+}) {
+  const { t } = useI18n();
+  if (showAll) {
+    return (
+      <p className="muted session-scope">
+        {t("sessions.showing_all")}
+        <button type="button" className="scope-toggle" onClick={onToggle}>
+          {t("sessions.show_project", { project: project.name })}
+        </button>
+      </p>
+    );
+  }
+  if (others.length === 0) return null;
+  const blocked = others.filter((pane) => pane.state === BLOCKED).length;
+  return (
+    <p className="muted session-scope">
+      {t("sessions.other_projects", { count: others.length })}
+      {blocked > 0 && <span className="scope-blocked">{t("sessions.other_blocked", { count: blocked })}</span>}
+      <button type="button" className="scope-toggle" onClick={onToggle}>
+        {t("sessions.show_all")}
+      </button>
+    </p>
   );
 }
 

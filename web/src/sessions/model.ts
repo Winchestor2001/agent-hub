@@ -15,6 +15,20 @@ export function groupLive(panes: readonly LivePane[]): LiveGroups {
   return groups;
 }
 
+export interface ProjectPanes {
+  mine: LivePane[];
+  others: LivePane[];
+}
+
+/** Tanlangan loyiha pane'lari va qolganlari (boshqa loyiha yoki loyihasiz); loyiha yo'q bo'lsa hammasi `mine`. */
+export function splitByProject(panes: readonly LivePane[], projectId: string | null): ProjectPanes {
+  const split: ProjectPanes = { mine: [], others: [] };
+  for (const pane of panes) {
+    (projectId === null || pane.project_id === projectId ? split.mine : split.others).push(pane);
+  }
+  return split;
+}
+
 export type TimeUnit = "seconds" | "minutes" | "hours" | "days";
 
 export interface Elapsed {

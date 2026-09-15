@@ -120,12 +120,17 @@ bloklangan) o'zbekcha ochiladi. Backend xatolari ham tanlangan tilda ko'rsatilad
 keladi. Oqim uzilsa ham UI har 2,5 s da (o'tgan sessiyalar — 6 s da) so'rab turadi; jonli sessiyalar
 ro'yxati tab fonda bo'lganda ham yangilanadi.
 
+**Sessiyalar paneli.** Jonli, javob kutayotgan va tugagan sessiyalar tanlangan loyiha bo'yicha ko'rsatiladi
+(sessiya loyihaga ishchi papkasi — cwd — orqali bog'lanadi). Boshqa loyihalarda yoki loyihadan tashqarida
+ochiq sessiyalar bo'lsa, «Jonli agentlar» ostida ularning soni (javob kutayotganlari qizil) yoziladi;
+**Hammasini ko'rsatish** barcha loyihalar sessiyalarini ochadi, **Faqat <loyiha>** qaytaradi.
+
 **Javob kutayotgan sessiyalar.** Ruxsat yoki javob kutayotgan agentlar Sessiyalar panelida «Javob kutmoqda»
-bo'limida birinchi turadi, soni tab sarlavhasida ko'rinadi: `(2) Agent Hub`.
+bo'limida birinchi turadi, soni (barcha loyihalar bo'yicha) tab sarlavhasida ko'rinadi: `(2) Agent Hub`.
 
 - Brauzer bildirishnomasi: yuqori paneldagi **Bildirishnomalar** tugmasini bosib ruxsat bering. Sessiya
   javob kuta boshlaganda, Agent Hub tabi fokusda bo'lmasa bildirishnoma chiqadi; bosilsa shu sessiya
-  terminali ochiladi. Ruxsat rad etilgan bo'lsa yuqori panelda «Bildirishnomalar bloklangan» yoziladi — brauzerning
+  terminali ochiladi (boshqa loyihada bo'lsa, o'sha loyiha tanlanadi). Ruxsat rad etilgan bo'lsa yuqori panelda «Bildirishnomalar bloklangan» yoziladi — brauzerning
   sayt sozlamalarida `http://127.0.0.1:8700` uchun ruxsat bering.
 - Holat hook'lardan olinadi. Hook bo'lmasa (masalan, Codex) holat ekrandan taxminiy aniqlanadi va «≈» bilan
   belgilanadi; bunday sessiyada javob kutish har doim ham aniqlanmaydi.
@@ -134,7 +139,7 @@ bo'limida birinchi turadi, soni tab sarlavhasida ko'rinadi: `(2) Agent Hub`.
 
 | Tugma | Amal |
 |---|---|
-| Alt+Shift+↓ / ↑ (macOS: ⌥⇧↓ / ↑) | Keyingi / oldingi jonli sessiya terminali (aylanma; avval javob kutayotganlar, keyin boshlanish tartibida). Terminal fokusda bo'lsa ham ishlaydi, matn maydonlarida va dialog ochiqligida ishlamaydi |
+| Alt+Shift+↓ / ↑ (macOS: ⌥⇧↓ / ↑) | Panelda ko'rinayotgan keyingi / oldingi jonli sessiya terminali (aylanma; avval javob kutayotganlar, keyin boshlanish tartibida). Terminal fokusda bo'lsa ham ishlaydi, matn maydonlarida va dialog ochiqligida ishlamaydi |
 | ↑ / ↓ / Home / End | Sessiya nomi fokusda bo'lsa — ro'yxatdagi keyingi sessiyaga o'tish |
 | Enter | Fokusdagi sessiya terminalini ochish |
 

@@ -11,6 +11,7 @@ import {
   pruneSelection,
   sessionKey,
   sessionTasks,
+  splitByProject,
   toggleKey,
 } from "./model";
 
@@ -59,6 +60,26 @@ function task(id: string, status: string): TaskItem {
     sessions: [],
   };
 }
+
+describe("splitByProject", () => {
+  it("tanlangan loyiha pane'lari alohida, loyihasizlar boshqalar qatorida", () => {
+    const panes = [
+      pane("a", { project_id: "p1" }),
+      pane("b", { project_id: "p2" }),
+      pane("c", { project_id: null }),
+      pane("d", { project_id: "p1", state: "blocked" }),
+    ];
+    const split = splitByProject(panes, "p1");
+    expect(split.mine.map((p) => p.id)).toEqual(["a", "d"]);
+    expect(split.others.map((p) => p.id)).toEqual(["b", "c"]);
+  });
+
+  it("loyiha tanlanmagan bo'lsa hammasi ko'rinadi", () => {
+    const split = splitByProject([pane("a", { project_id: "p1" }), pane("b", { project_id: null })], null);
+    expect(split.mine.map((p) => p.id)).toEqual(["a", "b"]);
+    expect(split.others).toEqual([]);
+  });
+});
 
 describe("groupLive", () => {
   it("blocked alohida, tartib saqlanadi", () => {

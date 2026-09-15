@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { collectBanners } from "./api/banners";
 import { useLiveEvents } from "./api/events";
@@ -11,6 +11,7 @@ import { SessionsPanel } from "./components/SessionsPanel";
 import { TerminalView } from "./components/TerminalView";
 import { TopBar } from "./components/TopBar";
 import { useBlockedAlerts } from "./sessions/alerts";
+import { splitByProject } from "./sessions/model";
 import { navigationOrder, useSessionShortcuts } from "./sessions/navigation";
 
 interface TaskTarget {
@@ -28,17 +29,37 @@ export function App() {
   const [newSession, setNewSession] = useState<{ projectId: string; taskId: string | null } | null>(null);
   // Terminal markaziy panel o'rnida; doska yashiriladi (filtr va detal saqlanadi).
   const [terminalPaneId, setTerminalPaneId] = useState<string | null>(null);
+  // Sessiyalar paneli odatda faqat tanlangan loyiha sessiyalarini ko'rsatadi.
+  const [showAllSessions, setShowAllSessions] = useState(false);
   const live = useLiveSessions();
   // Xatoda eski ro'yxat hisobga olinmaydi (panel ham uni ko'rsatmaydi).
   const livePanes = live.error ? undefined : live.data?.live;
-  const paneOrder = useMemo(() => navigationOrder(livePanes ?? []), [livePanes]);
-  useBlockedAlerts(livePanes, setTerminalPaneId);
-  useSessionShortcuts(paneOrder, terminalPaneId, setTerminalPaneId);
 
   const items = projects.data?.projects;
   const selected = items?.find((p) => p.id === selectedId) ?? items?.[0] ?? null;
+  const selectedProjectId = selected?.id ?? null;
   const sessionProject = newSession && items?.find((p) => p.id === newSession.projectId);
 
+  // Shortcut panelda ko'rinayotgan sessiyalar orasida o'tadi.
+  const paneOrder = useMemo(() => {
+    const panes = livePanes ?? [];
+    return navigationOrder(showAllSessions ? panes : splitByProject(panes, selectedProjectId).mine);
+  }, [livePanes, showAllSessions, selectedProjectId]);
+  useSessionShortcuts(paneOrder, terminalPaneId, setTerminalPaneId);
+
+  // Bildirishnoma barcha loyihalar uchun; bosilganda sessiya loyihasi tanlanadi.
+  const openAlertedPane = useCallback(
+    (paneId: string) => {
+      const projectId = livePanes?.find((pane) => pane.id === paneId)?.project_id;
+      if (projectId && projectId !== selectedProjectId) {
+        setSelectedId(projectId);
+        setOpenTask(null);
+      }
+      setTerminalPaneId(paneId);
+    },
+    [livePanes, selectedProjectId],
+  );
+  useBlockedAlerts(livePanes, openAlertedPane);
   function selectProject(projectId: string) {
     setSelectedId(projectId);
     setOpenTask(null);
@@ -98,6 +119,10 @@ export function App() {
             setSelectedId(projectId);
             setOpenTask({ projectId, taskId });
             setTerminalPaneId(null);
+          }}
+          showAll={showAllSessions}
+          onToggleShowAll={() => {
+            setShowAllSessions((value) => !value);
           }}
           terminalPaneId={terminalPaneId}
           onOpenTerminal={setTerminalPaneId}

@@ -1099,6 +1099,32 @@ button.session-open:focus-visible {
   font-size: 11px;
 }
 
+.session-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  padding: 6px 2px 0;
+  font-size: 12px;
+}
+
+.scope-blocked {
+  color: var(--danger);
+}
+
+.scope-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.scope-toggle:hover {
+  text-decoration: underline;
+}
+
 .panel-terminal {
   background: var(--bg);
 }
