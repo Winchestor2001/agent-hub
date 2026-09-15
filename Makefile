@@ -30,8 +30,9 @@ typecheck: ## mypy --strict + tsc --noEmit
 	$(UV) run mypy
 	cd web && $(NPM) run typecheck
 
-test: ## pytest (mock'lar bilan)
+test: ## pytest (mock'lar bilan) + vitest
 	$(UV) run pytest
+	cd web && $(NPM) test
 
 test-integration: ## Haqiqiy CLI bilan integratsion testlar
 	$(UV) run pytest -m integration

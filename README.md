@@ -103,6 +103,6 @@ yoki `backlog.config.yml` bo'lishi kerak.
 ## Tekshiruvlar
 
 ```sh
-make check              # ruff, mypy --strict, pytest, eslint, tsc --noEmit
+make check              # ruff, mypy --strict, pytest, vitest, eslint, tsc --noEmit
 make test-integration   # haqiqiy backlog CLI bilan (vaqtinchalik papkada)
 ```

@@ -1,30 +1,46 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
-interface Health {
-  ok: boolean;
-  version: string;
-}
+import { collectBanners } from "./api/banners";
+import { useHealth, useProjects } from "./api/queries";
+import { Banners } from "./components/Banners";
+import { BoardPanel } from "./components/BoardPanel";
+import { ProjectsPanel } from "./components/ProjectsPanel";
+import { SessionsPanel } from "./components/SessionsPanel";
+import { TopBar } from "./components/TopBar";
 
 export function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const health = useHealth();
+  const projects = useProjects();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/health")
-      .then(async (resp) => {
-        if (!resp.ok) throw new Error(`HTTP ${String(resp.status)}`);
-        setHealth((await resp.json()) as Health);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
-      });
-  }, []);
+  const items = projects.data?.projects;
+  const selected = items?.find((p) => p.id === selectedId) ?? items?.[0] ?? null;
+
+  const banners = useMemo(
+    () =>
+      collectBanners({
+        health: health.data,
+        healthError: health.error,
+        projects: projects.data,
+        projectsError: projects.error,
+      }),
+    [health.data, health.error, projects.data, projects.error],
+  );
 
   return (
-    <main className="shell">
-      <h1>Agent Hub</h1>
-      {health && <p>backend v{health.version}</p>}
-      {error && <p className="error">Backend bilan aloqa yo'q: {error}</p>}
-    </main>
+    <div className="app">
+      <TopBar health={health.data} error={health.error} />
+      <Banners banners={banners} />
+      <main className="panels">
+        <ProjectsPanel
+          projects={items}
+          error={projects.error}
+          selectedId={selected?.id ?? null}
+          onSelect={setSelectedId}
+        />
+        <BoardPanel project={selected} />
+        <SessionsPanel />
+      </main>
+    </div>
   );
 }
