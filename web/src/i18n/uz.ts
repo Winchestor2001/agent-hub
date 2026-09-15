@@ -150,6 +150,25 @@ export const uz = {
   "task.start_session": "+ Sessiya",
   "task.start_session_title": "Shu vazifa uchun yangi agent sessiyasi",
   "task.no_sessions": "jonli sessiya yo'q",
+  "task.open_terminal": "Terminalni ochish",
+
+  "sessions.open_terminal": "Terminalni ochish",
+
+  "terminal.back": "← Doska",
+  "terminal.back_title": "Doskaga qaytish",
+  "terminal.quick_keys": "Tezkor tugmalar",
+  "terminal.key_title": "Pane'ga yuborish: {key}",
+  "terminal.connecting": "ulanmoqda…",
+  "terminal.open": "ulangan",
+  "terminal.closed": "Ulanish uzildi",
+  "terminal.closed_gone": "Sessiya topilmadi — pane yopilgan yoki runner o'chiq",
+  "terminal.closed_kanbot": "KanBot ishlamayapti yoki ulanish uzildi",
+  "terminal.closed_slow": "Terminal ortda qoldi — ulanish uzildi",
+  "terminal.closed_bad_request": "Sessiya ID noto'g'ri",
+  "terminal.reconnect": "Qayta ulanish",
+  "terminal.error_invalid_keys": "Tugma rad etildi",
+  "terminal.error_bad_message": "Xabar rad etildi",
+  "terminal.ended": "Sessiya tugagan — yozish pane'ga yetmaydi",
 
   "banner.backend_unreachable": "Agent Hub backend bilan aloqa yo'q. Ma'lumotlar yangilanmayapti.",
   "banner.kanbot_unavailable":

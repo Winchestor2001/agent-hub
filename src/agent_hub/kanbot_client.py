@@ -230,6 +230,11 @@ class KanbotClient:
         self._http = http or httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, trust_env=False)
         self._warned_version: str | None = None
 
+    @property
+    def web_socket_url(self) -> str:
+        """KanBot'ning brauzer oqimi (`/ws/web`): pane terminallari shu orqali keladi."""
+        return "ws" + self.base_url.removeprefix("http") + "/ws/web"
+
     async def aclose(self) -> None:
         await self._http.aclose()
 
@@ -360,8 +365,12 @@ class KanbotClient:
 _PANE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
+def is_valid_pane_id(pane_id: str) -> bool:
+    return _PANE_ID_RE.match(pane_id) is not None
+
+
 def _seg(pane_id: str) -> str:
     """Pane ID URL yo'liga qo'yiladi — faqat xavfsiz belgilar (path traversal yo'q)."""
-    if not _PANE_ID_RE.match(pane_id):
+    if not is_valid_pane_id(pane_id):
         raise ValueError(f"noto'g'ri pane ID: {pane_id!r}")
     return pane_id

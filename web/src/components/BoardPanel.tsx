@@ -27,14 +27,17 @@ interface BoardPanelProps {
   onOpenTask: (taskId: string | null) => void;
   /** Yangi sessiya dialogi; vazifa detalidan chaqirilsa vazifa oldindan tanlanadi. */
   onStartSession: (taskId: string | null) => void;
+  onOpenTerminal: (paneId: string) => void;
+  /** Terminal ochiq: doska yashiriladi, lekin filtr va ochiq detal saqlanadi. */
+  hidden: boolean;
 }
 
-export function BoardPanel({ project, openTaskId, onOpenTask, onStartSession }: BoardPanelProps) {
+export function BoardPanel({ project, hidden, ...viewProps }: BoardPanelProps) {
   const { t } = useI18n();
 
   if (!project) {
     return (
-      <Panel title={t("panel.board")} className="panel-board">
+      <Panel title={t("panel.board")} className="panel-board" hidden={hidden}>
         <p className="muted placeholder">{t("board.select_project")}</p>
       </Panel>
     );
@@ -45,24 +48,25 @@ export function BoardPanel({ project, openTaskId, onOpenTask, onStartSession }: 
       title={`${t("panel.board")} · ${project.name}`}
       aside={<span className="muted mono">{project.backlog_dir}</span>}
       className="panel-board"
+      hidden={hidden}
     >
       {project.error ? (
         <ErrorText error={project.error} />
       ) : (
         // Loyiha almashsa filtr va dialoglar tozalanadi.
-        <BoardView
-          key={project.id}
-          projectId={project.id}
-          openTaskId={openTaskId}
-          onOpenTask={onOpenTask}
-          onStartSession={onStartSession}
-        />
+        <BoardView key={project.id} projectId={project.id} {...viewProps} />
       )}
     </Panel>
   );
 }
 
-function BoardView({ projectId, openTaskId, onOpenTask, onStartSession }: Omit<BoardPanelProps, "project"> & { projectId: string }) {
+function BoardView({
+  projectId,
+  openTaskId,
+  onOpenTask,
+  onStartSession,
+  onOpenTerminal,
+}: Omit<BoardPanelProps, "project" | "hidden"> & { projectId: string }) {
   const { t } = useI18n();
   const board = useBoard(projectId);
   const setStatus = useSetStatus(projectId);
@@ -111,6 +115,7 @@ function BoardView({ projectId, openTaskId, onOpenTask, onStartSession }: Omit<B
           board={board.data}
           onOpen={onOpenTask}
           onStartSession={onStartSession}
+          onOpenTerminal={onOpenTerminal}
           onClose={() => {
             onOpenTask(null);
           }}

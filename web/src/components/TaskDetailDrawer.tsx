@@ -1,4 +1,4 @@
-import { useEffect, useState, type SubmitEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type SubmitEvent, type ReactNode } from "react";
 
 import { useAddLabels, useSetStatus, useTaskDetail } from "../api/queries";
 import type { Board, ChecklistItem, TaskDetail } from "../api/types";
@@ -14,6 +14,7 @@ interface TaskDetailDrawerProps {
   board: Board;
   onOpen: (taskId: string) => void;
   onStartSession: (taskId: string) => void;
+  onOpenTerminal: (paneId: string) => void;
   onClose: () => void;
 }
 
@@ -23,15 +24,18 @@ export function TaskDetailDrawer({
   board,
   onOpen,
   onStartSession,
+  onOpenTerminal,
   onClose,
 }: TaskDetailDrawerProps) {
   const { t } = useI18n();
   const detail = useTaskDetail(projectId, taskId);
+  const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      // Modal ochiq bo'lsa Escape'ni o'zi ushlaydi.
-      if (event.key === "Escape" && !document.querySelector("dialog[open]")) onClose();
+      // Modal ochiq bo'lsa Escape'ni o'zi ushlaydi; doska yashirin bo'lsa (terminal) Escape pane'niki.
+      const visible = ref.current?.offsetParent != null;
+      if (event.key === "Escape" && visible && !document.querySelector("dialog[open]")) onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => {
@@ -42,7 +46,7 @@ export function TaskDetailDrawer({
   const task = detail.data;
 
   return (
-    <aside className="drawer" aria-label={task ? `${task.id} ${task.title}` : taskId}>
+    <aside ref={ref} className="drawer" aria-label={task ? `${task.id} ${task.title}` : taskId}>
       <header className="drawer-header">
         <span className="card-id mono">{task?.id ?? taskId}</span>
         <h3 className="drawer-title">{task?.title}</h3>
@@ -62,7 +66,13 @@ export function TaskDetailDrawer({
       </header>
       <div className="drawer-body">
         {task ? (
-          <DetailBody projectId={projectId} task={task} board={board} onOpen={onOpen} />
+          <DetailBody
+            projectId={projectId}
+            task={task}
+            board={board}
+            onOpen={onOpen}
+            onOpenTerminal={onOpenTerminal}
+          />
         ) : detail.error ? (
           <ErrorText error={detail.error} />
         ) : (
@@ -78,9 +88,10 @@ interface DetailBodyProps {
   task: TaskDetail;
   board: Board;
   onOpen: (taskId: string) => void;
+  onOpenTerminal: (paneId: string) => void;
 }
 
-function DetailBody({ projectId, task, board, onOpen }: DetailBodyProps) {
+function DetailBody({ projectId, task, board, onOpen, onOpenTerminal }: DetailBodyProps) {
   const { t } = useI18n();
   const setStatus = useSetStatus(projectId);
   const statuses = board.statuses.includes(task.status) ? board.statuses : [...board.statuses, task.status];
@@ -165,11 +176,20 @@ function DetailBody({ projectId, task, board, onOpen }: DetailBodyProps) {
         {task.sessions.length > 0 ? (
           <ul className="links">
             {task.sessions.map((pane) => (
-              <li key={pane.id} className="link-row" title={pane.cwd}>
-                <StateBadge state={pane.state} approximate={pane.approximate} />
-                <span className="mono">{pane.agent}</span>
-                <span className="link-row-title">{pane.title || pane.cwd}</span>
-                <Ago timestamp={paneActivity(pane)} />
+              <li key={pane.id}>
+                <button
+                  type="button"
+                  className="link-row"
+                  title={`${t("task.open_terminal")} · ${pane.cwd}`}
+                  onClick={() => {
+                    onOpenTerminal(pane.id);
+                  }}
+                >
+                  <StateBadge state={pane.state} approximate={pane.approximate} />
+                  <span className="mono">{pane.agent}</span>
+                  <span className="link-row-title">{pane.title || pane.cwd}</span>
+                  <Ago timestamp={paneActivity(pane)} />
+                </button>
               </li>
             ))}
           </ul>

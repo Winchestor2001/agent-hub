@@ -1039,3 +1039,80 @@ button.link-row:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* --- terminal --- */
+
+[hidden] {
+  display: none !important;
+}
+
+button.session-open {
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.session-open:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.session-current {
+  border-color: var(--accent);
+}
+
+.panel-terminal {
+  background: var(--bg);
+}
+
+.terminal-header .terminal-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-status {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.terminal-status-open {
+  color: var(--ok);
+}
+
+.terminal-status-closed {
+  color: var(--danger);
+}
+
+.terminal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-closed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--danger-bg);
+}
+
+.terminal-screen {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 0 8px;
+  overflow: hidden;
+}
+
+.terminal-screen .xterm {
+  height: 100%;
+}

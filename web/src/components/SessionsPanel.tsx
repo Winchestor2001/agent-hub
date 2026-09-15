@@ -16,9 +16,19 @@ interface SessionsPanelProps {
   projects: readonly ProjectItem[] | undefined;
   onOpenTask: OpenTask;
   onNewSession: () => void;
+  /** Markazda ochiq terminal (ro'yxatda belgilanadi). */
+  terminalPaneId: string | null;
+  onOpenTerminal: (paneId: string) => void;
 }
 
-export function SessionsPanel({ project, projects, onOpenTask, onNewSession }: SessionsPanelProps) {
+export function SessionsPanel({
+  project,
+  projects,
+  onOpenTask,
+  onNewSession,
+  terminalPaneId,
+  onOpenTerminal,
+}: SessionsPanelProps) {
   const { t } = useI18n();
   const live = useLiveSessions();
   const names = new Map(projects?.map((p) => [p.id, p.name]));
@@ -43,12 +53,12 @@ export function SessionsPanel({ project, projects, onOpenTask, onNewSession }: S
     >
       {groups && groups.blocked.length > 0 && (
         <Section title={t("sessions.blocked")} count={groups.blocked.length} className="section-blocked">
-          <LiveList panes={groups.blocked} names={names} onOpenTask={onOpenTask} />
+          <LiveList panes={groups.blocked} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />
         </Section>
       )}
       <Section title={t("sessions.live")} count={groups?.others.length}>
         <QueryBody error={live.error} loaded={groups !== null} empty={groups?.others.length === 0}>
-          {groups && <LiveList panes={groups.others} names={names} onOpenTask={onOpenTask} />}
+          {groups && <LiveList panes={groups.others} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />}
         </QueryBody>
       </Section>
       {project ? (
@@ -107,25 +117,37 @@ function QueryBody({
 function LiveList({
   panes,
   names,
+  current,
   onOpenTask,
+  onOpenTerminal,
 }: {
   panes: LivePane[];
   names: Map<string, string>;
+  current: string | null;
   onOpenTask: OpenTask;
+  onOpenTerminal: (paneId: string) => void;
 }) {
   const { t } = useI18n();
   return (
     <ul className="list">
       {panes.map((pane) => (
-        <li key={pane.id} className={`session session-${pane.state}`}>
+        <li key={pane.id} className={`session session-${pane.state}${pane.id === current ? " session-current" : ""}`}>
           <div className="session-top">
             <StateBadge state={pane.state} approximate={pane.approximate} />
             <span className="session-agent mono">{pane.agent}</span>
             <Ago timestamp={paneActivity(pane)} />
           </div>
-          <div className="session-title" title={pane.title || pane.cwd}>
+          <button
+            type="button"
+            className="session-title session-open"
+            title={`${t("sessions.open_terminal")} · ${pane.title || pane.cwd}`}
+            aria-current={pane.id === current ? "true" : undefined}
+            onClick={() => {
+              onOpenTerminal(pane.id);
+            }}
+          >
             {pane.title || baseName(pane.cwd)}
-          </div>
+          </button>
           <div className="session-meta">
             <span className="muted" title={pane.cwd}>
               {pane.project_id
