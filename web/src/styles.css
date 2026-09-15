@@ -464,7 +464,17 @@ textarea {
   opacity: 0;
 }
 
+.project-edit {
+  position: absolute;
+  top: 26px;
+  right: 3px;
+  font-size: 13px;
+  opacity: 0;
+}
+
 .project-row:hover .project-remove,
+.project-row:hover .project-edit,
+.project-edit:focus-visible,
 .project-remove:focus-visible {
   opacity: 1;
 }

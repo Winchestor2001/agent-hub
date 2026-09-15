@@ -26,6 +26,9 @@ export const uz = {
   "projects.backlog_error": "bekloq o'qilmadi",
   "projects.add": "+ Loyiha",
   "projects.add_title": "Loyiha qo'shish",
+  "projects.edit": "Tahrirlash",
+  "projects.edit_title": "Loyihani tahrirlash",
+  "projects.field_id_readonly": "ID o'zgarmaydi",
   "projects.remove": "Ro'yxatdan olib tashlash",
   "projects.remove_confirm": "«{name}» Agent Hub ro'yxatidan olib tashlansinmi? Bekloq va fayllar o'zgarmaydi.",
   "projects.remove_yes": "Olib tashlash",
@@ -66,6 +69,7 @@ export const uz = {
   "common.cancel": "Bekor qilish",
   "common.close": "Yopish",
   "common.add": "Qo'shish",
+  "common.save": "Saqlash",
   "common.saving": "Saqlanmoqda…",
   "common.none": "—",
 

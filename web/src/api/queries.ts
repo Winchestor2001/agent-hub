@@ -10,6 +10,7 @@ import type {
   Project,
   ProjectCreate,
   ProjectsResponse,
+  ProjectUpdate,
   LivePane,
   SessionOptions,
   SessionResume,
@@ -179,6 +180,23 @@ export function useAddProject() {
   return useMutation({
     mutationFn: (body: ProjectCreate) => apiFetch<Project>("/api/projects", { method: "POST", body }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.projects }),
+  });
+}
+
+/** Papkalar o'zgarsa bekloq ham, sessiyalarning loyihaga bog'lanishi ham boshqacha bo'ladi. */
+export function useUpdateProject(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProjectUpdate) =>
+      apiFetch<Project>(`/api/projects/${enc(projectId)}`, { method: "PUT", body }),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.projects }),
+        client.invalidateQueries({ queryKey: queryKeys.board(projectId) }),
+        client.invalidateQueries({ queryKey: queryKeys.tasks(projectId) }),
+        client.invalidateQueries({ queryKey: ["sessions"] }),
+        client.invalidateQueries({ queryKey: queryKeys.folders }),
+      ]),
   });
 }
 

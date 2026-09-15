@@ -62,7 +62,7 @@ export function ProjectsPanel({ projects, error, selectedId, onSelect }: Project
           onClose={() => {
             setAdding(false);
           }}
-          onAdded={onSelect}
+          onSaved={onSelect}
         />
       )}
     </Panel>
@@ -79,6 +79,7 @@ function ProjectRow({ project, selected, onSelect }: ProjectRowProps) {
   const { t } = useI18n();
   const remove = useRemoveProject();
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
     <li className="project-row">
@@ -108,6 +109,26 @@ function ProjectRow({ project, selected, onSelect }: ProjectRowProps) {
       >
         ×
       </button>
+      <button
+        type="button"
+        className="icon-button project-edit"
+        title={t("projects.edit")}
+        aria-label={`${t("projects.edit")}: ${project.name}`}
+        onClick={() => {
+          setEditing(true);
+        }}
+      >
+        ✎
+      </button>
+      {editing && (
+        <AddProjectDialog
+          project={project}
+          onClose={() => {
+            setEditing(false);
+          }}
+          onSaved={onSelect}
+        />
+      )}
       {confirming && (
         <div className="confirm" role="alertdialog" aria-label={t("projects.remove")}>
           <p>{t("projects.remove_confirm", { name: project.name })}</p>

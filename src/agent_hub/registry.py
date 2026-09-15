@@ -95,6 +95,15 @@ class Registry:
             self._save_locked([*projects, project])
         return project
 
+    def update(self, project: Project) -> Project:
+        """ID bo'yicha almashtiradi (ro'yxatdagi o'rni saqlanadi)."""
+        with self._lock:
+            projects = self._load_locked()
+            if all(p.id != project.id for p in projects):
+                raise RegistryError("project_not_found", id=project.id)
+            self._save_locked([project if p.id == project.id else p for p in projects])
+        return project
+
     def remove(self, project_id: str) -> None:
         with self._lock:
             projects = self._load_locked()

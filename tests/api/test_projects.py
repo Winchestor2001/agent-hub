@@ -101,6 +101,53 @@ def test_add_project_validation(api: ApiEnv) -> None:
     }
 
 
+def _active_sessions(api: ApiEnv, project_id: str) -> int:
+    resp = api.client.get(f"/api/projects/{project_id}/summary")
+    return int(resp.json()["summary"]["active_sessions"])
+
+
+def test_update_project(api: ApiEnv, tmp_path: Path) -> None:
+    api.pane(id="p1", cwd=str(api.outside), state="working")
+    fixed = tmp_path / "fixed"
+    (fixed / ".backlog").mkdir(parents=True)
+    (fixed / ".backlog" / "config.yml").write_text("project_name: Fixed\n")
+
+    body = {"name": " Fixed ", "backlog_dir": str(fixed), "repos": [str(api.outside)]}
+    resp = api.client.put("/api/projects/broken", json=body)
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "id": "broken",
+        "name": "Fixed",
+        "backlog_dir": str(fixed),
+        "repos": [str(api.outside)],
+    }
+    leveling, broken = api.client.get("/api/projects").json()["projects"]
+    assert (leveling["id"], broken["name"], broken["error"]) == ("leveling", "Fixed", None)
+    assert broken["summary"]["active_sessions"] == 1
+    assert fixed in api.backlog.cwds
+
+    # Repo papkalari kamaysa, ulardan tashqaridagi sessiyalar loyihadan chiqadi.
+    api.pane(id="p2", cwd=str(api.web), state="working")
+    assert _active_sessions(api, "leveling") == 1
+    body = {"name": "Leveling", "backlog_dir": str(api.backend), "repos": []}
+    assert api.client.put("/api/projects/leveling", json=body).json()["repos"] == [str(api.backend)]
+    assert _active_sessions(api, "leveling") == 0
+
+
+def test_update_project_validation(api: ApiEnv) -> None:
+    ok = {"name": "X", "backlog_dir": str(api.backend)}
+    assert_error(api.client.put("/api/projects/nope", json=ok), 404, "project_not_found")
+    cases = [
+        ({"name": "X", "backlog_dir": str(api.outside)}, "backlog_not_found"),
+        ({"name": " ", "backlog_dir": str(api.backend)}, "project_name_empty"),
+        ({**ok, "repos": [str(api.outside / "none")]}, "path_invalid"),
+        ({**ok, "id": "other"}, "validation_error"),
+    ]
+    for body, code in cases:
+        assert_error(api.client.put("/api/projects/leveling", json=body), 422, code)
+    assert api.client.get("/api/projects").json()["projects"][0]["name"] == "Leveling"
+
+
 def test_unknown_api_route_uses_error_format(api: ApiEnv) -> None:
     body = assert_error(api.client.get("/api/nope"), 404, "not_found")
     assert body == {"code": "not_found", "params": {"path": "/api/nope"}, "detail": None}

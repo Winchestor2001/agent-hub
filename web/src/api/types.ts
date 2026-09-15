@@ -172,6 +172,8 @@ export interface ProjectCreate {
   repos: string[];
 }
 
+export type ProjectUpdate = Omit<ProjectCreate, "id">;
+
 export interface TaskCreate {
   title: string;
   description?: string;

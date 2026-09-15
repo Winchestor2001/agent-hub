@@ -26,6 +26,9 @@ export const ru: Dictionary = {
   "projects.backlog_error": "бэклог не прочитан",
   "projects.add": "+ Проект",
   "projects.add_title": "Добавить проект",
+  "projects.edit": "Изменить",
+  "projects.edit_title": "Изменить проект",
+  "projects.field_id_readonly": "ID не меняется",
   "projects.remove": "Убрать из списка",
   "projects.remove_confirm": "Убрать «{name}» из списка Agent Hub? Бэклог и файлы не изменятся.",
   "projects.remove_yes": "Убрать",
@@ -66,6 +69,7 @@ export const ru: Dictionary = {
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.add": "Добавить",
+  "common.save": "Сохранить",
   "common.saving": "Сохранение…",
   "common.none": "—",
 

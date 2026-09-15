@@ -100,6 +100,24 @@ def test_add_get_remove_roundtrip(tmp_path: Path) -> None:
     assert exc.value.code == "project_not_found"
 
 
+def test_update_keeps_order(tmp_path: Path) -> None:
+    path = tmp_path / "projects.yaml"
+    path.write_text("projects: []\n")
+    reg = Registry(path)
+    first = _backlog_project(tmp_path, "first")
+    second = _backlog_project(tmp_path, "second")
+    reg.add(validate_project("a", "A", first))
+    reg.add(validate_project("b", "B", second))
+    reg.update(validate_project("a", "A2", second))
+    assert [(p.id, p.name, p.backlog_dir) for p in Registry(path).load()] == [
+        ("a", "A2", second),
+        ("b", "B", second),
+    ]
+    with pytest.raises(RegistryError) as exc:
+        reg.update(validate_project("c", "C", first))
+    assert exc.value.code == "project_not_found"
+
+
 def test_empty_repos_in_file_default_to_backlog_dir(tmp_path: Path) -> None:
     path = tmp_path / "projects.yaml"
     path.write_text("projects:\n- id: a\n  name: A\n  backlog_dir: ~/somewhere\n  repos: []\n")

@@ -40,7 +40,7 @@ function isErrorBody(value: unknown): value is ApiErrorBody {
 }
 
 export interface RequestOptions {
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   signal?: AbortSignal;
 }

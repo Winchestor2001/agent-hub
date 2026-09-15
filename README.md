@@ -105,6 +105,10 @@ papkada `--no-git` bilan): faqat `.backlog/` yaratiladi, `CLAUDE.md`/`AGENTS.md`
 qilinmaydi. Bekloq allaqachon bor papkada yaratish rad etiladi. Agent Hub hech qachon bekloqni o'zi
 avtomatik yaratmaydi.
 
+**Tahrirlash (✎).** Loyiha qatori ustiga kelganda × ostida chiqadi: nom, bekloq papkasi va repo papkalarini
+o'zgartirish mumkin (ID o'zgarmaydi). Tekshiruvlar qo'shishdagi bilan bir xil. Saqlangach doska yangi bekloq
+papkasidan o'qiladi, sessiyalar esa yangi repo papkalari bo'yicha qayta bog'lanadi.
+
 **Ro'yxatdan olib tashlash** faqat Agent Hub ro'yxatini o'zgartiradi, bekloq va fayllarga tegmaydi.
 
 Loyihalarni `~/.config/agent-hub/projects.yaml` da qo'lda ham tahrirlash mumkin (format "Sozlamalar"

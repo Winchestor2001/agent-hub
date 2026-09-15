@@ -30,6 +30,14 @@ class ProjectCreate(BaseModel):
     repos: list[str] = Field(default_factory=list, max_length=20)
 
 
+class ProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(max_length=100)
+    backlog_dir: str = Field(max_length=1024)
+    repos: list[str] = Field(default_factory=list, max_length=20)
+
+
 async def project_summary(
     hub: Hub, project: Project, projects: Sequence[Project], live: LiveData | None
 ) -> dict[str, Any]:
@@ -67,13 +75,27 @@ async def add_project(hub: HubDep, body: ProjectCreate) -> dict[str, Any]:
     return project_view(hub.registry.add(project))
 
 
+@router.put("/{project_id}")
+async def update_project(hub: HubDep, project_id: str, body: ProjectUpdate) -> dict[str, Any]:
+    old = hub.project(project_id)
+    project = validate_project(project_id, body.name, body.backlog_dir, body.repos)
+    hub.registry.update(project)
+    _forget_unused_backlog(hub, old)
+    return project_view(project)
+
+
 @router.delete("/{project_id}")
 async def remove_project(hub: HubDep, project_id: str) -> dict[str, Any]:
     project = hub.project(project_id)
     hub.registry.remove(project_id)
+    _forget_unused_backlog(hub, project)
+    return {"ok": True}
+
+
+def _forget_unused_backlog(hub: Hub, project: Project) -> None:
+    """Bekloq papkasini endi hech bir loyiha ishlatmasa, uning klienti (keshi) tashlanadi."""
     if all(p.backlog_dir != project.backlog_dir for p in hub.registry.load()):
         hub.forget_backlog(project)
-    return {"ok": True}
 
 
 @router.get("/{project_id}/summary")

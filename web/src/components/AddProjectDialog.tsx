@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode, type SubmitEvent } from "react";
 
-import { useAddProject, useFolder, useFolderSuggestions, useInitBacklog } from "../api/queries";
+import { useAddProject, useFolder, useFolderSuggestions, useInitBacklog, useUpdateProject } from "../api/queries";
+import type { Project } from "../api/types";
 import { addUnique, baseName, filterFolders, tildify } from "../board/folders";
 import { slugify } from "../board/model";
 import { useI18n } from "../i18n/context";
@@ -11,8 +12,10 @@ import { Field, Modal } from "./Modal";
 const STATUS_DEBOUNCE_MS = 300;
 
 interface AddProjectDialogProps {
+  /** Berilsa dialog shu loyihani tahrirlaydi (ID o'zgarmaydi). */
+  project?: Project;
   onClose: () => void;
-  onAdded: (projectId: string) => void;
+  onSaved: (projectId: string) => void;
 }
 
 function useDebounced<T>(value: T, delay: number): T {
@@ -28,19 +31,23 @@ function useDebounced<T>(value: T, delay: number): T {
   return debounced;
 }
 
-export function AddProjectDialog({ onClose, onAdded }: AddProjectDialogProps) {
+export function AddProjectDialog({ project, onClose, onSaved }: AddProjectDialogProps) {
   const { t } = useI18n();
+  const editing = project !== undefined;
   const addProject = useAddProject();
+  const updateProject = useUpdateProject(project?.id ?? "");
+  const save = editing ? updateProject : addProject;
   const initBacklog = useInitBacklog();
   const suggestions = useFolderSuggestions();
   const [search, setSearch] = useState("");
-  const [name, setName] = useState("");
-  // Foydalanuvchi nomni o'zi yozmaguncha u tanlangan papka nomidan olinadi.
-  const [nameTouched, setNameTouched] = useState(false);
+  const [name, setName] = useState(project?.name ?? "");
+  // Foydalanuvchi nomni o'zi yozmaguncha u tanlangan papka nomidan olinadi (tahrirlashda olinmaydi).
+  const [nameTouched, setNameTouched] = useState(editing);
   // null — ID nomdan avtomatik olinadi; foydalanuvchi tahrirlasa o'shani saqlaymiz.
-  const [customId, setCustomId] = useState<string | null>(null);
-  const [backlogDir, setBacklogDir] = useState("");
-  const [repos, setRepos] = useState<string[]>([]);
+  const [customId, setCustomId] = useState<string | null>(project?.id ?? null);
+  const [backlogDir, setBacklogDir] = useState(project?.backlog_dir ?? "");
+  // Tahrirlashda saqlangani (bekloq papkasi ham) ko'rinadi: yangi papka qo'shilganda u jimgina tushib qolmasin.
+  const [repos, setRepos] = useState<string[]>(project?.repos ?? []);
   const [picker, setPicker] = useState<"backlog" | "repo" | null>(null);
   const [confirmInit, setConfirmInit] = useState(false);
 
@@ -75,60 +82,62 @@ export function AddProjectDialog({ onClose, onAdded }: AddProjectDialogProps) {
 
   function submit(event: SubmitEvent) {
     event.preventDefault();
-    addProject.mutate(
-      { id, name: name.trim(), backlog_dir: dir, repos },
-      {
-        onSuccess: (project) => {
-          onAdded(project.id);
-          onClose();
-        },
+    const options = {
+      onSuccess: (saved: Project) => {
+        onSaved(saved.id);
+        onClose();
       },
-    );
+    };
+    const body = { name: name.trim(), backlog_dir: dir, repos };
+    if (editing) updateProject.mutate(body, options);
+    else addProject.mutate({ id, ...body }, options);
   }
 
   const folders = filterFolders(suggestions.data?.folders ?? [], search);
 
   return (
-    <Modal title={t("projects.add_title")} onClose={onClose}>
+    <Modal title={t(editing ? "projects.edit_title" : "projects.add_title")} onClose={onClose}>
       <form className="form" onSubmit={submit}>
-        <Group
-          label={t("projects.suggestions_title", {
-            root: suggestions.data ? tildify(suggestions.data.root, home) : "~/my-projects",
-          })}
-        >
-          <input
-            type="search"
-            value={search}
-            placeholder={t("projects.suggestions_search")}
-            onChange={(e) => {
-              setSearch(e.target.value);
-            }}
-          />
-          {suggestions.error && <ErrorText error={suggestions.error} />}
-          <ul className="list picker-list">
-            {folders.map((folder) => (
-              <li key={folder.path}>
-                <button
-                  type="button"
-                  className="list-item picker-entry"
-                  aria-current={tildify(folder.path, home) === dir}
-                  title={folder.path}
-                  onClick={() => {
-                    chooseBacklogDir(folder.path);
-                  }}
-                >
-                  <span className="list-item-title">{folder.name}</span>
-                  <span className={folder.has_backlog ? "chip chip-ok" : "chip muted"}>
-                    {t(folder.has_backlog ? "projects.backlog_yes" : "projects.backlog_no")}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {suggestions.data && folders.length === 0 && (
-            <p className="muted">{t("projects.suggestions_empty")}</p>
-          )}
-        </Group>
+        {!editing && (
+          <Group
+            label={t("projects.suggestions_title", {
+              root: suggestions.data ? tildify(suggestions.data.root, home) : "~/my-projects",
+            })}
+          >
+            <input
+              type="search"
+              value={search}
+              placeholder={t("projects.suggestions_search")}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
+            />
+            {suggestions.error && <ErrorText error={suggestions.error} />}
+            <ul className="list picker-list">
+              {folders.map((folder) => (
+                <li key={folder.path}>
+                  <button
+                    type="button"
+                    className="list-item picker-entry"
+                    aria-current={tildify(folder.path, home) === dir}
+                    title={folder.path}
+                    onClick={() => {
+                      chooseBacklogDir(folder.path);
+                    }}
+                  >
+                    <span className="list-item-title">{folder.name}</span>
+                    <span className={folder.has_backlog ? "chip chip-ok" : "chip muted"}>
+                      {t(folder.has_backlog ? "projects.backlog_yes" : "projects.backlog_no")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {suggestions.data && folders.length === 0 && (
+              <p className="muted">{t("projects.suggestions_empty")}</p>
+            )}
+          </Group>
+        )}
 
         <div className="form-row">
           <Field label={t("projects.field_name")}>
@@ -142,10 +151,14 @@ export function AddProjectDialog({ onClose, onAdded }: AddProjectDialogProps) {
               }}
             />
           </Field>
-          <Field label={t("projects.field_id")} hint={t("projects.field_id_hint")}>
+          <Field
+            label={t("projects.field_id")}
+            hint={t(editing ? "projects.field_id_readonly" : "projects.field_id_hint")}
+          >
             <input
               className="mono"
               value={id}
+              readOnly={editing}
               required
               maxLength={40}
               pattern="[a-z0-9][a-z0-9\-]{0,39}"
@@ -295,7 +308,7 @@ export function AddProjectDialog({ onClose, onAdded }: AddProjectDialogProps) {
           )}
         </Group>
 
-        {addProject.error && <ErrorText error={addProject.error} />}
+        {save.error && <ErrorText error={save.error} />}
         <footer className="form-actions">
           <button type="button" className="button" onClick={onClose}>
             {t("common.cancel")}
@@ -303,9 +316,9 @@ export function AddProjectDialog({ onClose, onAdded }: AddProjectDialogProps) {
           <button
             type="submit"
             className="button button-primary"
-            disabled={addProject.isPending || backlogMissing}
+            disabled={save.isPending || backlogMissing}
           >
-            {addProject.isPending ? t("common.saving") : t("common.add")}
+            {save.isPending ? t("common.saving") : t(editing ? "common.save" : "common.add")}
           </button>
         </footer>
       </form>
