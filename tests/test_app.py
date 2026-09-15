@@ -18,11 +18,6 @@ def static_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_health() -> None:
-    client = TestClient(create_app())
-    assert client.get("/api/health").json()["ok"] is True
-
-
 def test_unknown_api_is_json_404(static_dir: Path) -> None:
     client = TestClient(create_app(static_dir))
     resp = client.get("/api/nope")

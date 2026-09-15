@@ -26,7 +26,7 @@ packages = ["src/agent_hub"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 extend-exclude = [".backlog", "web", "*.md"]
 
 [tool.ruff.lint]
@@ -39,7 +39,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]

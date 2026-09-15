@@ -23,11 +23,16 @@ Avval bog'liqliklarni o'rnating:
 make sync
 ```
 
-1. **KanBot server** (1-terminal) — `127.0.0.1:8787`:
+1. **KanBot server** (1-terminal) — `127.0.0.1:8787`, himoya launcher'i orqali:
 
    ```sh
    make dev-kanbot
    ```
+
+   `kanbot server` to'g'ridan-to'g'ri ishlatilmaydi. KanBot'da CORS `*` va autentifikatsiya yo'q, shu sabab
+   brauzerdagi istalgan sayt agent ishga tushira olardi. `scripts/kanbot_guarded_server.py` KanBot
+   ilovasini o'raydi va begona `Host` yoki `Origin` bilan kelgan HTTP/WebSocket so'rovlariga 403 qaytaradi.
+   Runner, `kanbot` CLI, Agent Hub va KanBot'ning o'z UI'si (`http://127.0.0.1:8787`) ishlayveradi.
 
 2. **KanBot runner** (2-terminal) — faqat SAFE rejimda (`--safe`, auto-approve yo'q):
 
@@ -52,6 +57,15 @@ make sync
    ```sh
    make dev-web
    ```
+
+Xavfli agentlar (`shell`, `glm`, `kimi`) o'chirilgan bo'lishi kerak:
+
+```sh
+kanbot config --disable shell glm kimi
+```
+
+`curl -s http://127.0.0.1:8700/api/health` da `ok: true` bo'lishi kerak. Runner `shell` ni e'lon qilsa yoki
+auto-approve yoqilgan bo'lsa, `problems` da `shell_enabled` / `auto_approve_enabled` chiqadi.
 
 To'xtatish: har bir terminalda `Ctrl-C`. Runner to'xtaganda uning ichidagi agent sessiyalari ham tugaydi.
 

@@ -4,6 +4,8 @@ SHELL := /bin/zsh
 UV ?= uv
 NPM ?= npm
 KANBOT ?= kanbot
+# KanBot venv python'i (uv tool): himoya launcher'i kanbot paketini shu python bilan import qiladi.
+KANBOT_PYTHON ?= $(shell k=$$(command -v $(KANBOT)) && print -r -- $${k:A:h}/python)
 AGENT_HUB_PORT ?= 8700
 KANBOT_PORT ?= 8787
 
@@ -42,8 +44,9 @@ dev: build ## Agent Hub backend (127.0.0.1:$(AGENT_HUB_PORT))
 dev-web: ## Vite dev server (127.0.0.1:5173, /api -> backend)
 	cd web && AGENT_HUB_PORT=$(AGENT_HUB_PORT) $(NPM) run dev
 
-dev-kanbot: ## KanBot server (127.0.0.1:$(KANBOT_PORT))
-	$(KANBOT) server --host 127.0.0.1 --port $(KANBOT_PORT)
+dev-kanbot: ## KanBot server, Host/Origin himoyasi bilan (127.0.0.1:$(KANBOT_PORT))
+	@test -x "$(KANBOT_PYTHON)" || { echo "KanBot python topilmadi: '$(KANBOT_PYTHON)'" >&2; exit 1; }
+	$(KANBOT_PYTHON) scripts/kanbot_guarded_server.py --port $(KANBOT_PORT)
 
 dev-runner: ## KanBot runner, SAFE rejim
 	$(KANBOT) runner --safe --server http://127.0.0.1:$(KANBOT_PORT)
