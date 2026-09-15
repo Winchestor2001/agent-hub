@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-15 14:46'
-updated_date: '2026-09-15 15:27'
+updated_date: '2026-09-15 15:29'
 labels:
   - backend
   - client
@@ -43,6 +43,8 @@ Topilma: KanBot pane.session_id faqat karta sessiyalarida to'ladi; qo'lda ochilg
 Amalga oshirildi: linking.live_session_ids (ID'si noma'lum tirik pane uchun agent+realpath cwd+runner+started_at>=pane.started_at-5s bo'yicha eng yangi band qilinmagan sessiya), api/sessions.py past ro'yxatidan shu sessiyalarni chiqaradi va resume'da 409 session_active. Testlar: test_linking (3 ta yangi), tests/api/test_sessions.py::test_session_open_in_live_pane_is_not_past (pane tugagach qaytishi va 201 resume). make check: 459 + 61 o'tdi. Backend qayta ishga tushirildi. AC #4 kutilmoqda: brauzer kengaytmasi ulanmadi (3 urinish).
 
 Haqiqiy tekshiruv (2026-09-15): agent-hub papkasida KanBot orqali claude pane a37929c5 ochildi (session_id bo'sh). /api/sessions: sessiya 7d391512 'past' da yo'q, resume 409 session_active. Pane kill qilingach 7d391512 'past' ga qaytdi (KanBot fayl yangi bo'lgani uchun hozircha active=True; resume esa unit/API testida 201). Codex resume pane (01a0a4a6) ham past'dan yashirildi. Frontend SessionsPanel data.past ni filtrsiz ko'rsatadi; brauzer kengaytmasi ulanmagani uchun vizual skrinshot olinmadi. Test pane ro'yxatdan olib tashlandi. make check: ruff, mypy, eslint, tsc, 459 pytest + 61 vitest o'tdi.
+
+UI vizual tekshiruvi (Chrome, http://127.0.0.1:8700): claude pane c16a9115 (session_id bo'sh) «Jonli agentlar»da, sessiyasi a532a8e0 «O'tgan sessiyalar»da yo'q. Pane kill qilingach «Tugagan» (kod 143) bo'limiga o'tdi va sessiya o'tganlarga qaytdi; «Davom ettirish» KanBot active=True bo'lgan qisqa vaqt nofaol, ~2 daqiqalik avvalgi test sessiyasida faol. Test pane ro'yxatdan olib tashlandi.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
