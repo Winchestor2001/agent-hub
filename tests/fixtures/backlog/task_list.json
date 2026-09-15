@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "kind": "task-list",
+  "tasks": [
+    {
+      "id": "TASK-1",
+      "title": "Login sahifasi",
+      "status": "To Do",
+      "type": "bug",
+      "priority": "high",
+      "project": null,
+      "assignees": [
+        "@alice"
+      ],
+      "reporter": null,
+      "labels": [
+        "ui",
+        "Bug"
+      ],
+      "milestone": "m-0",
+      "parentTaskId": null,
+      "acceptanceCriteriaCompleted": 1,
+      "acceptanceCriteriaCount": 2,
+      "references": [],
+      "modifiedFiles": [],
+      "ordinal": 1000,
+      "createdAt": "2026-09-15T08:02:00Z",
+      "updatedAt": "2026-09-15T08:02:00Z",
+      "dueDate": null,
+      "isReady": true
+    },
+    {
+      "id": "TASK-1.1",
+      "title": "Sub",
+      "status": "To Do",
+      "type": null,
+      "priority": null,
+      "project": null,
+      "assignees": [],
+      "reporter": null,
+      "labels": [],
+      "milestone": "m-1",
+      "parentTaskId": "TASK-1",
+      "acceptanceCriteriaCompleted": 0,
+      "acceptanceCriteriaCount": 0,
+      "references": [],
+      "modifiedFiles": [],
+      "ordinal": 3000,
+      "createdAt": "2026-09-15T08:02:00Z",
+      "updatedAt": null,
+      "dueDate": null,
+      "isReady": true
+    },
+    {
+      "id": "TASK-2",
+      "title": "API",
+      "status": "In Progress",
+      "type": null,
+      "priority": null,
+      "project": null,
+      "assignees": [],
+      "reporter": null,
+      "labels": [
+        "backend"
+      ],
+      "milestone": null,
+      "parentTaskId": null,
+      "acceptanceCriteriaCompleted": 0,
+      "acceptanceCriteriaCount": 0,
+      "references": [],
+      "modifiedFiles": [],
+      "ordinal": 2000,
+      "createdAt": "2026-09-15T08:02:00Z",
+      "updatedAt": null,
+      "dueDate": null,
+      "isReady": false
+    }
+  ]
+}

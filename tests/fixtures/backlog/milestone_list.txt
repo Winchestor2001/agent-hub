@@ -1,0 +1,6 @@
+Active milestones (2):
+  m-0: Release 1 (0/1 done)
+  m-2: v2: Yangi (beta) (0/0 done)
+
+Completed milestones (1):
+  m-1: Release 2 (1/1 done)

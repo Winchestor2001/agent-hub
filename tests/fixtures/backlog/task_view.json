@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "kind": "task-view",
+  "task": {
+    "id": "TASK-1",
+    "title": "Login sahifasi",
+    "status": "To Do",
+    "type": "bug",
+    "priority": "high",
+    "project": null,
+    "assignees": [
+      "@alice"
+    ],
+    "reporter": null,
+    "labels": [
+      "ui",
+      "Bug"
+    ],
+    "milestone": "m-0",
+    "parentTaskId": null,
+    "acceptanceCriteriaCompleted": 1,
+    "acceptanceCriteriaCount": 2,
+    "references": [],
+    "modifiedFiles": [],
+    "ordinal": 1000,
+    "createdAt": "2026-09-15T08:02:00Z",
+    "updatedAt": "2026-09-15T08:02:00Z",
+    "dueDate": null,
+    "isReady": true,
+    "path": ".backlog/tasks/task-1 - Login-sahifasi.md",
+    "description": "Tavsif **md**",
+    "dependencies": [],
+    "dependencyGraph": {
+      "root": "TASK-1",
+      "nodes": [
+        {
+          "id": "TASK-1",
+          "title": "Login sahifasi",
+          "status": "To Do",
+          "state": "resolved",
+          "completed": false,
+          "dependencyDepth": 0,
+          "dependentDepth": 0
+        },
+        {
+          "id": "TASK-2",
+          "title": "API",
+          "status": "In Progress",
+          "state": "resolved",
+          "completed": false,
+          "dependencyDepth": null,
+          "dependentDepth": 1
+        }
+      ],
+      "edges": [
+        {
+          "from": "TASK-2",
+          "to": "TASK-1"
+        }
+      ]
+    },
+    "readiness": {
+      "isReady": true,
+      "isBlocked": false,
+      "blockingDependencies": [],
+      "missingDependencies": []
+    },
+    "documentation": [],
+    "subtasks": [
+      {
+        "id": "TASK-1.1",
+        "title": "Sub"
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "index": 1,
+        "text": "Forma bor",
+        "checked": true
+      },
+      {
+        "index": 2,
+        "text": "Xato ko'rsatiladi",
+        "checked": false
+      }
+    ],
+    "definitionOfDone": [
+      {
+        "index": 1,
+        "text": "Testlar",
+        "checked": true
+      }
+    ],
+    "implementationPlan": null,
+    "implementationNotes": "izoh",
+    "comments": [],
+    "finalSummary": null
+  }
+}

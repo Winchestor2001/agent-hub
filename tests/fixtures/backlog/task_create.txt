@@ -1,0 +1,2 @@
+Created task TASK-4
+File: /path/to/proj/.backlog/tasks/task-4 - Yangi-vazifa.md
