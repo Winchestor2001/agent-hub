@@ -197,6 +197,8 @@ export const ru: Dictionary = {
   "error.internal_error": "Внутренняя ошибка сервера",
   "error.not_found": "Не найдено",
   "error.validation_error": "Неверные поля запроса",
+  "error.forbidden_host": "Недопустимый Host: {host}",
+  "error.forbidden_origin": "Недопустимый Origin: {origin}",
 
   "error.project_not_found": "Проект «{id}» не найден",
   "error.project_exists": "Проект «{id}» уже существует",

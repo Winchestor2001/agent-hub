@@ -197,6 +197,8 @@ export const uz = {
   "error.internal_error": "Serverda ichki xato",
   "error.not_found": "Topilmadi",
   "error.validation_error": "So'rov maydonlari noto'g'ri",
+  "error.forbidden_host": "Ruxsat etilmagan Host: {host}",
+  "error.forbidden_origin": "Ruxsat etilmagan Origin: {origin}",
 
   "error.project_not_found": "«{id}» loyihasi topilmadi",
   "error.project_exists": "«{id}» loyihasi allaqachon bor",
