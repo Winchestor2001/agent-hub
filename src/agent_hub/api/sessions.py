@@ -68,18 +68,18 @@ async def list_sessions(
     indexes = await _indexes(hub, projects)
     titles = live.session_titles
 
-    live_views = []
+    live_views: list[dict[str, Any]] = []
+    # Chiqib ketgan pane'lar: KanBot ~2 soat saqlaydi, foydalanuvchi ro'yxatdan olib tashlaydi.
+    finished_views: list[dict[str, Any]] = []
     for pane in live.panes:
-        if not pane.alive:
-            continue
         owner = project_for_path(pane.cwd, projects)
         if project is not None and (owner is None or owner.id != project):
             continue
         index = indexes.get(owner.id) if owner else None
         task = index.for_pane(pane, titles) if index else None
-        live_views.append(
-            pane_view(pane, live.states.get(pane.id), owner.id if owner else None, task)
-        )
+        view = pane_view(pane, live.states.get(pane.id), owner.id if owner else None, task)
+        (live_views if pane.alive else finished_views).append(view)
+    finished_views.sort(key=lambda view: view["ended_at"] or 0.0, reverse=True)
 
     open_ids = open_session_ids(live.panes)
     past_views = []
@@ -94,7 +94,11 @@ async def list_sessions(
         past_views.append(past_session_view(session, owner.id, task, active=active))
     past_views.sort(key=lambda view: view["mtime"], reverse=True)
 
-    return {"live": sort_panes(live_views), "past": past_views[:past_limit]}
+    return {
+        "live": sort_panes(live_views),
+        "finished": finished_views,
+        "past": past_views[:past_limit],
+    }
 
 
 @router.post("/api/projects/{project_id}/sessions", status_code=201)
@@ -139,4 +143,20 @@ async def kill_session(hub: HubDep, pane_id: str) -> dict[str, Any]:
         await hub.kanbot.kill_pane(pane_id)
     except ValueError as exc:
         raise ApiError(422, "pane_id_invalid", pane_id=pane_id) from exc
+    return {"ok": True}
+
+
+@router.delete("/api/sessions/{pane_id}")
+async def remove_session(hub: HubDep, pane_id: str) -> dict[str, Any]:
+    """Tugagan pane'ni KanBot ro'yxatidan olib tashlaydi.
+
+    KanBot tirik pane'ni olib tashlashda SIGKILL qiladi: agent bu yo'l bilan o'ldirilmasin.
+    """
+    try:
+        pane = await hub.kanbot.get_pane(pane_id)
+    except ValueError as exc:
+        raise ApiError(422, "pane_id_invalid", pane_id=pane_id) from exc
+    if pane.alive:
+        raise ApiError(409, "pane_alive", pane_id=pane_id)
+    await hub.kanbot.remove_pane(pane_id)
     return {"ok": True}

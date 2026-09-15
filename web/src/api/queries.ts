@@ -1,6 +1,6 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiFetch, type ApiError } from "./client";
+import { ApiError, apiFetch } from "./client";
 import type {
   Board,
   Health,
@@ -75,8 +75,10 @@ export function useLiveSessions() {
   return useQuery({
     queryKey: queryKeys.liveSessions,
     queryFn: ({ signal }) => apiFetch<SessionsResponse>("/api/sessions?past_limit=0", { signal }),
-    select: (data) => data.live,
+    select: ({ live, finished }) => ({ live, finished }),
     refetchInterval: POLL_MS,
+    // Blocked bildirishnomasi boshqa tabda turganda kerak: SSE uzilsa ham polling to'xtamasin.
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -216,5 +218,26 @@ export function useResumeSession(projectId: string) {
         body,
       }),
     onSuccess: () => invalidate(projectId),
+  });
+}
+
+/** Tugagan pane'larni KanBot ro'yxatidan olib tashlash; allaqachon yo'q bo'lgani xato emas. */
+export function useRemoveSessions() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (paneIds: readonly string[]) => {
+      for (const paneId of paneIds) {
+        try {
+          await apiFetch<{ ok: boolean }>(`/api/sessions/${enc(paneId)}`, { method: "DELETE" });
+        } catch (error) {
+          if (!(error instanceof ApiError && error.code === "pane_not_found")) throw error;
+        }
+      }
+    },
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ["sessions"] }),
+        client.invalidateQueries({ queryKey: queryKeys.projects }),
+      ]),
   });
 }

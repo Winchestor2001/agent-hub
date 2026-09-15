@@ -10,6 +10,8 @@ import { ProjectsPanel } from "./components/ProjectsPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
 import { TerminalView } from "./components/TerminalView";
 import { TopBar } from "./components/TopBar";
+import { useBlockedAlerts } from "./sessions/alerts";
+import { navigationOrder, useSessionShortcuts } from "./sessions/navigation";
 
 interface TaskTarget {
   projectId: string;
@@ -27,6 +29,11 @@ export function App() {
   // Terminal markaziy panel o'rnida; doska yashiriladi (filtr va detal saqlanadi).
   const [terminalPaneId, setTerminalPaneId] = useState<string | null>(null);
   const live = useLiveSessions();
+  // Xatoda eski ro'yxat hisobga olinmaydi (panel ham uni ko'rsatmaydi).
+  const livePanes = live.error ? undefined : live.data?.live;
+  const paneOrder = useMemo(() => navigationOrder(livePanes ?? []), [livePanes]);
+  useBlockedAlerts(livePanes, setTerminalPaneId);
+  useSessionShortcuts(paneOrder, terminalPaneId, setTerminalPaneId);
 
   const items = projects.data?.projects;
   const selected = items?.find((p) => p.id === selectedId) ?? items?.[0] ?? null;
@@ -64,7 +71,9 @@ export function App() {
           <TerminalView
             key={terminalPaneId}
             paneId={terminalPaneId}
-            pane={live.data?.find((pane) => pane.id === terminalPaneId)}
+            pane={[...(live.data?.live ?? []), ...(live.data?.finished ?? [])].find(
+              (pane) => pane.id === terminalPaneId,
+            )}
             onBack={() => {
               setTerminalPaneId(null);
             }}
@@ -92,6 +101,9 @@ export function App() {
           }}
           terminalPaneId={terminalPaneId}
           onOpenTerminal={setTerminalPaneId}
+          onSessionsRemoved={(paneIds) => {
+            setTerminalPaneId((current) => (current && paneIds.includes(current) ? null : current));
+          }}
           onNewSession={() => {
             if (selected) setNewSession({ projectId: selected.id, taskId: null });
           }}

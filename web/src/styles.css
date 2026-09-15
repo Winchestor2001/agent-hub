@@ -120,6 +120,14 @@ textarea {
   margin-left: auto;
 }
 
+.topbar-notify {
+  margin-left: auto;
+}
+
+.topbar-notify + .topbar-version {
+  margin-left: 0;
+}
+
 .indicator {
   display: inline-flex;
   align-items: center;
@@ -1063,6 +1071,24 @@ button.session-open:hover {
 
 .session-current {
   border-color: var(--accent);
+}
+
+button.session-open:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.session-ended .session-title {
+  color: var(--muted);
+}
+
+.section-action {
+  margin-left: auto;
+}
+
+.session-hint {
+  padding: 4px 2px 0;
+  font-size: 11px;
 }
 
 .panel-terminal {

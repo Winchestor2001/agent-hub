@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
-import { useLiveSessions, usePastSessions, useResumeSession } from "../api/queries";
+import { useLiveSessions, usePastSessions, useRemoveSessions, useResumeSession } from "../api/queries";
 import type { LivePane, PastSession, ProjectItem, TaskRef } from "../api/types";
 import { useI18n } from "../i18n/context";
 import { baseName, groupLive, paneActivity } from "../sessions/model";
+import { focusIndex } from "../sessions/navigation";
 import { ErrorText } from "./ErrorText";
 import { Panel } from "./Panel";
 import { Ago, StateBadge } from "./SessionBits";
@@ -19,6 +20,8 @@ interface SessionsPanelProps {
   /** Markazda ochiq terminal (ro'yxatda belgilanadi). */
   terminalPaneId: string | null;
   onOpenTerminal: (paneId: string) => void;
+  /** Olib tashlangan pane terminali ochiq bo'lsa yopiladi. */
+  onSessionsRemoved: (paneIds: readonly string[]) => void;
 }
 
 export function SessionsPanel({
@@ -28,12 +31,14 @@ export function SessionsPanel({
   onNewSession,
   terminalPaneId,
   onOpenTerminal,
+  onSessionsRemoved,
 }: SessionsPanelProps) {
   const { t } = useI18n();
   const live = useLiveSessions();
   const names = new Map(projects?.map((p) => [p.id, p.name]));
   // Xatoda eski ro'yxat ko'rsatilmaydi: KanBot o'chsa "javob kutmoqda" ham yo'qoladi.
-  const groups = live.data && !live.error ? groupLive(live.data) : null;
+  const groups = live.data && !live.error ? groupLive(live.data.live) : null;
+  const finished = live.error ? [] : (live.data?.finished ?? []);
 
   return (
     <Panel
@@ -51,6 +56,7 @@ export function SessionsPanel({
         </button>
       }
     >
+      <div className="sessions-body" onKeyDown={moveSessionFocus}>
       {groups && groups.blocked.length > 0 && (
         <Section title={t("sessions.blocked")} count={groups.blocked.length} className="section-blocked">
           <LiveList panes={groups.blocked} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />
@@ -60,7 +66,18 @@ export function SessionsPanel({
         <QueryBody error={live.error} loaded={groups !== null} empty={groups?.others.length === 0}>
           {groups && <LiveList panes={groups.others} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />}
         </QueryBody>
+        {groups && <p className="muted session-hint">{t("sessions.shortcut_hint")}</p>}
       </Section>
+      {finished.length > 0 && (
+        <FinishedSection
+          panes={finished}
+          names={names}
+          current={terminalPaneId}
+          onOpenTask={onOpenTask}
+          onOpenTerminal={onOpenTerminal}
+          onRemoved={onSessionsRemoved}
+        />
+      )}
       {project ? (
         <PastSection key={project.id} project={project} onOpenTask={onOpenTask} />
       ) : (
@@ -68,8 +85,21 @@ export function SessionsPanel({
           <p className="muted">{t("sessions.no_project")}</p>
         </Section>
       )}
+      </div>
     </Panel>
   );
+}
+
+/** Sessiya sarlavhasi fokusda bo'lsa ↑/↓/Home/End keyingi sarlavhaga o'tadi (barcha bo'limlar bo'ylab). */
+function moveSessionFocus(event: KeyboardEvent<HTMLDivElement>) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement) || !target.classList.contains("session-open")) return;
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button.session-open")];
+  const next = focusIndex(buttons.length, buttons.indexOf(target), event.key);
+  if (next === null) return;
+  event.preventDefault();
+  buttons[next]?.focus();
 }
 
 function Section({
@@ -161,6 +191,107 @@ function LiveList({
         </li>
       ))}
     </ul>
+  );
+}
+
+function FinishedSection({
+  panes,
+  names,
+  current,
+  onOpenTask,
+  onOpenTerminal,
+  onRemoved,
+}: {
+  panes: LivePane[];
+  names: Map<string, string>;
+  current: string | null;
+  onOpenTask: OpenTask;
+  onOpenTerminal: (paneId: string) => void;
+  onRemoved: (paneIds: readonly string[]) => void;
+}) {
+  const { t } = useI18n();
+  const remove = useRemoveSessions();
+  const pending = remove.isPending ? remove.variables : null;
+
+  function removePanes(paneIds: readonly string[]) {
+    // `mutate` callback'i emas: oxirgi pane olingach bo'lim unmount bo'ladi va u chaqirilmay qoladi.
+    // Xato `remove.error` orqali ko'rsatiladi.
+    remove.mutateAsync(paneIds).then(
+      () => {
+        onRemoved(paneIds);
+      },
+      () => undefined,
+    );
+  }
+
+  return (
+    <div className="section">
+      <h3 className="section-title">
+        {t("sessions.finished")}
+        <span className="count">{panes.length}</span>
+        <button
+          type="button"
+          className="button button-small section-action"
+          title={t("sessions.remove_all_title")}
+          disabled={remove.isPending}
+          onClick={() => {
+            removePanes(panes.map((pane) => pane.id));
+          }}
+        >
+          {t("sessions.remove_all")}
+        </button>
+      </h3>
+      {remove.error && <ErrorText error={remove.error} />}
+      <ul className="list">
+        {panes.map((pane) => (
+          <li
+            key={pane.id}
+            className={`session session-ended${pane.id === current ? " session-current" : ""}`}
+          >
+            <div className="session-top">
+              <span className="session-agent mono">{pane.agent}</span>
+              {pane.exit_code !== null && (
+                <span className="muted mono">{t("sessions.exit_code", { code: pane.exit_code })}</span>
+              )}
+              <Ago timestamp={pane.ended_at ?? paneActivity(pane)} />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t("sessions.remove")}
+                title={t("sessions.remove")}
+                disabled={pending?.includes(pane.id)}
+                onClick={() => {
+                  removePanes([pane.id]);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <button
+              type="button"
+              className="session-title session-open"
+              title={`${t("sessions.open_terminal")} · ${pane.title || pane.cwd}`}
+              aria-current={pane.id === current ? "true" : undefined}
+              onClick={() => {
+                onOpenTerminal(pane.id);
+              }}
+            >
+              {pane.title || baseName(pane.cwd)}
+            </button>
+            <div className="session-meta">
+              <span className="muted" title={pane.cwd}>
+                {pane.project_id
+                  ? (names.get(pane.project_id) ?? pane.project_id)
+                  : t("sessions.outside_project")}
+              </span>
+              {pane.project_id && pane.task && (
+                <TaskLink projectId={pane.project_id} task={pane.task} onOpenTask={onOpenTask} />
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

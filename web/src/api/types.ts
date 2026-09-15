@@ -100,6 +100,8 @@ export interface PastSession {
 
 export interface SessionsResponse {
   live: LivePane[];
+  /** Chiqib ketgan pane'lar (yangisi oldin) — ro'yxatdan olib tashlash mumkin. */
+  finished: LivePane[];
   past: PastSession[];
 }
 

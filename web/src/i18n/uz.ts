@@ -153,6 +153,18 @@ export const uz = {
   "task.open_terminal": "Terminalni ochish",
 
   "sessions.open_terminal": "Terminalni ochish",
+  "sessions.finished": "Tugagan",
+  "sessions.exit_code": "kod {code}",
+  "sessions.remove": "Ro'yxatdan olib tashlash",
+  "sessions.remove_all": "Tozalash",
+  "sessions.remove_all_title": "Tugagan sessiyalarning barchasini ro'yxatdan olib tashlash",
+  "sessions.shortcut_hint": "Alt+Shift+↑/↓ — sessiyalar orasida o'tish",
+
+  "notify.blocked_title": "{agent} javob kutmoqda",
+  "notify.enable": "Bildirishnomalar",
+  "notify.enable_title": "Sessiya javob kutganda brauzer bildirishnomasi ko'rsatilsin",
+  "notify.denied": "Bildirishnomalar bloklangan",
+  "notify.denied_title": "Brauzer sozlamalarida bu sayt uchun bildirishnomalarga ruxsat bering",
 
   "terminal.back": "← Doska",
   "terminal.back_title": "Doskaga qaytish",
@@ -217,6 +229,7 @@ export const uz = {
   "error.cwd_outside_project": "Papka «{project}» loyihasiga tegishli emas: {cwd}",
   "error.session_not_found": "Sessiya topilmadi",
   "error.session_active": "Sessiya hozir ochiq",
+  "error.pane_alive": "Sessiya hali ishlayapti — olib tashlanmaydi",
   "error.session_id_invalid": "Sessiya ID noto'g'ri",
 
   "error.shell_enabled": "Xavfli «{agent}» agenti yoqilgan. O'chirish: kanbot config --disable shell glm kimi",

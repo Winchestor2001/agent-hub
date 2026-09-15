@@ -15,7 +15,9 @@ def test_list_sessions(api: ApiEnv) -> None:
     api.pane(id="work", title="TASK-2 · API", state="working", last_output_at=50.0)
     api.pane(id="blk", title="TASK-1 · Login", state="blocked", last_output_at=10.0)
     api.pane(id="fake", agent="claude", state="blocked", last_output_at=20.0)
-    api.pane(id="dead", state="done", alive=False)
+    api.pane(id="dead", state="done", alive=False, ended_at=30.0, exit_code=0)
+    api.pane(id="dead2", title="TASK-2 · API", state="done", alive=False, ended_at=40.0)
+    api.pane(id="dead-out", cwd=str(api.outside), state="done", alive=False, ended_at=50.0)
     api.pane(id="out", cwd=str(api.outside), state="idle", last_output_at=5.0)
     api.screens["fake"] = IDLE_SCREEN
     api.session(session_id="11111111-aaaa", title="Работай только над TASK-1.", mtime=1.0)
@@ -35,6 +37,11 @@ def test_list_sessions(api: ApiEnv) -> None:
     assert (fake["state"], fake["raw_state"], fake["approximate"]) == ("idle", "blocked", True)
     assert (out["project_id"], out["task"]) == (None, None)
 
+    finished = data["finished"]
+    assert [p["id"] for p in finished] == ["dead-out", "dead2", "dead"]
+    assert (finished[1]["alive"], finished[1]["task"]["id"]) == (False, "TASK-2")
+    assert finished[2]["exit_code"] == 0
+
     past = data["past"]
     assert [s["session_id"] for s in past] == ["22222222-bbbb", "11111111-aaaa"]
     assert past[0]["project_id"] == "leveling"
@@ -42,6 +49,7 @@ def test_list_sessions(api: ApiEnv) -> None:
 
     filtered = api.client.get("/api/sessions", params={"project": "leveling", "past_limit": 1})
     assert [p["id"] for p in filtered.json()["live"]] == ["blk", "work", "fake"]
+    assert [p["id"] for p in filtered.json()["finished"]] == ["dead2", "dead"]
     assert len(filtered.json()["past"]) == 1
     assert_error(
         api.client.get("/api/sessions", params={"project": "nope"}), 404, "project_not_found"
@@ -197,6 +205,24 @@ def test_resume_rejected(api: ApiEnv) -> None:
     body = assert_error(resume(codex), 409, "agent_unavailable")
     assert body["params"] == {"agent": "codex"}
     assert api.started == []
+
+
+def test_remove_finished_session(api: ApiEnv) -> None:
+    api.pane(id="alive")
+    api.pane(id="done-alive", state="done")
+    api.pane(id="dead", state="done", alive=False)
+    assert api.client.delete("/api/sessions/dead").json() == {"ok": True}
+    assert api.removed == ["dead"]
+    assert api.client.get("/api/sessions").json()["finished"] == []
+
+    # Tirik pane (SessionEnd hook'dan keyingi done ham) olib tashlanmaydi — KanBot uni o'ldiradi.
+    for pane_id in ("alive", "done-alive"):
+        assert_error(api.client.delete(f"/api/sessions/{pane_id}"), 409, "pane_alive")
+    assert_error(api.client.delete("/api/sessions/zzz"), 404, "pane_not_found")
+    assert_error(api.client.delete("/api/sessions/a.b"), 422, "pane_id_invalid")
+    api.kanbot_down = True
+    assert_error(api.client.delete("/api/sessions/alive"), 503, "kanbot_unavailable")
+    assert api.removed == ["dead"]
 
 
 def test_kill_session(api: ApiEnv) -> None:

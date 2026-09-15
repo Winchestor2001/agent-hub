@@ -86,6 +86,7 @@ class ApiEnv:
     screens: dict[str, str] = field(default_factory=dict)
     started: list[dict[str, Any]] = field(default_factory=list)
     killed: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
     kanbot_down: bool = False
 
     def pane(self, **overrides: Any) -> dict[str, Any]:
@@ -158,7 +159,21 @@ def _install_kanbot_routes(env: ApiEnv) -> None:
         env.killed.append(pane_id)
         return response
 
+    def get_pane(request: httpx.Request, pane_id: str) -> httpx.Response:
+        pane = next((p for p in env.panes if p["id"] == pane_id), None)
+        if pane is None:
+            return httpx.Response(404, json={"detail": "pane not found"})
+        return guarded(pane)
+
+    def remove(request: httpx.Request, pane_id: str) -> httpx.Response:
+        response = guarded({"ok": True})
+        env.panes = [p for p in env.panes if p["id"] != pane_id]
+        env.removed.append(pane_id)
+        return response
+
     router = env.kanbot
+    router.get(path__regex=r"^/api/panes/(?P<pane_id>[^/]+)$").mock(side_effect=get_pane)
+    router.delete(path__regex=r"^/api/panes/(?P<pane_id>[^/]+)$").mock(side_effect=remove)
     router.get("/api/panes").mock(side_effect=lambda _: guarded({"panes": env.panes}))
     router.get("/api/agent-sessions").mock(
         side_effect=lambda _: guarded({"sessions": env.sessions})

@@ -1,6 +1,7 @@
 import type { ApiError } from "../api/client";
 import type { Health } from "../api/types";
 import { useI18n } from "../i18n/context";
+import { useNotificationPermission } from "../sessions/alerts";
 
 type Tone = "ok" | "warn" | "bad" | "idle";
 
@@ -40,6 +41,7 @@ export function TopBar({ health, error }: { health: Health | undefined; error: A
     <header className="topbar">
       <h1>{t("app.title")}</h1>
       <div className="indicators">{indicators}</div>
+      <NotifyToggle />
       {health && (
         <span className="muted topbar-version">
           {t("app.backend_version", { version: health.version })}
@@ -47,4 +49,24 @@ export function TopBar({ health, error }: { health: Health | undefined; error: A
       )}
     </header>
   );
+}
+
+function NotifyToggle() {
+  const { t } = useI18n();
+  const { permission, request } = useNotificationPermission();
+  if (permission === "default") {
+    return (
+      <button type="button" className="button button-small topbar-notify" title={t("notify.enable_title")} onClick={request}>
+        {t("notify.enable")}
+      </button>
+    );
+  }
+  if (permission === "denied") {
+    return (
+      <span className="muted topbar-notify" title={t("notify.denied_title")}>
+        {t("notify.denied")}
+      </span>
+    );
+  }
+  return null;
 }
