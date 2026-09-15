@@ -92,6 +92,42 @@ Agent Hub ro'yxatini o'zgartiradi, bekloq va fayllarga tegmaydi.
 Loyihalarni `~/.config/agent-hub/projects.yaml` da qo'lda ham tahrirlash mumkin (format "Sozlamalar"
 bo'limida). Backend fayl o'zgarishini keyingi so'rovda o'qiydi.
 
+## Foydalanish
+
+**Til.** Yuqori paneldagi tanlovda O'zbekcha yoki Русский. Tanlov shu brauzerda saqlanadi (`localStorage`,
+`agent-hub.locale` kaliti) va sahifa qayta yuklanganda qoladi; saqlab bo'lmasa (masalan, sayt ma'lumotlari
+bloklangan) o'zbekcha ochiladi. Backend xatolari ham tanlangan tilda ko'rsatiladi.
+
+**Yangilanishlar.** Sessiya holati va health o'zgarishi backend'dan push (`/api/events`, SSE) orqali darhol
+keladi. Oqim uzilsa ham UI har 2,5 s da (o'tgan sessiyalar — 6 s da) so'rab turadi; jonli sessiyalar
+ro'yxati tab fonda bo'lganda ham yangilanadi.
+
+**Javob kutayotgan sessiyalar.** Ruxsat yoki javob kutayotgan agentlar Sessiyalar panelida «Javob kutmoqda»
+bo'limida birinchi turadi, soni tab sarlavhasida ko'rinadi: `(2) Agent Hub`.
+
+- Brauzer bildirishnomasi: yuqori paneldagi **Bildirishnomalar** tugmasini bosib ruxsat bering. Sessiya
+  javob kuta boshlaganda, Agent Hub tabi fokusda bo'lmasa bildirishnoma chiqadi; bosilsa shu sessiya
+  terminali ochiladi. Ruxsat rad etilgan bo'lsa yuqori panelda «Bildirishnomalar bloklangan» yoziladi — brauzerning
+  sayt sozlamalarida `http://127.0.0.1:8700` uchun ruxsat bering.
+- Holat hook'lardan olinadi. Hook bo'lmasa (masalan, Codex) holat ekrandan taxminiy aniqlanadi va «≈» bilan
+  belgilanadi; bunday sessiyada javob kutish har doim ham aniqlanmaydi.
+
+**Terminal va klaviatura.**
+
+| Tugma | Amal |
+|---|---|
+| Alt+Shift+↓ / ↑ (macOS: ⌥⇧↓ / ↑) | Keyingi / oldingi jonli sessiya terminali (aylanma; avval javob kutayotganlar, keyin boshlanish tartibida). Terminal fokusda bo'lsa ham ishlaydi, matn maydonlarida va dialog ochiqligida ishlamaydi |
+| ↑ / ↓ / Home / End | Sessiya nomi fokusda bo'lsa — ro'yxatdagi keyingi sessiyaga o'tish |
+| Enter | Fokusdagi sessiya terminalini ochish |
+
+Terminal ustidagi tezkor tugmalar (Enter, y, n, Esc, Ctrl-C) pane'ga to'g'ridan-to'g'ri yuboriladi — ruxsat
+so'rovlarini shu yerdan tasdiqlash mumkin.
+
+**Tugagan sessiyalar.** Agent chiqqan pane «Tugagan» bo'limiga o'tadi (chiqish kodi bilan), terminali
+ko'rish uchun ochiladi. `×` bitta pane'ni, **Tozalash** hammasini KanBot ro'yxatidan olib tashlaydi; ochiq
+terminali yopiladi. Hali ishlayotgan pane olib tashlanmaydi. Suhbat tarixi o'chmaydi: sessiya «O'tgan
+sessiyalar» dan davom ettiriladi.
+
 ## Yangilash
 
 **Agent Hub** (kod yangilangandan keyin):
