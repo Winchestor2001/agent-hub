@@ -1,6 +1,7 @@
 import type { ApiError } from "../api/client";
 import type { Health } from "../api/types";
 import { useI18n } from "../i18n/context";
+import { isLocale, LOCALE_NAMES, LOCALES } from "../i18n/messages";
 import { useNotificationPermission } from "../sessions/alerts";
 
 type Tone = "ok" | "warn" | "bad" | "idle";
@@ -42,6 +43,7 @@ export function TopBar({ health, error }: { health: Health | undefined; error: A
       <h1>{t("app.title")}</h1>
       <div className="indicators">{indicators}</div>
       <NotifyToggle />
+      <LocaleSelect />
       {health && (
         <span className="muted topbar-version">
           {t("app.backend_version", { version: health.version })}
@@ -69,4 +71,25 @@ function NotifyToggle() {
     );
   }
   return null;
+}
+
+function LocaleSelect() {
+  const { t, locale, setLocale } = useI18n();
+  return (
+    <select
+      className="topbar-locale"
+      aria-label={t("app.language")}
+      title={t("app.language")}
+      value={locale}
+      onChange={(event) => {
+        if (isLocale(event.target.value)) setLocale(event.target.value);
+      }}
+    >
+      {LOCALES.map((option) => (
+        <option key={option} value={option} lang={option}>
+          {LOCALE_NAMES[option]}
+        </option>
+      ))}
+    </select>
+  );
 }

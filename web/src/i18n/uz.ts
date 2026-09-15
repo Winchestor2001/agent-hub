@@ -7,6 +7,7 @@
 export const uz = {
   "app.title": "Agent Hub",
   "app.backend_version": "backend v{version}",
+  "app.language": "Interfeys tili",
 
   "status.kanbot_online": "KanBot v{version}",
   "status.kanbot_offline": "KanBot o'chiq",

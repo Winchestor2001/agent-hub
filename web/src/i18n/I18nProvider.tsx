@@ -1,14 +1,34 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { I18nContext } from "./context";
-import { createTranslator, type Locale } from "./messages";
+import { I18nContext, type I18n } from "./context";
+import { createTranslator, readLocale, writeLocale, type Locale } from "./messages";
 
-export function I18nProvider({ locale, children }: { locale: Locale; children: ReactNode }) {
-  const translator = useMemo(() => createTranslator(locale), [locale]);
+function browserStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Til brauzerda saqlanadi — sahifa qayta yuklanganda ham tanlov qoladi. */
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>(() => readLocale(browserStorage()));
+
+  const value = useMemo<I18n>(
+    () => ({
+      ...createTranslator(locale),
+      setLocale: (next) => {
+        writeLocale(browserStorage(), next);
+        setLocaleState(next);
+      },
+    }),
+    [locale],
+  );
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
-  return <I18nContext value={translator}>{children}</I18nContext>;
+  return <I18nContext value={value}>{children}</I18nContext>;
 }

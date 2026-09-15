@@ -5,7 +5,6 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { createQueryClient } from "./api/queries";
 import { I18nProvider } from "./i18n/I18nProvider";
-import { DEFAULT_LOCALE } from "./i18n/messages";
 import "./styles.css";
 
 const root = document.getElementById("root");
@@ -16,7 +15,7 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={createQueryClient()}>
-      <I18nProvider locale={DEFAULT_LOCALE}>
+      <I18nProvider>
         <App />
       </I18nProvider>
     </QueryClientProvider>

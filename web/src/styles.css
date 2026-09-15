@@ -124,7 +124,15 @@ textarea {
   margin-left: auto;
 }
 
-.topbar-notify + .topbar-version {
+/* Bildirishnoma tugmasi bo'lmasa ham til tanlovi o'ngga suriladi. */
+.topbar-locale {
+  margin-left: auto;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.topbar-notify + .topbar-locale,
+.topbar-locale + .topbar-version {
   margin-left: 0;
 }
 

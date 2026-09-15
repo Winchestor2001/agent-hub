@@ -1,3 +1,4 @@
+import { ru } from "./ru";
 import { uz } from "./uz";
 
 export type MessageKey = keyof typeof uz;
@@ -6,11 +7,43 @@ export type MessageKey = keyof typeof uz;
 export type Dictionary = { readonly [K in MessageKey]: string };
 
 /** Yangi til: `Dictionary` turidagi fayl va shu xaritada bitta qator. */
-export const dictionaries = { uz } as const satisfies Record<string, Dictionary>;
+export const dictionaries = { uz, ru } as const satisfies Record<string, Dictionary>;
 
 export type Locale = keyof typeof dictionaries;
 
 export const DEFAULT_LOCALE: Locale = "uz";
+
+/** Almashtirgichda har til o'z nomi bilan ko'rsatiladi. */
+export const LOCALE_NAMES: Readonly<Record<Locale, string>> = { uz: "O'zbekcha", ru: "Русский" };
+
+export const LOCALES = Object.keys(dictionaries) as Locale[];
+
+export function isLocale(value: unknown): value is Locale {
+  return typeof value === "string" && Object.hasOwn(dictionaries, value);
+}
+
+export const LOCALE_STORAGE_KEY = "agent-hub.locale";
+
+type LocaleStorage = Pick<Storage, "getItem" | "setItem">;
+
+/** Saqlangan til; storage yo'q, bloklangan yoki qiymat noto'g'ri bo'lsa — standart til. */
+export function readLocale(storage: LocaleStorage | null): Locale {
+  try {
+    const value = storage?.getItem(LOCALE_STORAGE_KEY);
+    return isLocale(value) ? value : DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
+/** Saqlab bo'lmasa (masalan, private rejim) til faqat shu sahifa uchun almashadi. */
+export function writeLocale(storage: LocaleStorage | null, locale: Locale): void {
+  try {
+    storage?.setItem(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // e'tiborsiz: tanlov joriy sahifada baribir ishlaydi
+  }
+}
 
 type Placeholders<S extends string> = S extends `${string}{${infer P}}${infer Rest}`
   ? P | Placeholders<Rest>
