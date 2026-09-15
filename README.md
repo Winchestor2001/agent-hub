@@ -1,11 +1,22 @@
 # Agent Hub
 
 Claude Code va Codex sessiyalari (KanBot orqali) hamda Backlog.md vazifalari uchun lokal veb UI.
-Bitta jarayon, bitta port: `http://127.0.0.1:8700`. Hammasi faqat `127.0.0.1` da tinglaydi.
+Bitta brauzer oynasida loyihalar, vazifalar doskasi, agent sessiyalari va ularning jonli terminali.
+Manzil: `http://127.0.0.1:8700`. Hammasi faqat `127.0.0.1` da tinglaydi.
 Ilova telemetriya yubormaydi va tashqi so'rov qilmaydi.
 
-> README qoralama holatda: to'liq o'rnatish (launchd), loyiha qo'shish va loglar bo'limlari
-> TASK-15 da yoziladi.
+```
+brauzer ──► Agent Hub (127.0.0.1:8700) ──► KanBot server (127.0.0.1:8787) ◄── KanBot runner (--safe)
+                 │                                                               │
+                 └──► backlog CLI (loyiha papkalarida)                  claude / codex pane'lari
+```
+
+- **Agent Hub** (`python -m agent_hub`): FastAPI backend va build qilingan React UI, bitta jarayon.
+  Vazifalarni `backlog` CLI orqali o'qiydi va o'zgartiradi, sessiyalarni KanBot REST/WebSocket orqali boshqaradi.
+- **KanBot server**: `scripts/kanbot_guarded_server.py` orqali, begona `Host`/`Origin` ni rad etadigan himoya bilan.
+- **KanBot runner**: agent CLI'larni pane'larda ishga tushiradi, faqat SAFE rejimda (auto-approve yo'q).
+
+Uchala jarayon launchd servisi sifatida login paytida o'zi ishga tushadi (quyida), yoki dev-rejimda qo'lda.
 
 ## Talablar
 
@@ -14,9 +25,147 @@ Ilova telemetriya yubormaydi va tashqi so'rov qilmaydi.
 - [Backlog.md](https://github.com/MrLesk/Backlog.md) CLI (`backlog`)
 - `claude` va/yoki `codex` CLI (obuna orqali avtorizatsiya qilingan; API kalitlari kerak emas)
 
+## O'rnatish (launchd servislari)
+
+1. Bog'liqliklar:
+
+   ```sh
+   make sync
+   ```
+
+2. KanBot'ni xavfsiz sozlash (bir marta). Xavfli agentlar o'chiriladi:
+
+   ```sh
+   kanbot config --disable shell glm kimi
+   ```
+
+   `~/.kanbot/config.json` da `auto_approve` `false` bo'lishi kerak. `--safe` bilan ishlagan runner uni o'zi
+   `false` qilib yozadi.
+
+3. Qo'lda ishga tushirilgan KanBot (`kanbot up`, `make dev-kanbot`, `make dev-runner`) va `make dev` ni to'xtating.
+   Keyin:
+
+   ```sh
+   make install
+   ```
+
+   Frontend build qilinadi, plist'lar `launchd/*.plist.in` shablonlaridan joriy mashina yo'llari bilan render
+   qilinib `~/Library/LaunchAgents` ga yoziladi va yuklanadi. Qayta ishga tushirish xavfsiz: o'zgarmagan
+   servislarga tegilmaydi, faqat yangi yoki o'zgargan plist qayta yuklanadi.
+
+   `make install` quyidagi holatlarda ogohlantirib to'xtaydi va hech narsa yozmaydi:
+   - 8787 yoki 8700 portini launchd'dan tashqari jarayon egallagan;
+   - qo'lda ishga tushirilgan `kanbot runner` / `kanbot up` bor;
+   - tirik agent pane'lari bor va KanBot server yoki runner qayta ishga tushishi kerak (pane'lar to'xtaydi).
+
+   Baribir davom etish: `make install FORCE=1`.
+
+4. Tekshirish:
+
+   ```sh
+   make status
+   ```
+
+   Hammasi joyida bo'lsa exit 0: uchala servis `running`, Agent Hub health `ok`, KanBot'da aynan 1 ta onlayn
+   runner, config va runner'da `auto_approve=false`. So'ng `http://127.0.0.1:8700` ni oching.
+
+| Servis (label) | Buyruq | Port | Log |
+|---|---|---|---|
+| `local.agent-hub.kanbot-server` | KanBot venv python'i + `scripts/kanbot_guarded_server.py` | 8787 | `kanbot-server.log` |
+| `local.agent-hub.kanbot-runner` | `kanbot runner --safe --server http://127.0.0.1:8787` | — | `kanbot-runner.log` |
+| `local.agent-hub.backend` | `.venv/bin/python -m agent_hub` | 8700 | `backend.log` |
+
+Servislarda `RunAtLoad` va `KeepAlive` yoqilgan: login paytida ishga tushadi, yiqilsa 10 s dan keyin qayta
+ko'tariladi. PATH plist'ga render paytida yoziladi (`kanbot`, `claude`, `codex`, `backlog`, `node` papkalari).
+CLI'lardan biri boshqa joyga ko'chsa, `make install` ni qayta ishga tushiring.
+
+Boshqa portlar: `make install AGENT_HUB_PORT=8711 KANBOT_PORT=8797` (`make status` va `make uninstall` ga ham
+xuddi shu qiymatlarni bering).
+
+## Loyiha qo'shish
+
+UI'da chap paneldagi **+ Loyiha** tugmasi: nomi, ID (kichik lotin harflari, raqam va `-`), bekloq papkasi
+(`backlog/` yoki `.backlog/` joylashgan papka) va ixtiyoriy repo papkalari. Repo papkalari sessiyalarni
+loyihaga bog'lash uchun ishlatiladi; bo'sh qolsa bekloq papkasi olinadi. **Ro'yxatdan olib tashlash** faqat
+Agent Hub ro'yxatini o'zgartiradi, bekloq va fayllarga tegmaydi.
+
+Loyihalarni `~/.config/agent-hub/projects.yaml` da qo'lda ham tahrirlash mumkin (format "Sozlamalar"
+bo'limida). Backend fayl o'zgarishini keyingi so'rovda o'qiydi.
+
+## Yangilash
+
+**Agent Hub** (kod yangilangandan keyin):
+
+```sh
+git pull
+make sync
+make install                                                  # frontend build, plist o'zgargan bo'lsa qayta yuklash
+launchctl kickstart -k gui/$(id -u)/local.agent-hub.backend   # yangi Python kodini yuklash
+```
+
+Frontend fayllari diskdan beriladi, brauzer sahifasini yangilash yetadi. Backend'ni qayta ishga tushirish
+agent sessiyalariga ta'sir qilmaydi.
+
+**KanBot** yangilangandan keyin server va runner eski kod bilan ishlashda davom etadi, ularni qayta ishga
+tushiring. Runner qayta ishga tushganda uning ichidagi barcha agent pane'lari to'xtaydi, avval ishlarni tugating:
+
+```sh
+uv tool upgrade kanbot
+make install                                                        # venv yo'li o'zgargan bo'lsa plist yangilanadi
+launchctl kickstart -k gui/$(id -u)/local.agent-hub.kanbot-server
+launchctl kickstart -k gui/$(id -u)/local.agent-hub.kanbot-runner
+make status
+```
+
+Agent Hub KanBot 0.8.x bilan tekshirilgan. Boshqa versiyada health `kanbot_version_unsupported` ogohlantirishini
+ko'rsatadi: himoya launcher'i va API mosligini tekshirmasdan ishlatmang.
+
+## Servislarni o'chirish
+
+```sh
+make uninstall
+```
+
+Servislar to'xtatiladi va `~/Library/LaunchAgents/local.agent-hub.*.plist` o'chiriladi. Loglar va
+`~/.config/agent-hub` qoladi. Tirik agent pane'lari bo'lsa to'xtaydi va buyruq ogohlantiradi:
+davom etish uchun `make uninstall FORCE=1`. Qayta ishga tushirish xavfsiz.
+
+## Loglar
+
+Servis loglari `~/Library/Logs/agent-hub/` da: `kanbot-server.log`, `kanbot-runner.log`, `backend.log`
+(stdout va stderr bitta faylda).
+
+```sh
+make logs                 # oxirgi 50 qator va kuzatish (Ctrl-C)
+make logs LOG_LINES=200
+```
+
+Loglar avtomatik aylantirilmaydi. Hajmi oshsa servislarni to'xtatib (`make uninstall`) tozalang yoki faylni
+qisqartiring (`: > ~/Library/Logs/agent-hub/backend.log`).
+
+Servis ishga tushmasa: `make status`, keyin tegishli log. Tez-tez uchraydigan sabablar: port band
+(`lsof -nP -iTCP:8787 -sTCP:LISTEN`), `.venv` yo'q (`make sync`), `kanbot` qayta o'rnatilgan (`make install`).
+
+## Xavfsizlik
+
+- Agent Hub va KanBot'da autentifikatsiya yo'q. Himoya faqat `127.0.0.1` ga bog'lanish va `Host`/`Origin`
+  tekshiruviga tayanadi: begona saytdan kelgan brauzer so'rovlari 403 oladi. Portlarni tarmoqqa chiqarmang
+  (`ssh -R`, ngrok, proxy, `0.0.0.0` ga ko'chirish). Mashinadagi har qanday lokal jarayon esa API'dan
+  foydalana oladi.
+- `kanbot server` ni himoyasiz, to'g'ridan-to'g'ri ishga tushirmang: KanBot'da CORS `*`.
+- Runner faqat `--safe` rejimda: agentlarning auto-approve bayroqlari olib tashlanadi, ruxsat so'rovlarini
+  pane terminalida (yoki tezkor tugmalar bilan) o'zingiz tasdiqlaysiz. `auto_approve` yoqilsa yoki `shell`, `glm`, `kimi`
+  e'lon qilinsa, UI'da xato banneri va health'da `auto_approve_enabled` / `shell_enabled` chiqadi.
+- Bir vaqtda faqat bitta runner: `kanbot up` yoki ikkinchi `kanbot runner` ni servislar bilan birga
+  ishlatmang (`make status` buni tekshiradi).
+- Agentlar sizning foydalanuvchi huquqlaringiz bilan loyiha papkalarida ishlaydi.
+- Plist'larda token va API kalitlari yo'q. KanBot tokeni faqat `~/.kanbot/config.json` da qoladi, runner uni
+  o'zi o'qiydi. `claude` va `codex` obuna avtorizatsiyasidan foydalanadi.
+
 ## Dev-rejim (launchd servislarisiz)
 
-launchd servislarini o'rnatishdan oldin hammasini qo'lda, alohida terminallarda ishga tushirish mumkin.
+Hammasini qo'lda, alohida terminallarda ishga tushirish (ishlab chiqish yoki servislarsiz sinash uchun).
+launchd servislari o'rnatilgan bo'lsa, avval `make uninstall` qiling: portlar va runner to'qnashadi.
 Avval bog'liqliklarni o'rnating:
 
 ```sh
