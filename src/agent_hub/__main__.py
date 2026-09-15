@@ -9,6 +9,8 @@ import uvicorn
 from agent_hub.app import create_asgi_app
 from agent_hub.settings import Settings, SettingsError
 
+GRACEFUL_SHUTDOWN = 3
+
 
 def main() -> None:
     try:
@@ -23,6 +25,8 @@ def main() -> None:
         log_level="info",
         proxy_headers=False,
         server_header=False,
+        # Ochiq SSE/terminal ulanishlari launchd to'xtatishini ushlab qolmasin.
+        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN,
     )
 
 

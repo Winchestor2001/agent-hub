@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from agent_hub import __version__
-from agent_hub.api import health, projects, sessions, tasks, terminal
+from agent_hub.api import events, health, projects, sessions, tasks, terminal
 from agent_hub.api.deps import BacklogFactory, Hub
 from agent_hub.api.errors import error_response, install_error_handlers
 from agent_hub.backlog_client import BacklogClient
@@ -34,6 +34,7 @@ def create_app(
     """FastAPI ilovasi (testlar uchun). Serverga `create_asgi_app` beriladi."""
     client = kanbot or KanbotClient(settings.kanbot_url)
     registry = Registry(settings.projects_file)
+    event_hub = events.EventHub.for_url(client.web_socket_url)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -41,6 +42,7 @@ def create_app(
         try:
             yield
         finally:
+            await event_hub.close()
             await client.aclose()
 
     app = FastAPI(
@@ -49,9 +51,11 @@ def create_app(
     app.state.settings = settings
     app.state.registry = registry
     app.state.hub = Hub(settings, registry, client, backlog_factory)
+    app.state.events = event_hub
     install_error_handlers(app)
-    for router in (health.router, projects.router, tasks.router, sessions.router, terminal.router):
-        app.include_router(router)
+    routers = (health, projects, tasks, sessions, terminal, events)
+    for module in routers:
+        app.include_router(module.router)
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def api_not_found(path: str) -> JSONResponse:

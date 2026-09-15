@@ -316,3 +316,43 @@ def test_shell_wrappers_are_valid() -> None:
         script = SCRIPTS / name
         assert script.stat().st_mode & 0o111
         subprocess.run(["sh", "-n", str(script)], check=True)
+
+
+def test_logs_truncate_in_place(system: FakeSystem, tmp_path: Path) -> None:
+    lines: list[str] = []
+    assert svc.logs_truncate(system, out=lines.append) == 0
+    assert lines == [f"Loglar yo'q: {system.log_dir}"]
+
+    system.log_dir.mkdir(parents=True)
+    backend = system.log_dir / "backend.log"
+    backend.write_bytes(b"x" * 2048)
+    (system.log_dir / "kanbot-runner.log").write_text("", encoding="utf-8")
+    other = system.log_dir / "notes.txt"
+    other.write_text("keep", encoding="utf-8")
+    outside = tmp_path / "outside.log"
+    outside.write_text("keep", encoding="utf-8")
+    (system.log_dir / "link.log").symlink_to(outside)
+
+    # Servis faylni O_APPEND bilan ochiq ushlab turadi: qisqartirishdan keyin ham shu faylga yozadi.
+    with backend.open("ab") as service:
+        inode = backend.stat().st_ino
+        lines.clear()
+        assert svc.logs_truncate(system, out=lines.append) == 0
+        service.write(b"new\n")
+        service.flush()
+
+    assert lines == [
+        "backend.log: 2.0 KB → 0",
+        "kanbot-runner.log: 0 B → 0",
+        "Jami bo'shatildi: 2.0 KB",
+    ]
+    assert backend.read_bytes() == b"new\n"
+    assert backend.stat().st_ino == inode
+    assert other.read_text(encoding="utf-8") == "keep"
+    assert outside.read_text(encoding="utf-8") == "keep"
+
+
+def test_logs_truncate_command_is_wired() -> None:
+    makefile = (SCRIPTS.parent / "Makefile").read_text(encoding="utf-8")
+    assert "\nlogs-truncate:" in makefile
+    assert "scripts/services.py logs-truncate" in makefile

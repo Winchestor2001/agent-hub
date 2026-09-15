@@ -15,7 +15,7 @@ PORT_ARGS = --agent-hub-port $(AGENT_HUB_PORT) --kanbot-port $(KANBOT_PORT) --la
 SERVICE_ARGS = $(PORT_ARGS)$(if $(FORCE), --force)
 
 .PHONY: help sync build lint typecheck test test-integration check dev dev-web dev-kanbot dev-runner \
-	install uninstall status logs
+	install uninstall status logs logs-truncate
 
 help: ## Buyruqlar ro'yxati
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -73,3 +73,7 @@ logs: ## Servis loglari (~/Library/Logs/agent-hub, tail -F)
 	@logs=($$HOME/Library/Logs/agent-hub/*.log(N)); \
 	if (( ! $${#logs} )); then echo "Loglar hali yo'q: $$HOME/Library/Logs/agent-hub" >&2; exit 1; fi; \
 	tail -n $(LOG_LINES) -F $$logs
+
+logs-truncate: ## Servis loglarini joyida 0 ga qisqartirish (servislar ishlayveradi)
+	@test -x .venv/bin/python || { echo "Avval 'make sync'" >&2; exit 1; }
+	@.venv/bin/python scripts/services.py logs-truncate

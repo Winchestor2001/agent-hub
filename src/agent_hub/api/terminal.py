@@ -257,7 +257,7 @@ class _ClientChannel:
             await self._ws.close(code, reason)
 
 
-class _UpstreamChannel:
+class UpstreamChannel:
     def __init__(self, connection: ClientConnection) -> None:
         self._ws = connection
 
@@ -278,6 +278,21 @@ class _UpstreamChannel:
         await self._ws.close(code, reason)
 
 
+UPSTREAM_CONNECT_ERRORS = (OSError, TimeoutError, InvalidHandshake)
+
+
+async def open_upstream(url: str) -> UpstreamChannel:
+    """KanBot `/ws/web` ga ulanish; ulanib bo'lmasa `UPSTREAM_CONNECT_ERRORS` dan biri."""
+    connection = await connect(
+        url,
+        proxy=None,
+        open_timeout=CONNECT_TIMEOUT,
+        max_size=UPSTREAM_MAX_SIZE,
+        compression=None,
+    )
+    return UpstreamChannel(connection)
+
+
 def _terminal_size(params: Mapping[str, str]) -> tuple[int | None, int | None]:
     def parse(name: str, bounds: tuple[int, int]) -> int | None:
         raw = params.get(name, "")
@@ -286,7 +301,7 @@ def _terminal_size(params: Mapping[str, str]) -> tuple[int | None, int | None]:
     return parse("rows", ROWS_RANGE), parse("cols", COLS_RANGE)
 
 
-async def _quietly(action: Awaitable[None]) -> None:
+async def quietly(action: Awaitable[None]) -> None:
     """Yopish to'xtab qolgan mijozda osilib qolmasligi uchun vaqt cheklovi bilan."""
     with contextlib.suppress(Exception):
         async with asyncio.timeout(CLOSE_TIMEOUT):
@@ -300,28 +315,21 @@ async def pane_terminal(websocket: WebSocket, pane_id: str) -> None:
     await websocket.accept()
     client = _ClientChannel(websocket)
     if not is_valid_pane_id(pane_id):
-        await _quietly(client.close(*BAD_REQUEST))
+        await quietly(client.close(*BAD_REQUEST))
         return
     rows, cols = _terminal_size(websocket.query_params)
     url = hub.kanbot.web_socket_url
     try:
-        connection = await connect(
-            url,
-            proxy=None,
-            open_timeout=CONNECT_TIMEOUT,
-            max_size=UPSTREAM_MAX_SIZE,
-            compression=None,
-        )
-    except (OSError, TimeoutError, InvalidHandshake) as exc:
+        upstream = await open_upstream(url)
+    except UPSTREAM_CONNECT_ERRORS as exc:
         logger.warning("KanBot WebSocket'iga ulanib bo'lmadi (%s): %s", url, exc)
-        await _quietly(client.close(*KANBOT_UNAVAILABLE))
+        await quietly(client.close(*KANBOT_UNAVAILABLE))
         return
-    upstream = _UpstreamChannel(connection)
     try:
         close = await PaneBridge(pane_id).run(upstream, client, rows, cols)
     finally:
         # Upstream birinchi: KanBot obunani darhol bo'shatadi, mijoz osilib qolsa ham.
-        await _quietly(upstream.close(1000, ""))
+        await quietly(upstream.close(1000, ""))
     if close.code != CLIENT_LEFT.code:
         logger.info("terminal %s yopildi: %s", pane_id, close.reason)
-    await _quietly(client.close(*close))
+    await quietly(client.close(*close))

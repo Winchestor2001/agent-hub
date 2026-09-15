@@ -1,4 +1,4 @@
-"""Agent Hub launchd servislari: `install`, `uninstall`, `status`.
+"""Agent Hub launchd servislari: `install`, `uninstall`, `status`, `logs-truncate`.
 
 `install` idempotent: `launchd/*.plist.in` render qilinadi va `~/Library/LaunchAgents` dagisi bilan
 solishtiriladi — o'zgarmagan va yuklangan job'ga tegilmaydi, yangi yoki o'zgargani qayta yuklanadi.
@@ -7,6 +7,7 @@ runner yoki qayta ishga tushirish o'ldiradigan tirik pane'lar bo'lsa, `--force` 
 
 `uninstall` job'larni to'xtatib plist'larni o'chiradi, loglar qoladi. `status` job holati, Agent Hub
 health, onlayn runner'lar soni va `auto_approve` ni ko'rsatadi; biror narsa noto'g'ri bo'lsa exit 1.
+`logs-truncate` servis loglarini joyida 0 baytga qisqartiradi (servislar to'xtatilmaydi).
 
 Faqat stdlib: skript loyiha `.venv` python'ida ishlaydi (`scripts/install-services.sh`).
 """
@@ -373,9 +374,38 @@ def status(system: System, target: Target, *, out: Out = print) -> int:
     return 0 if ok else 1
 
 
+def _size(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
+
+
+def logs_truncate(system: System, *, out: Out = print) -> int:
+    """`*.log` fayllarni joyida qisqartiradi.
+
+    launchd StandardOutPath'ni O_APPEND bilan ochadi: fayl o'chirilmaydi va almashtirilmaydi (aks
+    holda servis eski inode'ga yozishda davom etadi), balki 0 ga qisqartiriladi — keyingi yozuv
+    boshidan.
+    """
+    logs = sorted(p for p in system.log_dir.glob("*.log") if p.is_file() and not p.is_symlink())
+    if not logs:
+        out(f"Loglar yo'q: {system.log_dir}")
+        return 0
+    total = 0
+    for path in logs:
+        size = path.stat().st_size
+        os.truncate(path, 0)
+        total += size
+        out(f"{path.name}: {_size(size)} → 0")
+    out(f"Jami bo'shatildi: {_size(total)}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Agent Hub launchd servislari")
-    parser.add_argument("command", choices=("install", "uninstall", "status"))
+    parser.add_argument("command", choices=("install", "uninstall", "status", "logs-truncate"))
     parser.add_argument(
         "--force", action="store_true", help="ogohlantirishlarga qaramay davom etish"
     )
@@ -388,6 +418,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "status":
             return status(system, target)
+        if args.command == "logs-truncate":
+            return logs_truncate(system)
         if args.command == "uninstall":
             return uninstall(system, target, force=args.force)
         ctx = discover(

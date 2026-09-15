@@ -140,8 +140,15 @@ make logs                 # oxirgi 50 qator va kuzatish (Ctrl-C)
 make logs LOG_LINES=200
 ```
 
-Loglar avtomatik aylantirilmaydi. Hajmi oshsa servislarni to'xtatib (`make uninstall`) tozalang yoki faylni
-qisqartiring (`: > ~/Library/Logs/agent-hub/backend.log`).
+Loglar avtomatik aylantirilmaydi. Hajmi oshsa:
+
+```sh
+make logs-truncate        # har bir *.log joyida 0 baytga qisqartiriladi, bo'shatilgan hajm chiqariladi
+```
+
+Servislarni to'xtatish shart emas: launchd log faylini qo'shib yozish (`O_APPEND`) rejimida ochadi, keyingi
+yozuvlar bo'sh faylning boshidan davom etadi. Faylni `rm` qilmang — servis o'chirilgan faylga yozishda davom
+etadi va joy bo'shamaydi.
 
 Servis ishga tushmasa: `make status`, keyin tegishli log. Tez-tez uchraydigan sabablar: port band
 (`lsof -nP -iTCP:8787 -sTCP:LISTEN`), `.venv` yo'q (`make sync`), `kanbot` qayta o'rnatilgan (`make install`).

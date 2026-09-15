@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { collectBanners } from "./api/banners";
+import { useLiveEvents } from "./api/events";
 import { useHealth, useLiveSessions, useProjects } from "./api/queries";
 import { Banners } from "./components/Banners";
 import { BoardPanel } from "./components/BoardPanel";
@@ -16,6 +17,7 @@ interface TaskTarget {
 }
 
 export function App() {
+  useLiveEvents();
   const health = useHealth();
   const projects = useProjects();
   const [selectedId, setSelectedId] = useState<string | null>(null);
