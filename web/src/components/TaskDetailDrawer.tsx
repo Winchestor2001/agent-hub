@@ -14,6 +14,8 @@ interface TaskDetailDrawerProps {
   board: Board;
   onOpen: (taskId: string) => void;
   onStartSession: (taskId: string) => void;
+  /** Status muvaffaqiyatli o'zgardi — doska qaror qiladi (masalan, sessiya dialogini ochish). */
+  onStatusChanged: (taskId: string, status: string) => void;
   onOpenTerminal: (paneId: string) => void;
   onClose: () => void;
 }
@@ -24,6 +26,7 @@ export function TaskDetailDrawer({
   board,
   onOpen,
   onStartSession,
+  onStatusChanged,
   onOpenTerminal,
   onClose,
 }: TaskDetailDrawerProps) {
@@ -71,6 +74,7 @@ export function TaskDetailDrawer({
             task={task}
             board={board}
             onOpen={onOpen}
+            onStatusChanged={onStatusChanged}
             onOpenTerminal={onOpenTerminal}
           />
         ) : detail.error ? (
@@ -88,10 +92,18 @@ interface DetailBodyProps {
   task: TaskDetail;
   board: Board;
   onOpen: (taskId: string) => void;
+  onStatusChanged: (taskId: string, status: string) => void;
   onOpenTerminal: (paneId: string) => void;
 }
 
-function DetailBody({ projectId, task, board, onOpen, onOpenTerminal }: DetailBodyProps) {
+function DetailBody({
+  projectId,
+  task,
+  board,
+  onOpen,
+  onStatusChanged,
+  onOpenTerminal,
+}: DetailBodyProps) {
   const { t } = useI18n();
   const setStatus = useSetStatus(projectId);
   const statuses = board.statuses.includes(task.status) ? board.statuses : [...board.statuses, task.status];
@@ -133,7 +145,15 @@ function DetailBody({ projectId, task, board, onOpen, onOpenTerminal }: DetailBo
             value={task.status}
             disabled={setStatus.isPending}
             onChange={(e) => {
-              setStatus.mutate({ taskId: task.id, status: e.target.value });
+              const status = e.target.value;
+              setStatus.mutate(
+                { taskId: task.id, status },
+                {
+                  onSuccess: () => {
+                    onStatusChanged(task.id, status);
+                  },
+                },
+              );
             }}
           >
             {statuses.map((status) => (

@@ -19,6 +19,7 @@ import type {
   SessionsResponse,
   TaskCreate,
   TaskDetail,
+  UploadsResponse,
 } from "./types";
 
 /** Jonli holatlar (health, loyihalar, pane'lar). */
@@ -148,6 +149,22 @@ export function useCreateTask(projectId: string) {
     mutationFn: (body: TaskCreate) =>
       apiFetch<{ id: string }>(`/api/projects/${enc(projectId)}/tasks`, { method: "POST", body }),
     onSuccess: () => invalidate(projectId),
+  });
+}
+
+/** Fayllarni loyiha papkasiga yuklaydi; javobdagi `path` lar keyin vazifa/sessiyaga uzatiladi. */
+export function useUploadFiles(projectId: string) {
+  return useMutation({
+    mutationFn: ({ files, cwd, taskId }: { files: File[]; cwd?: string | undefined; taskId?: string | undefined }) => {
+      const form = new FormData();
+      for (const file of files) form.append("files", file, file.name);
+      if (cwd) form.append("cwd", cwd);
+      if (taskId) form.append("task_id", taskId);
+      return apiFetch<UploadsResponse>(`/api/projects/${enc(projectId)}/uploads`, {
+        method: "POST",
+        form,
+      });
+    },
   });
 }
 

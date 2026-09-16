@@ -929,6 +929,53 @@ button.link-row:hover {
   gap: 6px;
 }
 
+/* --- fayl biriktirish --- */
+
+.file-drop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.file-drop-over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--panel-raised);
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+}
+
+.file-kind {
+  flex: none;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* --- sessiyalar --- */
 
 .state {

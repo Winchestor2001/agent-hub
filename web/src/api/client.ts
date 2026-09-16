@@ -42,6 +42,8 @@ function isErrorBody(value: unknown): value is ApiErrorBody {
 export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
+  /** Multipart yuklama; `body` o'rniga beriladi (Content-Type'ni brauzer o'zi qo'yadi). */
+  form?: FormData;
   signal?: AbortSignal;
 }
 
@@ -49,7 +51,10 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const headers: Record<string, string> = { Accept: "application/json" };
   const init: RequestInit = { method: options.method ?? "GET", headers };
   if (options.signal) init.signal = options.signal;
-  if (options.body !== undefined) {
+  if (options.form !== undefined) {
+    // Content-Type qo'lda qo'yilmaydi: brauzer `boundary` bilan birga o'zi yozadi.
+    init.body = options.form;
+  } else if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(options.body);
   }

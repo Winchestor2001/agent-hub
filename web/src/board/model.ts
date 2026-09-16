@@ -23,6 +23,21 @@ export interface Column {
   tasks: TaskItem[];
 }
 
+/**
+ * "Jarayonda" ustunimi? Backlog config'da ustun nomi erkin, shuning uchun keng tarqalgan
+ * nomlar bo'yicha taxmin qilinadi; mos kelmasa hech narsa ochilmaydi.
+ */
+const IN_PROGRESS = /^(in[ _-]*progress|doing|wip|в[ _-]*работе|jarayon(da)?)$/i;
+
+export function isInProgressStatus(status: string): boolean {
+  return IN_PROGRESS.test(status.trim());
+}
+
+/** Vazifa jarayonga o'tdi va tirik sessiyasi yo'q — sessiya dialogi ochilsin. */
+export function shouldOpenSession(task: TaskItem | undefined, status: string): boolean {
+  return isInProgressStatus(status) && task !== undefined && task.sessions.length === 0;
+}
+
 const norm = (value: string) => value.trim().toLowerCase();
 
 function byOrdinalThenId(a: TaskItem, b: TaskItem): number {

@@ -124,6 +124,13 @@ export const ru: Dictionary = {
   "task_form.acceptance": "Критерии приёмки",
   "task_form.acceptance_hint": "по одному в строке",
   "task_form.create": "Создать",
+  "files.label": "Файлы",
+  "files.hint": "картинка или документ: выберите, перетащите или вставьте через Ctrl+V",
+  "files.pick": "Добавить файл",
+  "files.drop": "Перетащите файлы сюда",
+  "files.uploading": "Загрузка…",
+  "files.remove": "Убрать из списка",
+  "files.count": "Прикреплено файлов: {count}",
 
   "sessions.live": "Активные агенты",
   "sessions.blocked": "Ждут ответа",
@@ -275,6 +282,13 @@ export const ru: Dictionary = {
   "error.session_file_not_found": "Файл сессии не найден на этом компьютере (возможно, сессия на другом раннере): {session_id}",
   "error.pane_alive": "Сессия ещё работает — убрать нельзя",
   "error.session_id_invalid": "Неверный ID сессии",
+
+  "error.upload_type_invalid": "«{name}» — неподдерживаемый тип файла",
+  "error.upload_too_large": "«{name}» слишком большой (предел: {limit} байт)",
+  "error.upload_too_many": "Нельзя загрузить больше {limit} файлов за раз (выбрано: {count})",
+  "error.upload_empty": "«{name}» пустой — не загружен",
+  "error.upload_name_invalid": "Неверное имя файла: {name}",
+  "error.upload_not_found": "Загруженный файл не найден: {path}",
 
   "error.shell_enabled":
     "Включён опасный агент «{agent}». Отключить: kanbot config --disable shell glm kimi",

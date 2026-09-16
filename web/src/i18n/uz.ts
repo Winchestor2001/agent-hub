@@ -124,6 +124,13 @@ export const uz = {
   "task_form.acceptance": "Qabul mezonlari",
   "task_form.acceptance_hint": "har qatorda bittasi",
   "task_form.create": "Yaratish",
+  "files.label": "Fayllar",
+  "files.hint": "rasm yoki hujjat: tanlang, sudrab tashlang yoki Ctrl+V bilan qo'ying",
+  "files.pick": "Fayl qo'shish",
+  "files.drop": "Fayllarni shu yerga tashlang",
+  "files.uploading": "Yuklanmoqda…",
+  "files.remove": "Ro'yxatdan olib tashlash",
+  "files.count": "{count} ta fayl biriktirildi",
 
   "sessions.live": "Jonli agentlar",
   "sessions.blocked": "Javob kutmoqda",
@@ -276,6 +283,13 @@ export const uz = {
   "error.session_file_not_found": "Sessiya fayli bu kompyuterda topilmadi (sessiya boshqa runner'da bo'lishi mumkin): {session_id}",
   "error.pane_alive": "Sessiya hali ishlayapti — olib tashlanmaydi",
   "error.session_id_invalid": "Sessiya ID noto'g'ri",
+
+  "error.upload_type_invalid": "«{name}» — qo'llab-quvvatlanmaydigan fayl turi",
+  "error.upload_too_large": "«{name}» juda katta (chegara: {limit} bayt)",
+  "error.upload_too_many": "Bir vaqtda {limit} tadan ko'p fayl yuklab bo'lmaydi ({count} ta tanlandi)",
+  "error.upload_empty": "«{name}» bo'sh — yuklanmadi",
+  "error.upload_name_invalid": "Fayl nomi noto'g'ri: {name}",
+  "error.upload_not_found": "Yuklangan fayl topilmadi: {path}",
 
   "error.shell_enabled": "Xavfli «{agent}» agenti yoqilgan. O'chirish: kanbot config --disable shell glm kimi",
   "error.agent_enabled": "Xavfli «{agent}» agenti yoqilgan. O'chirish: kanbot config --disable shell glm kimi",

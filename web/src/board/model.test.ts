@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { Milestone, TaskItem } from "../api/types";
+import type { LivePane, Milestone, TaskItem } from "../api/types";
 import {
   ALL,
   collectLabels,
   filterTasks,
   groupByStatus,
+  isInProgressStatus,
   milestoneId,
   milestoneTitle,
   NO_MILESTONE,
+  shouldOpenSession,
   slugify,
   splitLines,
   splitList,
@@ -150,5 +152,36 @@ describe("slugify va ro'yxatlar", () => {
   it("vergul/qator bo'yicha ajratish", () => {
     expect(splitList("backend, bug,\n bug ,,client")).toEqual(["backend", "bug", "client"]);
     expect(splitLines("Birinchi, shart\n\n Ikkinchi ")).toEqual(["Birinchi, shart", "Ikkinchi"]);
+  });
+});
+
+describe("isInProgressStatus", () => {
+  it("keng tarqalgan nomlarni registr va ajratuvchidan qat'i nazar taniydi", () => {
+    for (const status of ["In Progress", "in-progress", "IN_PROGRESS", "doing", "WIP", "В работе", "jarayonda"]) {
+      expect(isInProgressStatus(status)).toBe(true);
+    }
+  });
+
+  it("boshqa ustunlar uchun false", () => {
+    for (const status of ["To Do", "Done", "Blocked", "", "progress report", "in progress soon"]) {
+      expect(isInProgressStatus(status)).toBe(false);
+    }
+  });
+});
+
+describe("shouldOpenSession", () => {
+  const live = [{ id: "pane-1" } as LivePane];
+
+  it("jarayonga o'tgan va sessiyasiz vazifa uchun ochiladi", () => {
+    expect(shouldOpenSession(task("A"), "In Progress")).toBe(true);
+  });
+
+  it("tirik sessiyasi bor vazifa uchun ochilmaydi", () => {
+    expect(shouldOpenSession(task("A", { sessions: live }), "In Progress")).toBe(false);
+  });
+
+  it("boshqa statusda yoki noma'lum vazifada ochilmaydi", () => {
+    expect(shouldOpenSession(task("A"), "Done")).toBe(false);
+    expect(shouldOpenSession(undefined, "In Progress")).toBe(false);
   });
 });

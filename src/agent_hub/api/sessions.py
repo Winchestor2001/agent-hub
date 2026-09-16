@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_hub.kanbot_client import SESSION_AGENTS
 from agent_hub.registry import Project
-from agent_hub.services import transcripts
+from agent_hub.services import transcripts, uploads
 from agent_hub.services.linking import live_session_ids, project_for_path
 from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE, TaskInfo, session_title
 
@@ -31,6 +31,8 @@ class SessionStart(BaseModel):
     cwd: str | None = Field(default=None, max_length=1024)
     task_id: str | None = Field(default=None, max_length=40)
     prompt: str = Field(default="", max_length=MAX_PROMPT)
+    # Yuklangan fayllar: loyiha papkasiga nisbatan yo'llar (`POST .../uploads` qaytargan).
+    files: list[str] = Field(default_factory=list, max_length=uploads.MAX_FILES)
 
 
 class SessionResume(BaseModel):
@@ -123,6 +125,7 @@ async def start_session(hub: HubDep, project_id: str, body: SessionStart) -> dic
         cwd=body.cwd,
         task=TaskInfo(task.id, task.title) if task else None,
         prompt=body.prompt,
+        files=uploads.resolve(project, body.files, body.cwd),
     )
     return pane_view(pane, None, project.id, task)
 

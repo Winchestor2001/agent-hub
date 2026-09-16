@@ -185,6 +185,20 @@ export interface TaskCreate {
   assignees: string[];
   milestone?: string;
   acceptance_criteria: string[];
+  /** Yuklangan fayllar yo'llari (`UploadedFile.path`); tavsif oxiriga ro'yxat bo'lib qo'shiladi. */
+  files?: string[];
+}
+
+/** Loyiha papkasiga yuklangan fayl; `path` — o'sha papkaga nisbatan. */
+export interface UploadedFile {
+  name: string;
+  path: string;
+  size: number;
+  kind: "image" | "file";
+}
+
+export interface UploadsResponse {
+  files: UploadedFile[];
 }
 
 export interface SessionOptions {
@@ -198,6 +212,8 @@ export interface SessionStart {
   cwd?: string;
   task_id?: string;
   prompt: string;
+  /** Yuklangan fayllar yo'llari; prompt oxiriga ro'yxat bo'lib qo'shiladi. */
+  files?: string[];
 }
 
 export interface SessionResume {

@@ -17,6 +17,7 @@ from agent_hub.backlog_client import BacklogError
 from agent_hub.kanbot_client import KanbotError
 from agent_hub.registry import RegistryError
 from agent_hub.services.sessions import SessionError
+from agent_hub.services.uploads import UploadError
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,11 @@ _BACKLOG_STATUS = {
     "backlog_timeout": 504,
     "backlog_exists": 409,
 }
+_UPLOAD_STATUS = {
+    "upload_too_large": 413,
+    "upload_type_invalid": 415,
+    "upload_not_found": 404,
+}
 _KANBOT_STATUS = {
     "kanbot_unavailable": 503,
     "kanbot_no_runner": 409,
@@ -66,6 +72,8 @@ def _describe(exc: Exception) -> tuple[int, str, dict[str, Any], str | None]:
         return _REGISTRY_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, SessionError):
         return _SESSION_STATUS.get(exc.code, 422), exc.code, exc.params, None
+    if isinstance(exc, UploadError):
+        return _UPLOAD_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, BacklogError):
         return _BACKLOG_STATUS.get(exc.code, 502), exc.code, exc.params, str(exc)
     if isinstance(exc, KanbotError):
@@ -90,7 +98,15 @@ def install_error_handlers(app: FastAPI) -> None:
         logger.exception("%s %s: kutilmagan xato", request.method, request.url.path)
         return error_response(500, "internal_error")
 
-    for exc_type in (ApiError, RegistryError, SessionError, BacklogError, KanbotError):
+    exc_types = (
+        ApiError,
+        RegistryError,
+        SessionError,
+        UploadError,
+        BacklogError,
+        KanbotError,
+    )
+    for exc_type in exc_types:
         app.add_exception_handler(exc_type, handle)
     app.add_exception_handler(RequestValidationError, handle)
     app.add_exception_handler(Exception, handle_unexpected)

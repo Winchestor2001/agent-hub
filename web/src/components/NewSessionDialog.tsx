@@ -1,10 +1,11 @@
 import { useState, type SubmitEvent } from "react";
 
 import { useBoard, useHealth, useSessionOptions, useStartSession } from "../api/queries";
-import type { ProjectItem, SessionStart } from "../api/types";
+import type { ProjectItem, SessionStart, UploadedFile } from "../api/types";
 import { useI18n } from "../i18n/context";
 import { agentChoices, promptPrefix, sessionTasks } from "../sessions/model";
 import { ErrorText } from "./ErrorText";
+import { FileAttach } from "./FileAttach";
 import { Field, Modal } from "./Modal";
 
 interface NewSessionDialogProps {
@@ -30,6 +31,7 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
   const [cwd, setCwd] = useState(dirs[0] ?? "");
   const [taskId, setTaskId] = useState(initialTaskId ?? "");
   const [prompt, setPrompt] = useState("");
+  const [files, setFiles] = useState<UploadedFile[]>([]);
 
   // Tanlanmagan bo'lsa — birinchi onlayn agent (options kelguncha bo'sh).
   const selectedAgent = agent ?? (choices.find((c) => c.online !== false) ?? choices[0])?.agent ?? "";
@@ -40,6 +42,7 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
     event.preventDefault();
     const body: SessionStart = { agent: selectedAgent, cwd, prompt: prompt.trim() };
     if (taskId) body.task_id = taskId;
+    if (files.length > 0) body.files = files.map((file) => file.path);
     startSession.mutate(body, { onSuccess: onClose });
   }
 
@@ -112,6 +115,13 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
             }}
           />
         </Field>
+        <FileAttach
+          projectId={project.id}
+          cwd={cwd}
+          taskId={taskId || undefined}
+          files={files}
+          onChange={setFiles}
+        />
         {kanbotDown && <p className="error-text">{t("session_form.kanbot_down")}</p>}
         {startSession.error && <ErrorText error={startSession.error} />}
         <footer className="form-actions">

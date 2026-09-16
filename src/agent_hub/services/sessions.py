@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +15,7 @@ SESSION_PROMPT_TEMPLATE = (
     "Работай только над {task_id}. Прочитай `backlog instructions overview` и задачу, "
     "переведи её в In Progress, напиши план и дождись моего одобрения перед кодом."
 )
+SESSION_FILES_HEADER = "Прикреплённые файлы (пути относительно рабочей папки):"
 TITLE_SEPARATOR = " · "
 MAX_TITLE_LENGTH = 120
 
@@ -33,13 +35,19 @@ class TaskInfo:
     title: str
 
 
-def build_prompt(task: TaskInfo | None, extra: str = "") -> str:
+def files_block(files: Sequence[str]) -> str:
+    """Biriktirilgan fayllar ro'yxati; yo'llar sessiya `cwd` siga nisbatan."""
+    if not files:
+        return ""
+    lines = "\n".join(f"- {path}" for path in files)
+    return f"{SESSION_FILES_HEADER}\n{lines}"
+
+
+def build_prompt(task: TaskInfo | None, extra: str = "", files: Sequence[str] = ()) -> str:
     """Vazifa tanlangan bo'lsa prompt aynan `SESSION_PROMPT_TEMPLATE` bilan boshlanadi."""
-    extra = extra.strip()
-    if task is None:
-        return extra
-    prefix = SESSION_PROMPT_TEMPLATE.format(task_id=task.id)
-    return f"{prefix}\n\n{extra}" if extra else prefix
+    prefix = SESSION_PROMPT_TEMPLATE.format(task_id=task.id) if task else ""
+    parts = [part for part in (prefix, extra.strip(), files_block(files)) if part]
+    return "\n\n".join(parts)
 
 
 def session_title(task: TaskInfo | None, fallback: str = "") -> str:
@@ -106,13 +114,14 @@ class SessionService:
         cwd: str | None = None,
         task: TaskInfo | None = None,
         prompt: str = "",
+        files: Sequence[str] = (),
     ) -> Pane:
         name = _agent(agent)
         directory = _project_dir(project, cwd)
         runner_id = await self._safe_runner_id(name)
         return await self._kanbot.start_pane(
             name,
-            prompt=build_prompt(task, prompt),
+            prompt=build_prompt(task, prompt, files),
             cwd=str(directory),
             title=session_title(task, fallback=project.name),
             runner_id=runner_id,

@@ -9,6 +9,7 @@ import {
   filterTasks,
   groupByStatus,
   NO_MILESTONE,
+  shouldOpenSession,
   statusTone,
   type BoardFilter,
 } from "../board/model";
@@ -81,6 +82,13 @@ function BoardView({
     );
   }
 
+  const tasks = board.data.tasks;
+
+  /** Vazifa jarayonga o'tdi — agent ishni darhol boshlashi uchun sessiya dialogi ochiladi. */
+  function statusChanged(taskId: string, status: string) {
+    if (shouldOpenSession(tasks.find((task) => task.id === taskId), status)) onStartSession(taskId);
+  }
+
   return (
     <div className="board">
       <FilterBar
@@ -104,7 +112,14 @@ function BoardView({
         pendingTaskId={setStatus.isPending ? setStatus.variables.taskId : null}
         onOpen={onOpenTask}
         onMove={(taskId, status) => {
-          setStatus.mutate({ taskId, status });
+          setStatus.mutate(
+            { taskId, status },
+            {
+              onSuccess: () => {
+                statusChanged(taskId, status);
+              },
+            },
+          );
         }}
       />
       {openTaskId && (
@@ -115,6 +130,7 @@ function BoardView({
           board={board.data}
           onOpen={onOpenTask}
           onStartSession={onStartSession}
+          onStatusChanged={statusChanged}
           onOpenTerminal={onOpenTerminal}
           onClose={() => {
             onOpenTask(null);

@@ -140,6 +140,23 @@ bo'limida birinchi turadi, soni (barcha loyihalar bo'yicha) tab sarlavhasida ko'
 - Holat hook'lardan olinadi. Hook bo'lmasa (masalan, Codex) holat ekrandan taxminiy aniqlanadi va «≈» bilan
   belgilanadi; bunday sessiyada javob kutish har doim ham aniqlanmaydi.
 
+**Media fayllar.** Vazifa yaratish va yangi sessiya dialoglarida fayl biriktirsa bo'ladi: **Fayl tanlash**,
+maydonga sudrab tashlash yoki skrinshotni `Ctrl+V` (macOS: `⌘V`) bilan qo'yish. Fayl darhol loyiha papkasi
+ichiga — `.agent-hub/uploads/<vazifa-id>/` yoki vazifa hali yo'q bo'lsa `.agent-hub/uploads/inbox/` ga —
+saqlanadi, nomiga vaqt belgisi qo'shiladi (mavjud fayl hech qachon ustiga yozilmaydi). Yo'llar vazifa
+tavsifiga yoki sessiya promptiga nisbiy ko'rinishda qo'shiladi, shuning uchun claude/codex ularni o'z ishchi
+papkasidan qo'shimcha ruxsatsiz o'qiydi.
+
+- Ruxsat etilgan turlar: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.heic`, `.pdf`, `.txt`, `.md`, `.csv`,
+  `.json`, `.log`, `.yaml`, `.yml`. `.svg` ataylab qabul qilinmaydi (ichida skript bo'lishi mumkin).
+- Chegaralar: bitta fayl 10 MB gacha, bir martada 10 tagacha.
+- `.agent-hub/uploads/.gitignore` o'zi yaratiladi (`*`), shuning uchun yuklangan fayllar repoga tushmaydi;
+  loyihaning o'z `.gitignore` fayliga tegilmaydi. Keraksiz bo'lsa papkani qo'lda o'chirsa bo'ladi.
+
+**Jarayonga o'tganda sessiya.** Vazifa **In Progress** ustuniga ko'chirilganda (sudrab yoki detaldagi status
+tanlovidan) va unda tirik sessiya bo'lmasa, yangi sessiya dialogi shu vazifa oldindan tanlangan holda
+ochiladi — agent va papkani tasdiqlab **Boshlash** bosiladi. Dialog o'zi ishga tushirmaydi.
+
 **Terminal va klaviatura.**
 
 | Tugma | Amal |

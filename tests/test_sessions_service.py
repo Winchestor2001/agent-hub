@@ -8,6 +8,7 @@ import pytest
 from agent_hub.kanbot_client import AgentSession, Pane, Runner
 from agent_hub.registry import Project
 from agent_hub.services.sessions import (
+    SESSION_FILES_HEADER,
     SESSION_PROMPT_TEMPLATE,
     SessionError,
     SessionService,
@@ -248,3 +249,13 @@ async def test_resume_validation(project: Project, dirs: dict[str, Path]) -> Non
             await service.resume(project, session)
         assert err.value.code == code, session
     assert kanbot.started == []
+
+
+def test_prompt_lists_attached_files() -> None:
+    files = [".agent-hub/uploads/task-3/a.png", ".agent-hub/uploads/task-3/b.pdf"]
+    prompt = build_prompt(TaskInfo("TASK-3", "X"), "Qara", files)
+    assert prompt.startswith(SESSION_PROMPT_TEMPLATE.format(task_id="TASK-3"))
+    assert prompt.endswith(f"{SESSION_FILES_HEADER}\n- {files[0]}\n- {files[1]}")
+    # Vazifasiz va matnsiz ham fayllar ro'yxati yolg'iz qoladi.
+    assert build_prompt(None, "", files[:1]) == f"{SESSION_FILES_HEADER}\n- {files[0]}"
+    assert build_prompt(None, "salom", []) == "salom"

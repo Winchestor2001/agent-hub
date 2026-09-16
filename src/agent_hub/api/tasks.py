@@ -13,7 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent_hub.backlog_client import BacklogClient
 from agent_hub.kanbot_client import Pane
 from agent_hub.registry import Project
+from agent_hub.services import uploads
 from agent_hub.services.linking import panes_for_project
+from agent_hub.services.sessions import files_block
 
 from .deps import Hub, HubDep, LiveData
 from .errors import ApiError
@@ -35,6 +37,8 @@ class TaskCreate(BaseModel):
     assignees: list[str] = Field(default_factory=list, max_length=20)
     milestone: str | None = Field(default=None, max_length=MAX_LINE)
     acceptance_criteria: list[str] = Field(default_factory=list, max_length=50)
+    # Yuklangan fayllar: loyiha papkasiga nisbatan yo'llar (`POST .../uploads` qaytargan).
+    files: list[str] = Field(default_factory=list, max_length=uploads.MAX_FILES)
 
 
 class StatusUpdate(BaseModel):
@@ -119,12 +123,19 @@ async def task_detail(hub: HubDep, project_id: str, task_id: str) -> dict[str, A
     return {**task_view(detail, None, sessions), "kanbot_available": live is not None}
 
 
+def _description(body: TaskCreate, files: list[str]) -> str | None:
+    """Tavsif va biriktirilgan fayllar ro'yxati (ikkalasi ham bo'sh bo'lsa — `None`)."""
+    parts = [part for part in (body.description or "", files_block(files)) if part.strip()]
+    return "\n\n".join(part.strip() for part in parts) or None
+
+
 @router.post("/tasks", status_code=201)
 async def create_task(hub: HubDep, project_id: str, body: TaskCreate) -> dict[str, Any]:
-    backlog = hub.backlog(hub.project(project_id))
+    project = hub.project(project_id)
+    backlog = hub.backlog(project)
     task_id = await backlog.create_task(
         _line("title", body.title),
-        description=body.description.strip() if body.description else None,
+        description=_description(body, uploads.resolve(project, body.files)),
         status=await _check_status(backlog, body.status) if body.status else None,
         labels=[_line("labels", label, allow_comma=False) for label in body.labels],
         assignees=[_line("assignees", name, allow_comma=False) for name in body.assignees],

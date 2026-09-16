@@ -1,10 +1,11 @@
 import { useState, type SubmitEvent } from "react";
 
 import { useCreateTask } from "../api/queries";
-import type { Board, TaskCreate } from "../api/types";
+import type { Board, TaskCreate, UploadedFile } from "../api/types";
 import { collectLabels, splitLines, splitList } from "../board/model";
 import { useI18n } from "../i18n/context";
 import { ErrorText } from "./ErrorText";
+import { FileAttach } from "./FileAttach";
 import { Field, Modal } from "./Modal";
 
 interface CreateTaskDialogProps {
@@ -24,6 +25,7 @@ export function CreateTaskDialog({ projectId, board, onClose, onCreated }: Creat
   const [assignees, setAssignees] = useState("");
   const [milestone, setMilestone] = useState("");
   const [acceptance, setAcceptance] = useState("");
+  const [files, setFiles] = useState<UploadedFile[]>([]);
   const listId = `new-task-labels-${projectId}`;
 
   function submit(event: SubmitEvent) {
@@ -37,6 +39,7 @@ export function CreateTaskDialog({ projectId, board, onClose, onCreated }: Creat
     if (description.trim()) body.description = description.trim();
     if (status) body.status = status;
     if (milestone) body.milestone = milestone;
+    if (files.length > 0) body.files = files.map((file) => file.path);
     createTask.mutate(body, {
       onSuccess: ({ id }) => {
         onCreated(id);
@@ -134,6 +137,7 @@ export function CreateTaskDialog({ projectId, board, onClose, onCreated }: Creat
             }}
           />
         </Field>
+        <FileAttach projectId={projectId} files={files} onChange={setFiles} />
         {createTask.error && <ErrorText error={createTask.error} />}
         <footer className="form-actions">
           <button type="button" className="button" onClick={onClose}>
