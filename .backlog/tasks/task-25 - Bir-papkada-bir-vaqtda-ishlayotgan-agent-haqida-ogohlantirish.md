@@ -1,9 +1,10 @@
 ---
 id: TASK-25
 title: Bir papkada bir vaqtda ishlayotgan agent haqida ogohlantirish
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-15 17:32'
+updated_date: '2026-09-16 05:52'
 labels:
   - backend
   - client
