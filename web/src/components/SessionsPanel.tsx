@@ -4,6 +4,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import type { ApiError } from "../api/client";
 import {
   useDeleteSessions,
+  useKillSessions,
   useLiveSessions,
   usePastSessions,
   useRemoveSessions,
@@ -224,6 +225,10 @@ function LiveList({
   onOpenTerminal: (paneId: string) => void;
 }) {
   const { t } = useI18n();
+  // Loyihalararo ro'yxat: kill'dan keyin barcha doskalar yangilanadi.
+  const kill = useKillSessions(null);
+  const [closing, setClosing] = useState<string | null>(null);
+
   return (
     <ul className="list">
       {panes.map((pane) => (
@@ -232,6 +237,19 @@ function LiveList({
             <StateBadge state={pane.state} approximate={pane.approximate} />
             <span className="session-agent mono">{pane.agent}</span>
             <Ago timestamp={paneActivity(pane)} />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={t("sessions.kill")}
+              title={t("sessions.kill")}
+              disabled={kill.isPending}
+              onClick={() => {
+                kill.reset();
+                setClosing(pane.id);
+              }}
+            >
+              ■
+            </button>
           </div>
           <button
             type="button"
@@ -254,6 +272,43 @@ function LiveList({
               <TaskLink projectId={pane.project_id} task={pane.task} onOpenTask={onOpenTask} />
             )}
           </div>
+          {closing === pane.id && (
+            <div className="confirm" role="alertdialog" aria-label={t("sessions.kill")}>
+              <p>{t("sessions.kill_confirm", { agent: pane.agent })}</p>
+              {kill.error && (
+                <span>
+                  {t("sessions.kill_failed")}: <ErrorText error={kill.error} />
+                </span>
+              )}
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="button button-small"
+                  disabled={kill.isPending}
+                  onClick={() => {
+                    setClosing(null);
+                    kill.reset();
+                  }}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="button button-small button-danger"
+                  disabled={kill.isPending}
+                  onClick={() => {
+                    kill.mutate([pane.id], {
+                      onSuccess: () => {
+                        setClosing(null);
+                      },
+                    });
+                  }}
+                >
+                  {kill.isPending ? t("sessions.killing") : t("sessions.kill_yes")}
+                </button>
+              </div>
+            </div>
+          )}
         </li>
       ))}
     </ul>

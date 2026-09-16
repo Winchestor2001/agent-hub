@@ -190,6 +190,11 @@ export const uz = {
   "task.open_terminal": "Terminalni ochish",
 
   "sessions.open_terminal": "Terminalni ochish",
+  "sessions.kill": "Sessiyani yopish",
+  "sessions.kill_confirm": "{agent} sessiyasi yopiladi. Agent ishlayotgan bo'lsa, tugatilmagan ishi yo'qoladi.",
+  "sessions.kill_yes": "Yopish",
+  "sessions.killing": "Yopilmoqda…",
+  "sessions.kill_failed": "Sessiya yopilmadi",
   "sessions.finished": "Tugagan",
   "sessions.exit_code": "kod {code}",
   "sessions.remove": "Ro'yxatdan olib tashlash",

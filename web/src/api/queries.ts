@@ -284,14 +284,15 @@ export function useRemoveProject() {
 }
 
 /** Yangi pane: jonli ro'yxat, loyiha hisoblagichlari va doska kartochkalari yangilanadi. */
+/** `projectId` null — sessiya loyihalararo ro'yxatdan o'zgardi, barcha doska va vazifalar yangilanadi. */
 function useInvalidateSessions() {
   const client = useQueryClient();
-  return (projectId: string) =>
+  return (projectId: string | null) =>
     Promise.all([
       client.invalidateQueries({ queryKey: ["sessions"] }),
       client.invalidateQueries({ queryKey: queryKeys.projects }),
-      client.invalidateQueries({ queryKey: queryKeys.board(projectId) }),
-      client.invalidateQueries({ queryKey: queryKeys.tasks(projectId) }),
+      client.invalidateQueries({ queryKey: projectId ? queryKeys.board(projectId) : ["board"] }),
+      client.invalidateQueries({ queryKey: projectId ? queryKeys.tasks(projectId) : ["task"] }),
     ]);
 }
 
@@ -326,7 +327,7 @@ export function useDeleteSessions(projectId: string) {
 }
 
 /** Vazifa tugagach agent pane'larini to'xtatish; allaqachon yo'q bo'lgani xato emas. */
-export function useKillSessions(projectId: string) {
+export function useKillSessions(projectId: string | null) {
   const invalidate = useInvalidateSessions();
   return useMutation({
     mutationFn: async (paneIds: readonly string[]) => {

@@ -190,6 +190,11 @@ export const ru: Dictionary = {
   "task.open_terminal": "Открыть терминал",
 
   "sessions.open_terminal": "Открыть терминал",
+  "sessions.kill": "Закрыть сессию",
+  "sessions.kill_confirm": "Сессия {agent} будет закрыта. Если агент сейчас работает, незавершённая работа пропадёт.",
+  "sessions.kill_yes": "Закрыть",
+  "sessions.killing": "Закрывается…",
+  "sessions.kill_failed": "Сессия не закрыта",
   "sessions.finished": "Завершённые",
   "sessions.exit_code": "код {code}",
   "sessions.remove": "Убрать из списка",
