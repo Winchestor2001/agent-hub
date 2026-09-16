@@ -1,11 +1,11 @@
 ---
 id: TASK-29
 title: media files upload
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 05:53'
-updated_date: '2026-09-16 06:33'
+updated_date: '2026-09-16 06:42'
 labels: []
 dependencies: []
 ordinal: 29000
@@ -14,7 +14,7 @@ ordinal: 29000
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 file/rasim yuklasa bo`lsa task done
-- [ ] #2 Vazifa In Progress ga o'tganda sessiya dialogi oldindan to'ldirilgan holda avtomatik ochiladi
+- [x] #2 Vazifa In Progress ga o'tganda sessiya dialogi oldindan to'ldirilgan holda avtomatik ochiladi
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -92,4 +92,18 @@ Avtomatik tekshiruvlar (`make check`, ishchi papkada — TASK-30 va TASK-31 bila
 Commit ajratilishi: TASK-30/TASK-31 parallel ishlagani uchun umumiy fayllarda (README.md, api/errors.py, app.py, tests/test_i18n_keys.py, web api/i18n/styles) faqat TASK-29 hunklari commit qilindi; boshqa vazifalarning hunklari ishchi papkada qoldi va o'z commitlarini kutadi. Shu sababli faqat shu commitning daraxtida mypy `api/updates.py` uchun xato beradi (TASK-30 ning app.py ulanishi hali commit qilinmagan) — ishchi papkada esa hammasi yashil.
 
 AC #2 hali belgilanmagan: brauzer kengaytmasi ulanmagani uchun UI orqali bosib tekshirilmadi. Model darajasida isInProgressStatus/shouldOpenSession vitest bilan qoplangan, wiring tsc bilan tekshirilgan — lekin bu AC uchun yetarli dalil emas.
+
+AC #2 UI da tekshirildi: build qilingan frontend bilan backend qayta ishga tushirildi (launchctl kickstart, health ok, runner 1 onlayn), foydalanuvchi doskada vazifani In Progress ga ko'chirib dialog oldindan to'ldirilgan holda ochilishini tasdiqladi.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Agent Hub orqali media fayl biriktirish va vazifa jarayonga o'tganda sessiya dialogini ochish qo'shildi.
+
+Fayllar loyiha papkasidagi `.agent-hub/uploads/<vazifa-id>|inbox/` ga saqlanadi (o'zini e'tiborsiz qoldiruvchi .gitignore bilan), nisbiy yo'l vazifa tavsifiga yoki sessiya promptiga qo'shiladi — shuning uchun claude/codex faylni qo'shimcha ruxsatsiz o'qiydi. Kengaytma allowlist'i (.svg yo'q), 10 MB / 10 fayl chegarasi, nom slug + vaqt belgisi, mijoz yo'llari server tomonda qayta tekshiriladi.
+
+Vazifa In Progress ga o'tganda (sudrab yoki detaldagi statusdan) va tirik sessiyasi bo'lmasa, yangi sessiya dialogi oldindan to'ldirilgan holda ochiladi; o'zi ishga tushirmaydi.
+
+Tekshiruv: AC #1 — jonli izolyatsiya qilingan server (port 8799) ustida HTTP orqali (201 + baytma-bayt cmp, .gitignore avtomatik, tavsifga yo'l yozilishi, 415/413/404 xato yo'llari, rad etilganidan diskda iz qolmasligi). AC #2 — foydalanuvchi UI da tasdiqladi. Avtomatik: make check yashil (pytest 554, vitest 89, ruff, mypy --strict, eslint, tsc). Commit: 49d7951 (faqat TASK-29 hunklari).
+<!-- SECTION:FINAL_SUMMARY:END -->
