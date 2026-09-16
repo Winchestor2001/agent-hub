@@ -32,7 +32,18 @@ function byOrdinalThenId(a: TaskItem, b: TaskItem): number {
   return a.id.localeCompare(b.id, undefined, { numeric: true });
 }
 
-/** Config tartibidagi status ustunlari; config'da yo'q statuslar oxirida (bo'sh bo'lsa ham config ustunlari qoladi). */
+/** Tugagan ustun uchun: oxirgi yangilangani tepada; sanasizlar pastda, ular orasida ordinal/ID teskari. */
+function byRecencyDesc(a: TaskItem, b: TaskItem): number {
+  const at = a.updated_at ?? a.created_at ?? "";
+  const bt = b.updated_at ?? b.created_at ?? "";
+  if (at !== bt) return at < bt ? 1 : -1;
+  return -byOrdinalThenId(a, b);
+}
+
+/**
+ * Config tartibidagi status ustunlari; config'da yo'q statuslar oxirida (bo'sh bo'lsa ham config ustunlari qoladi).
+ * Ustun ichida navbat tartibi (ordinal, keyin ID), tugagan ustunda esa teskari — yangi bajarilgani tepada.
+ */
 export function groupByStatus(tasks: readonly TaskItem[], statuses: readonly string[]): Column[] {
   const columns = new Map<string, TaskItem[]>(statuses.map((status) => [status, []]));
   for (const task of tasks) {
@@ -40,7 +51,11 @@ export function groupByStatus(tasks: readonly TaskItem[], statuses: readonly str
     if (column) column.push(task);
     else columns.set(task.status, [task]);
   }
-  return [...columns].map(([status, items]) => ({ status, tasks: items.sort(byOrdinalThenId) }));
+  const done = statuses.length > 0 ? statuses[statuses.length - 1] : null;
+  return [...columns].map(([status, items]) => ({
+    status,
+    tasks: items.sort(status === done ? byRecencyDesc : byOrdinalThenId),
+  }));
 }
 
 /** Vazifadagi milestone qiymati ID ham, sarlavha ham bo'lishi mumkin — ID'ga keltiriladi. */

@@ -49,18 +49,49 @@ describe("groupByStatus", () => {
   it("config tartibi, bo'sh ustunlar qoladi, noma'lum status oxirida, ordinal keyin ID", () => {
     const columns = groupByStatus(
       [
-        task("TASK-10", { status: "Done" }),
-        task("TASK-2", { status: "Done" }),
+        task("TASK-10", { status: "To Do" }),
+        task("TASK-2", { status: "To Do" }),
         task("TASK-3", { status: "Review" }),
-        task("TASK-1", { status: "Done", ordinal: 5 }),
+        task("TASK-1", { status: "To Do", ordinal: 5 }),
       ],
       ["To Do", "In Progress", "Done"],
     );
     expect(columns.map((c) => [c.status, ids(c.tasks)])).toEqual([
-      ["To Do", []],
+      ["To Do", ["TASK-1", "TASK-2", "TASK-10"]],
       ["In Progress", []],
-      ["Done", ["TASK-1", "TASK-2", "TASK-10"]],
+      ["Done", []],
       ["Review", ["TASK-3"]],
+    ]);
+  });
+
+  it("tugagan ustun: oxirgi yangilangani tepada", () => {
+    const columns = groupByStatus(
+      [
+        task("TASK-1", { status: "Done", ordinal: 1, updated_at: "2026-09-15T10:00:00Z" }),
+        task("TASK-2", { status: "Done", ordinal: 2, updated_at: "2026-09-16T09:00:00Z" }),
+        task("TASK-3", { status: "Done", ordinal: 3, created_at: "2026-09-15T08:00:00Z" }),
+        task("TASK-4", { status: "Done", ordinal: 4, updated_at: "2026-09-15T18:00:00Z" }),
+      ],
+      ["To Do", "Done"],
+    );
+    expect(columns.map((c) => [c.status, ids(c.tasks)])).toEqual([
+      ["To Do", []],
+      ["Done", ["TASK-2", "TASK-4", "TASK-1", "TASK-3"]],
+    ]);
+  });
+
+  it("tugagan ustun sanasizlari pastda, ular orasida ID teskari", () => {
+    const columns = groupByStatus(
+      [
+        task("TASK-2", { status: "Done" }),
+        task("TASK-10", { status: "Done" }),
+        task("TASK-1", { status: "Done", updated_at: "2026-09-15T10:00:00Z" }),
+      ],
+      ["To Do", "Done"],
+    );
+    expect(columns.map((c) => [c.status, ids(c.tasks)])).toEqual([
+      ["To Do", []],
+      ["Done", ["TASK-1", "TASK-10", "TASK-2"]],
     ]);
   });
 });
