@@ -84,6 +84,19 @@ def test_discover_finds_real_paths(machine: dict[str, Path]) -> None:
     assert len(path) == len(set(path))
 
 
+def test_path_includes_brew_dir(machine: dict[str, Path], tmp_path: Path) -> None:
+    """Backend agent CLI'larini `brew upgrade --cask` bilan yangilaydi — brew PATH'da bo'lsin."""
+    brew_dir = _executable(tmp_path / "homebrew" / "bin" / "brew").parent
+    tools = {"kanbot": machine["local_bin"] / "kanbot", "brew": brew_dir / "brew"}
+
+    def which(name: str) -> str | None:
+        found = tools.get(name)
+        return str(found) if found else None
+
+    ctx = rl.discover(home=machine["home"], repo=machine["repo"], which=which)
+    assert str(brew_dir) in ctx.path.split(":")
+
+
 def test_build_path_skips_missing_dirs(tmp_path: Path) -> None:
     path = rl.build_path(
         tmp_path, ["/nope/bin", "/usr/bin"], is_dir=lambda d: d == "/opt/homebrew/bin"

@@ -27,8 +27,9 @@ SERVICES = ("kanbot-server", "kanbot-runner", "backend")
 DEFAULT_LABEL_PREFIX = "local.agent-hub"
 DEFAULT_AGENT_HUB_PORT = 8700
 DEFAULT_KANBOT_PORT = 8787
-# PATH'dagi papkalari qo'shiladigan CLI'lar: runner agentlarni, backend `backlog`ni ishga tushiradi.
-PATH_TOOLS = ("kanbot", "claude", "codex", "backlog", "node", "uv", "git")
+# PATH'dagi papkalari qo'shiladigan CLI'lar: runner agentlarni, backend `backlog` va `brew`ni
+# (agent CLI'larini yangilash) ishga tushiradi.
+PATH_TOOLS = ("kanbot", "claude", "codex", "brew", "backlog", "node", "uv", "git")
 SYSTEM_PATH = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
 _PLACEHOLDER = re.compile(r"@([A-Z_]+)@")

@@ -60,6 +60,8 @@ const SAME_IN_RU = new Set([
   "app.title",
   "app.backend_version",
   "status.kanbot_online",
+  "updates.label",
+  "updates.version_unknown",
   "projects.field_id",
   "common.none",
   "board.filter_milestone",

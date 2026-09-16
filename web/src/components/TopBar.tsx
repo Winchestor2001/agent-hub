@@ -3,6 +3,7 @@ import type { Health } from "../api/types";
 import { useI18n } from "../i18n/context";
 import { isLocale, LOCALE_NAMES, LOCALES } from "../i18n/messages";
 import { useNotificationPermission } from "../sessions/alerts";
+import { UpdateButtons } from "./UpdateButtons";
 
 type Tone = "ok" | "warn" | "bad" | "idle";
 
@@ -42,6 +43,7 @@ export function TopBar({ health, error }: { health: Health | undefined; error: A
     <header className="topbar">
       <h1>{t("app.title")}</h1>
       <div className="indicators">{indicators}</div>
+      <UpdateButtons />
       <NotifyToggle />
       <LocaleSelect />
       {health && (
