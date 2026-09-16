@@ -1,4 +1,4 @@
-import type { Milestone, TaskItem } from "../api/types";
+import type { LivePane, Milestone, TaskItem } from "../api/types";
 
 /** Milestone filtri: hammasi, milestone'siz yoki aniq milestone ID. */
 export const ALL = "__all__";
@@ -38,6 +38,21 @@ export function shouldOpenSession(task: TaskItem | undefined, status: string): b
   return isInProgressStatus(status) && task !== undefined && task.sessions.length === 0;
 }
 
+/** Tugagan ustun — config'dagi oxirgi status; unga o'tgan vazifaning agenti endi kerak emas. */
+export function isDoneStatus(status: string, statuses: readonly string[]): boolean {
+  return statuses.length > 0 && status === statuses[statuses.length - 1];
+}
+
+/** Vazifa tugadi — shu vazifaga bog'langan tirik pane'lar yopishga taklif qilinadi. */
+export function sessionsToClose(
+  task: TaskItem | undefined,
+  status: string,
+  statuses: readonly string[],
+): LivePane[] {
+  if (!task || !isDoneStatus(status, statuses)) return [];
+  return task.sessions.filter((pane) => pane.alive);
+}
+
 const norm = (value: string) => value.trim().toLowerCase();
 
 function byOrdinalThenId(a: TaskItem, b: TaskItem): number {
@@ -66,10 +81,9 @@ export function groupByStatus(tasks: readonly TaskItem[], statuses: readonly str
     if (column) column.push(task);
     else columns.set(task.status, [task]);
   }
-  const done = statuses.length > 0 ? statuses[statuses.length - 1] : null;
   return [...columns].map(([status, items]) => ({
     status,
-    tasks: items.sort(status === done ? byRecencyDesc : byOrdinalThenId),
+    tasks: items.sort(isDoneStatus(status, statuses) ? byRecencyDesc : byOrdinalThenId),
   }));
 }
 

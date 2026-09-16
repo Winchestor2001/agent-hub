@@ -325,6 +325,23 @@ export function useDeleteSessions(projectId: string) {
   });
 }
 
+/** Vazifa tugagach agent pane'larini to'xtatish; allaqachon yo'q bo'lgani xato emas. */
+export function useKillSessions(projectId: string) {
+  const invalidate = useInvalidateSessions();
+  return useMutation({
+    mutationFn: async (paneIds: readonly string[]) => {
+      for (const paneId of paneIds) {
+        try {
+          await apiFetch<{ ok: boolean }>(`/api/sessions/${enc(paneId)}/kill`, { method: "POST" });
+        } catch (error) {
+          if (!(error instanceof ApiError && error.code === "pane_not_found")) throw error;
+        }
+      }
+    },
+    onSettled: () => invalidate(projectId),
+  });
+}
+
 /** Tugagan pane'larni KanBot ro'yxatidan olib tashlash; allaqachon yo'q bo'lgani xato emas. */
 export function useRemoveSessions() {
   const client = useQueryClient();

@@ -86,6 +86,11 @@ export const ru: Dictionary = {
   "board.no_labels": "нет меток",
   "board.column_empty": "пусто",
   "board.status_failed": "Статус не изменён",
+  "board.close_session": "Закрыть сессию",
+  "board.close_session_confirm": "Задача {task} завершена, но связанных с ней открытых сессий агента: {count}. Закрыть их?",
+  "board.close_session_yes": "Закрыть",
+  "board.closing": "Закрывается…",
+  "board.close_failed": "Сессия не закрыта",
   "board.drag_hint": "Перетащите в другую колонку, чтобы сменить статус",
 
   "card.ac": "AC {done}/{total}",

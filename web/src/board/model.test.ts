@@ -10,6 +10,7 @@ import {
   milestoneId,
   milestoneTitle,
   NO_MILESTONE,
+  sessionsToClose,
   shouldOpenSession,
   slugify,
   splitLines,
@@ -183,5 +184,28 @@ describe("shouldOpenSession", () => {
   it("boshqa statusda yoki noma'lum vazifada ochilmaydi", () => {
     expect(shouldOpenSession(task("A"), "Done")).toBe(false);
     expect(shouldOpenSession(undefined, "In Progress")).toBe(false);
+  });
+});
+
+describe("sessionsToClose", () => {
+  const STATUSES = ["To Do", "In Progress", "Done"];
+  const pane = (id: string, alive = true) => ({ id, alive }) as LivePane;
+
+  it("tugagan statusga o'tganda tirik pane'lar qaytadi", () => {
+    const sessions = [pane("pane-1"), pane("pane-2")];
+    expect(sessionsToClose(task("A", { sessions }), "Done", STATUSES)).toEqual(sessions);
+  });
+
+  it("o'lgan pane'lar hisobga olinmaydi", () => {
+    const sessions = [pane("pane-1", false), pane("pane-2")];
+    expect(sessionsToClose(task("A", { sessions }), "Done", STATUSES)).toEqual([pane("pane-2")]);
+  });
+
+  it("sessiyasiz vazifa, oraliq status, noma'lum vazifa yoki statussiz config — bo'sh", () => {
+    const sessions = [pane("pane-1")];
+    expect(sessionsToClose(task("A"), "Done", STATUSES)).toEqual([]);
+    expect(sessionsToClose(task("A", { sessions }), "In Progress", STATUSES)).toEqual([]);
+    expect(sessionsToClose(undefined, "Done", STATUSES)).toEqual([]);
+    expect(sessionsToClose(task("A", { sessions }), "Done", [])).toEqual([]);
   });
 });

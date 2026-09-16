@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent } from "react";
 
-import { useBoard, useSetStatus } from "../api/queries";
-import type { Board, ProjectItem, TaskItem } from "../api/types";
+import { useBoard, useKillSessions, useSetStatus } from "../api/queries";
+import type { Board, LivePane, ProjectItem, TaskItem } from "../api/types";
 import {
   ALL,
   collectLabels,
@@ -9,6 +9,7 @@ import {
   filterTasks,
   groupByStatus,
   NO_MILESTONE,
+  sessionsToClose,
   shouldOpenSession,
   statusTone,
   type BoardFilter,
@@ -71,8 +72,11 @@ function BoardView({
   const { t } = useI18n();
   const board = useBoard(projectId);
   const setStatus = useSetStatus(projectId);
+  const kill = useKillSessions(projectId);
   const [filter, setFilter] = useState<BoardFilter>(EMPTY_FILTER);
   const [creating, setCreating] = useState(false);
+  /** Tugagan vazifaning yopilishi kutilayotgan pane'lari — tasdiq so'raladi. */
+  const [closing, setClosing] = useState<{ taskId: string; panes: LivePane[] } | null>(null);
 
   if (!board.data) {
     return board.error ? (
@@ -83,10 +87,23 @@ function BoardView({
   }
 
   const tasks = board.data.tasks;
+  const statuses = board.data.statuses;
 
-  /** Vazifa jarayonga o'tdi — agent ishni darhol boshlashi uchun sessiya dialogi ochiladi. */
+  /**
+   * Vazifa jarayonga o'tdi — agent ishni darhol boshlashi uchun sessiya dialogi ochiladi;
+   * tugadi — ochiq qolgan agentni yopish taklif qilinadi (o'zi yopilmaydi: agent ishlayotgan bo'lishi mumkin).
+   */
   function statusChanged(taskId: string, status: string) {
-    if (shouldOpenSession(tasks.find((task) => task.id === taskId), status)) onStartSession(taskId);
+    const task = tasks.find((item) => item.id === taskId);
+    if (shouldOpenSession(task, status)) {
+      onStartSession(taskId);
+      return;
+    }
+    const panes = sessionsToClose(task, status, statuses);
+    if (panes.length > 0) {
+      kill.reset();
+      setClosing({ taskId, panes });
+    }
   }
 
   return (
@@ -103,6 +120,48 @@ function BoardView({
         <div className="board-error">
           <span>{t("board.status_failed")}:</span>
           <ErrorText error={setStatus.error} />
+        </div>
+      )}
+      {closing && (
+        <div className="confirm" role="alertdialog" aria-label={t("board.close_session")}>
+          <p>
+            {t("board.close_session_confirm", { task: closing.taskId, count: closing.panes.length })}
+          </p>
+          {kill.error && (
+            <span>
+              {t("board.close_failed")}: <ErrorText error={kill.error} />
+            </span>
+          )}
+          <div className="form-actions">
+            <button
+              type="button"
+              className="button button-small"
+              disabled={kill.isPending}
+              onClick={() => {
+                setClosing(null);
+                kill.reset();
+              }}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              className="button button-small button-danger"
+              disabled={kill.isPending}
+              onClick={() => {
+                kill.mutate(
+                  closing.panes.map((pane) => pane.id),
+                  {
+                    onSuccess: () => {
+                      setClosing(null);
+                    },
+                  },
+                );
+              }}
+            >
+              {kill.isPending ? t("board.closing") : t("board.close_session_yes")}
+            </button>
+          </div>
         </div>
       )}
       <Columns

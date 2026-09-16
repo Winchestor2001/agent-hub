@@ -86,6 +86,11 @@ export const uz = {
   "board.no_labels": "labellar yo'q",
   "board.column_empty": "bo'sh",
   "board.status_failed": "Status o'zgartirilmadi",
+  "board.close_session": "Sessiyani yopish",
+  "board.close_session_confirm": "{task} tugadi, unga bog'langan {count} ta agent sessiyasi hali ochiq. Yopilsinmi?",
+  "board.close_session_yes": "Yopish",
+  "board.closing": "Yopilmoqda…",
+  "board.close_failed": "Sessiya yopilmadi",
   "board.drag_hint": "Status o'zgartirish uchun boshqa ustunga sudrang",
 
   "card.ac": "AC {done}/{total}",
