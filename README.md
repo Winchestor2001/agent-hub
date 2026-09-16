@@ -76,7 +76,7 @@ Uchala jarayon launchd servisi sifatida login paytida o'zi ishga tushadi (quyida
 | `local.agent-hub.backend` | `.venv/bin/python -m agent_hub` | 8700 | `backend.log` |
 
 Servislarda `RunAtLoad` va `KeepAlive` yoqilgan: login paytida ishga tushadi, yiqilsa 10 s dan keyin qayta
-ko'tariladi. PATH plist'ga render paytida yoziladi (`kanbot`, `claude`, `codex`, `backlog`, `node` papkalari).
+ko'tariladi. PATH plist'ga render paytida yoziladi (`kanbot`, `claude`, `codex`, `backlog`, `node`, `brew` papkalari).
 CLI'lardan biri boshqa joyga ko'chsa, `make install` ni qayta ishga tushiring.
 
 Boshqa portlar: `make install AGENT_HUB_PORT=8711 KANBOT_PORT=8797` (`make status` va `make uninstall` ga ham
@@ -211,6 +211,21 @@ make status
 
 Agent Hub KanBot 0.8.x bilan tekshirilgan. Boshqa versiyada health `kanbot_version_unsupported` ogohlantirishini
 ko'rsatadi: himoya launcher'i va API mosligini tekshirmasdan ishlatmang.
+
+**Agent CLI'lari (claude, codex) — UI orqali.** Yuqori panelning o'ng tomonida har bir agent uchun tugma
+turadi: `claude 2.1.272`, `codex 0.154.0`. Yangi versiya chiqqan bo'lsa tugma yonida sariq nuqta paydo
+bo'ladi. Tugmani bosing → tasdiqlash oynasida bajariladigan buyruq (`brew upgrade --cask …`) ko'rinadi →
+**Yangilash**. Backend `brew update --quiet` va `brew upgrade --cask <cask>` ni fonda bajaradi; ketayotganda
+tugmada `…`, tugagach `✓` yoki `✗` (xato matni tasdiqlash oynasida — brew chiqishining oxirgi qatorlari)
+chiqadi. Sahifani yangilash yoki yopish yangilashni to'xtatmaydi.
+
+- Versiyalar `brew list --cask --versions` va `brew outdated --cask --json=v2` dan olinadi, javob ~60 s
+  keshlanadi; tarmoq bo'lmasa o'rnatilgan versiya ko'rinadi, so'nggisi «noma'lum» bo'ladi.
+- Agentning ochiq sessiyalari bo'lsa tasdiqlash oynasida ularning soni ogohlantirish sifatida yoziladi —
+  yangilash baribir mumkin, lekin ishlayotgan agent yangi ikkilik faylga o'tmaydi (uni qayta ishga tushiring).
+- `brew` topilmasa yoki cask o'rnatilmagan bo'lsa tugma o'chirilgan bo'ladi (sababi tugma `title` ida).
+  launchd ostida `brew` PATH'ga qo'shiladi (`scripts/render_launchd.py`), shuning uchun `make install` dan
+  keyin ishlaydi.
 
 ## Servislarni o'chirish
 

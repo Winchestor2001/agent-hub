@@ -30,6 +30,7 @@ CODE_ARG = {
     "TranscriptError": 0,
     "SessionError": 0,
     "UploadError": 0,
+    "UpdateError": 0,
     "Problem": 0,
     "error_response": 1,
     "error_body": 0,

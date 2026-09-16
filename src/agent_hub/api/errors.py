@@ -17,6 +17,7 @@ from agent_hub.backlog_client import BacklogError
 from agent_hub.kanbot_client import KanbotError
 from agent_hub.registry import RegistryError
 from agent_hub.services.sessions import SessionError
+from agent_hub.services.updates import UpdateError
 from agent_hub.services.uploads import UploadError
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,12 @@ _UPLOAD_STATUS = {
     "upload_type_invalid": 415,
     "upload_not_found": 404,
 }
+_UPDATE_STATUS = {
+    "brew_missing": 503,
+    "update_agent_unknown": 404,
+    "update_cask_missing": 409,
+    "update_running": 409,
+}
 _KANBOT_STATUS = {
     "kanbot_unavailable": 503,
     "kanbot_no_runner": 409,
@@ -72,6 +79,8 @@ def _describe(exc: Exception) -> tuple[int, str, dict[str, Any], str | None]:
         return _REGISTRY_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, SessionError):
         return _SESSION_STATUS.get(exc.code, 422), exc.code, exc.params, None
+    if isinstance(exc, UpdateError):
+        return _UPDATE_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, UploadError):
         return _UPLOAD_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, BacklogError):
@@ -102,6 +111,7 @@ def install_error_handlers(app: FastAPI) -> None:
         ApiError,
         RegistryError,
         SessionError,
+        UpdateError,
         UploadError,
         BacklogError,
         KanbotError,

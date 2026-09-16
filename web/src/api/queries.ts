@@ -1,7 +1,9 @@
 import { keepPreviousData, QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, apiFetch } from "./client";
+import { anyRunning } from "../updates/model";
 import type {
+  AgentUpdate,
   BacklogInit,
   Board,
   FolderListing,
@@ -19,6 +21,7 @@ import type {
   SessionsResponse,
   TaskCreate,
   TaskDetail,
+  UpdatesResponse,
   UploadsResponse,
 } from "./types";
 
@@ -27,6 +30,9 @@ export const POLL_MS = 2500;
 /** O'tgan sessiyalar — KanBot ularni ~6 s da yangilaydi. */
 export const PAST_POLL_MS = 6000;
 export const PAST_LIMIT = 50;
+/** Yangilash ketayotganda holat tez, aks holda kamdan-kam so'raladi (brew chaqiruvi arzon emas). */
+export const UPDATES_POLL_MS = 2000;
+export const UPDATES_IDLE_MS = 60_000;
 
 export const queryKeys = {
   health: ["health"],
@@ -40,6 +46,7 @@ export const queryKeys = {
   folders: ["folders"],
   folderSuggestions: ["folders", "suggestions"],
   folder: (path: string) => ["folders", "browse", path] as const,
+  updates: ["updates"],
 };
 
 const enc = encodeURIComponent;
@@ -165,6 +172,26 @@ export function useUploadFiles(projectId: string) {
         form,
       });
     },
+  });
+}
+
+/** Agent CLI'lari versiyalari; yangilash ketayotganda polling tezlashadi. */
+export function useUpdates() {
+  return useQuery({
+    queryKey: queryKeys.updates,
+    queryFn: ({ signal }) => apiFetch<UpdatesResponse>("/api/updates", { signal }),
+    refetchInterval: ({ state }) =>
+      state.data && anyRunning(state.data.agents) ? UPDATES_POLL_MS : UPDATES_IDLE_MS,
+  });
+}
+
+/** Yangilashni fonda boshlaydi; natija polling orqali keladi. */
+export function useStartUpdate() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (agent: string) =>
+      apiFetch<AgentUpdate>(`/api/updates/${enc(agent)}`, { method: "POST" }),
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.updates }),
   });
 }
 

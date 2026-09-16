@@ -212,6 +212,21 @@ export const uz = {
   "notify.denied": "Bildirishnomalar bloklangan",
   "notify.denied_title": "Brauzer sozlamalarida bu sayt uchun bildirishnomalarga ruxsat bering",
 
+  "updates.label": "{agent} {version}",
+  "updates.version_unknown": "—",
+  "updates.title_no_brew": "brew topilmadi — UI orqali yangilab bo'lmaydi",
+  "updates.title_missing": "{agent} brew cask sifatida o'rnatilmagan",
+  "updates.title_running": "{agent} yangilanmoqda…",
+  "updates.title_failed": "Oxirgi yangilash xato bilan tugadi. Qayta urinish uchun bosing.",
+  "updates.title_outdated": "{agent}: {installed} → {latest}. Yangilash uchun bosing.",
+  "updates.title_done": "{agent} {version} gacha yangilandi",
+  "updates.title_unknown": "{agent} {version} — so'nggi versiya noma'lum (brew javob bermadi)",
+  "updates.title_current": "{agent} {version} — eng so'nggi versiya",
+  "updates.confirm": "{agent} yangilansinmi?",
+  "updates.confirm_live": "Bu agentning {count} ta ochiq sessiyasi bor — yangilash ularga xalaqit berishi mumkin.",
+  "updates.confirm_yes": "Yangilash",
+  "updates.output": "brew chiqishi",
+
   "terminal.back": "← Doska",
   "terminal.back_title": "Doskaga qaytish",
   "terminal.quick_keys": "Tezkor tugmalar",
@@ -236,6 +251,11 @@ export const uz = {
   "banner.backlog_cli_missing": "backlog CLI topilmadi — vazifalar o'qilmaydi",
   "banner.backlog_not_found": "«{project}» loyihasida bekloq topilmadi: {path}",
   "banner.backlog_error": "«{project}» loyihasining bekloqi o'qilmadi",
+
+  "error.brew_missing": "brew topilmadi — Homebrew o'rnatilganini tekshiring",
+  "error.update_agent_unknown": "«{agent}» agentini brew orqali yangilab bo'lmaydi",
+  "error.update_cask_missing": "«{agent}» brew cask sifatida o'rnatilmagan",
+  "error.update_running": "«{agent}» allaqachon yangilanmoqda",
 
   "error.unknown": "Kutilmagan xato ({code})",
   "error.backend_unreachable": "Agent Hub backend bilan aloqa yo'q",

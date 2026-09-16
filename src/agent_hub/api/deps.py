@@ -15,6 +15,7 @@ from agent_hub.kanbot_client import AgentSession, KanbotClient, KanbotError, Pan
 from agent_hub.registry import Project, Registry
 from agent_hub.services.sessions import SessionService
 from agent_hub.services.state import EffectiveState, StateResolver
+from agent_hub.services.updates import UpdateService
 from agent_hub.settings import Settings
 
 BacklogFactory = Callable[[Path], BacklogClient]
@@ -46,6 +47,7 @@ class Hub:
         self.kanbot = kanbot
         self.sessions = SessionService(kanbot)
         self.state = StateResolver.for_kanbot(kanbot)
+        self.updates = UpdateService.detect()
         self._backlog_factory = backlog_factory
         self._backlogs: dict[Path, BacklogClient] = {}
         # Fayli o'chirilgan (agent, session_id): runner qayta skanerlaguncha KanBot ko'rsataveradi.

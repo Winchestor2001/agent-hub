@@ -250,3 +250,28 @@ export interface BacklogInit {
   path: string;
   name: string;
 }
+
+/** Brew orqali bo'lgan oxirgi yangilash urinishi (chiqishi — brew logining oxiri). */
+export interface UpdateRun {
+  ok: boolean;
+  exit_code: number;
+  finished_at: number;
+  output: string;
+}
+
+export interface AgentUpdate {
+  agent: string;
+  cask: string | null;
+  installed_version: string | null;
+  /** Brew so'nggi versiyani aytmasa (tarmoq yo'q) — null. */
+  latest_version: string | null;
+  outdated: boolean;
+  running: boolean;
+  last: UpdateRun | null;
+}
+
+export interface UpdatesResponse {
+  /** brew topilmasa yangilash tugmalari o'chirilgan bo'ladi. */
+  brew: boolean;
+  agents: AgentUpdate[];
+}

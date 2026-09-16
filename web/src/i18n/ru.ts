@@ -212,6 +212,21 @@ export const ru: Dictionary = {
   "notify.denied": "Уведомления заблокированы",
   "notify.denied_title": "Разрешите уведомления для этого сайта в настройках браузера",
 
+  "updates.label": "{agent} {version}",
+  "updates.version_unknown": "—",
+  "updates.title_no_brew": "brew не найден — обновление через UI недоступно",
+  "updates.title_missing": "{agent} не установлен как brew cask",
+  "updates.title_running": "{agent} обновляется…",
+  "updates.title_failed": "Последнее обновление завершилось ошибкой. Нажмите, чтобы повторить.",
+  "updates.title_outdated": "{agent}: {installed} → {latest}. Нажмите, чтобы обновить.",
+  "updates.title_done": "{agent} обновлён до {version}",
+  "updates.title_unknown": "{agent} {version} — последняя версия неизвестна (brew не ответил)",
+  "updates.title_current": "{agent} {version} — последняя версия",
+  "updates.confirm": "Обновить {agent}?",
+  "updates.confirm_live": "У этого агента {count} открытых сессий — обновление может им помешать.",
+  "updates.confirm_yes": "Обновить",
+  "updates.output": "вывод brew",
+
   "terminal.back": "← Доска",
   "terminal.back_title": "Вернуться к доске",
   "terminal.quick_keys": "Быстрые клавиши",
@@ -235,6 +250,11 @@ export const ru: Dictionary = {
   "banner.backlog_cli_missing": "backlog CLI не найден — задачи не читаются",
   "banner.backlog_not_found": "В проекте «{project}» бэклог не найден: {path}",
   "banner.backlog_error": "Бэклог проекта «{project}» не прочитан",
+
+  "error.brew_missing": "brew не найден — проверьте, установлен ли Homebrew",
+  "error.update_agent_unknown": "Агент «{agent}» не обновляется через brew",
+  "error.update_cask_missing": "«{agent}» не установлен как brew cask",
+  "error.update_running": "«{agent}» уже обновляется",
 
   "error.unknown": "Непредвиденная ошибка ({code})",
   "error.backend_unreachable": "Нет связи с backend Agent Hub",
