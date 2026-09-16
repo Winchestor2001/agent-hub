@@ -1,11 +1,11 @@
 ---
 id: TASK-33
 title: Sessiyalar panelida jonli sessiyani yopish tugmasi
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 06:56'
-updated_date: '2026-09-16 06:58'
+updated_date: '2026-09-16 07:02'
 labels:
   - client
 dependencies: []
@@ -20,10 +20,10 @@ TASK-32 da vazifa Done bo'lganda sessiyani yopish taklifi qo'shildi, lekin vazif
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Jonli sessiya qatorida yopish tugmasi bor (aria-label bilan), faqat shu qatorga ta'sir qiladi
-- [ ] #2 Tugma bosilganda qator ichida tasdiq so'rovi chiqadi; bekor qilinsa hech narsa yopilmaydi
-- [ ] #3 Tasdiqlansa pane POST /api/sessions/{pane_id}/kill bilan yopiladi, xato qatorda ko'rinadi, ro'yxat va doska yangilanadi
-- [ ] #4 Yangi matnlar uz va ru lug'atlarida bor; web testlari, typecheck va lint o'tadi
+- [x] #1 Jonli sessiya qatorida yopish tugmasi bor (aria-label bilan), faqat shu qatorga ta'sir qiladi
+- [x] #2 Tugma bosilganda qator ichida tasdiq so'rovi chiqadi; bekor qilinsa hech narsa yopilmaydi
+- [x] #3 Tasdiqlansa pane POST /api/sessions/{pane_id}/kill bilan yopiladi, xato qatorda ko'rinadi, ro'yxat va doska yangilanadi
+- [x] #4 Yangi matnlar uz va ru lug'atlarida bor; web testlari, typecheck va lint o'tadi
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -41,4 +41,12 @@ TASK-32 da vazifa Done bo'lganda sessiyani yopish taklifi qo'shildi, lekin vazif
 Bajarildi: LiveList qatoriga ■ tugmasi (aria-label sessions.kill) va qator ichida .confirm bloki; tasdiqlanganda useKillSessions([pane.id]). queries.ts: useInvalidateSessions/useKillSessions endi projectId null bo'lishini qabul qiladi — null da barcha ['board'] va ['task'] so'rovlari yangilanadi (sessiyalar paneli loyihalararo). Tugagan sessiyalardagi × (ro'yxatdan olib tashlash) bilan chalkashmasligi uchun jonli sessiyada ■ ishlatildi.
 
 Tekshiruv: npm test 92 test, typecheck, lint toza; build src/agent_hub/static ga qilindi.
+
+Foydalanuvchi 8700 dagi ilovada tekshirdi: jonli sessiya qatoridagi tugma va tasdiq so'rovi ishlaydi, sessiya yopiladi.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Sessiyalar panelidagi har bir jonli sessiya qatoriga yopish tugmasi (■, aria-label sessions.kill) va qator ichidagi tasdiq bloki qo'shildi; tasdiqlanganda pane POST /api/sessions/{id}/kill bilan yopiladi, xato o'sha qatorda ko'rinadi, keyin sessiyalar/loyihalar/doskalar yangilanadi. useInvalidateSessions va useKillSessions endi projectId null bo'lishini qabul qiladi (panel loyihalararo). uz+ru ga sessions.kill* kalitlari. Tekshiruv: 92 web testi, typecheck, lint toza; UI ni foydalanuvchi brauzerda sinab ko'rdi. Commit: 7629b7c.
+<!-- SECTION:FINAL_SUMMARY:END -->
