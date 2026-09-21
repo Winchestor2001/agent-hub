@@ -1110,21 +1110,6 @@ button.link-row:hover {
   flex-shrink: 0;
 }
 
-.section-blocked {
-  padding: 4px;
-  border: 1px solid #6b2a28;
-  border-radius: var(--radius);
-  background: var(--danger-bg);
-}
-
-.section-blocked .section-title {
-  color: var(--danger);
-}
-
-.section-blocked .session:hover {
-  background: rgb(248 81 73 / 10%);
-}
-
 .task-link {
   display: inline-flex;
   align-items: center;
@@ -1188,6 +1173,15 @@ button.session-open {
 button.session-open:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+.session-blocked {
+  border-color: #6b2a28;
+  background: var(--danger-bg);
+}
+
+.session-blocked:hover {
+  background: rgb(248 81 73 / 10%);
 }
 
 .session-current {

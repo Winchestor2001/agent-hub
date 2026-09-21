@@ -138,7 +138,6 @@ export const ru: Dictionary = {
   "files.count": "Прикреплено файлов: {count}",
 
   "sessions.live": "Активные агенты",
-  "sessions.blocked": "Ждут ответа",
   "sessions.past": "Прошлые сессии",
   "sessions.past_project": "Прошлые сессии · {project}",
   "sessions.none": "нет",
@@ -251,8 +250,8 @@ export const ru: Dictionary = {
   "terminal.reconnect": "Переподключиться",
   "terminal.error_invalid_keys": "Клавиша отклонена",
   "terminal.error_bad_message": "Сообщение отклонено",
-  "terminal.upload_no_project": "Файл не загружен: папка этой сессии не относится ни к одному проекту",
   "terminal.ended": "Сессия завершена — ввод не дойдёт до pane",
+  "terminal.upload_no_project": "Файл не загружен: папка этой сессии не относится ни к одному проекту",
 
   "banner.backend_unreachable": "Нет связи с backend Agent Hub. Данные не обновляются.",
   "banner.kanbot_unavailable":

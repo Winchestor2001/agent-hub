@@ -12,7 +12,7 @@ import { TerminalView } from "./components/TerminalView";
 import { TopBar } from "./components/TopBar";
 import { useBlockedAlerts } from "./sessions/alerts";
 import { splitByProject } from "./sessions/model";
-import { navigationOrder, useSessionShortcuts } from "./sessions/navigation";
+import { useSessionShortcuts } from "./sessions/navigation";
 
 interface TaskTarget {
   projectId: string;
@@ -43,10 +43,10 @@ export function App() {
     ? [...(live.data?.live ?? []), ...(live.data?.finished ?? [])].find((pane) => pane.id === terminalPaneId)
     : undefined;
 
-  // Shortcut panelda ko'rinayotgan sessiyalar orasida o'tadi.
+  // Shortcut panelda ko'rinayotgan sessiyalar orasida, panel tartibida (backend tartibi) o'tadi.
   const paneOrder = useMemo(() => {
     const panes = livePanes ?? [];
-    return navigationOrder(showAllSessions ? panes : splitByProject(panes, selectedProjectId).mine);
+    return (showAllSessions ? panes : splitByProject(panes, selectedProjectId).mine).map((pane) => pane.id);
   }, [livePanes, showAllSessions, selectedProjectId]);
   useSessionShortcuts(paneOrder, terminalPaneId, setTerminalPaneId);
 

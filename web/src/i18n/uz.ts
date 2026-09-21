@@ -138,7 +138,6 @@ export const uz = {
   "files.count": "{count} ta fayl biriktirildi",
 
   "sessions.live": "Jonli agentlar",
-  "sessions.blocked": "Javob kutmoqda",
   "sessions.past": "O'tgan sessiyalar",
   "sessions.past_project": "O'tgan sessiyalar · {project}",
   "sessions.none": "yo'q",
@@ -251,8 +250,8 @@ export const uz = {
   "terminal.reconnect": "Qayta ulanish",
   "terminal.error_invalid_keys": "Tugma rad etildi",
   "terminal.error_bad_message": "Xabar rad etildi",
-  "terminal.upload_no_project": "Fayl yuklanmadi: bu sessiya papkasi hech bir loyihaga tegishli emas",
   "terminal.ended": "Sessiya tugagan — yozish pane'ga yetmaydi",
+  "terminal.upload_no_project": "Fayl yuklanmadi: bu sessiya papkasi hech bir loyihaga tegishli emas",
 
   "banner.backend_unreachable": "Agent Hub backend bilan aloqa yo'q. Ma'lumotlar yangilanmayapti.",
   "banner.kanbot_unavailable":

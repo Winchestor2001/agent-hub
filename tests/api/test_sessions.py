@@ -29,8 +29,9 @@ def test_list_sessions(api: ApiEnv) -> None:
     assert resp.status_code == 200
     data = resp.json()
     live = data["live"]
-    assert [p["id"] for p in live] == ["blk", "work", "fake", "out"]
-    blk, work, fake, out = live
+    # Tartib — boshlanish vaqti bo'yicha; holat va chiqish vaqti hisobga olinmaydi.
+    assert [p["id"] for p in live] == ["work", "blk", "fake", "out"]
+    work, blk, fake, out = live
     assert (blk["state"], blk["raw_state"], blk["approximate"]) == ("blocked", "blocked", False)
     assert blk["task"] == {"id": "TASK-1", "title": "Login sahifasi", "status": "To Do"}
     assert work["task"]["id"] == "TASK-2"
@@ -49,12 +50,37 @@ def test_list_sessions(api: ApiEnv) -> None:
     assert past[1]["task"]["id"] == "TASK-1"
 
     filtered = api.client.get("/api/sessions", params={"project": "leveling", "past_limit": 1})
-    assert [p["id"] for p in filtered.json()["live"]] == ["blk", "work", "fake"]
+    assert [p["id"] for p in filtered.json()["live"]] == ["work", "blk", "fake"]
     assert [p["id"] for p in filtered.json()["finished"]] == ["dead2", "dead"]
     assert len(filtered.json()["past"]) == 1
     assert_error(
         api.client.get("/api/sessions", params={"project": "nope"}), 404, "project_not_found"
     )
+
+
+def live_ids(api: ApiEnv) -> list[str]:
+    return [p["id"] for p in api.client.get("/api/sessions").json()["live"]]
+
+
+def test_live_order_ignores_state_and_output(api: ApiEnv) -> None:
+    first = api.pane(id="first", state="idle", last_output_at=1.0)
+    second = api.pane(id="second", state="working", last_output_at=2.0)
+    third = api.pane(id="third", state="idle")
+    assert live_ids(api) == ["first", "second", "third"]
+
+    # Holat va chiqish o'zgarsa ham qatorlar joyida qoladi.
+    first.update(state="working", last_output_at=900.0)
+    second.update(state="blocked", last_output_at=10.0)
+    third.update(state="blocked", last_output_at=999.0)
+    assert live_ids(api) == ["first", "second", "third"]
+
+
+def test_live_order_ties_by_id_and_unknown_start_last(api: ApiEnv) -> None:
+    api.pane(id="b", started_at=1000.0)
+    api.pane(id="a", started_at=1000.0)
+    api.pane(id="none", started_at=None)
+    api.pane(id="old", started_at=10.0)
+    assert live_ids(api) == ["old", "a", "b", "none"]
 
 
 def test_session_open_in_live_pane_is_not_past(api: ApiEnv) -> None:

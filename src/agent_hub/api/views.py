@@ -15,9 +15,6 @@ from agent_hub.services.summary import ProjectSummary
 
 from .errors import ApiError
 
-# Jonli pane'lar tartibi: e'tibor talab qiladiganlari tepada.
-STATE_ORDER = {"blocked": 0, "working": 1, "idle": 2, "unknown": 3, "done": 4}
-
 
 @dataclass(frozen=True)
 class TaskIndex:
@@ -129,9 +126,15 @@ def pane_view(
 
 
 def sort_panes(views: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    def order(view: dict[str, Any]) -> tuple[int, float]:
-        recent = view["last_output_at"] or view["started_at"] or 0.0
-        return STATE_ORDER.get(view["state"], len(STATE_ORDER)), -recent
+    """Jonli pane'lar barqaror tartibda: eskisi tepada, boshlanish vaqti yo'qlari oxirda.
+
+    Holat yoki oxirgi chiqish bo'yicha saralanmaydi — aks holda agent har safar chiqish
+    berganda qator joyini almashtiradi va uni bosib bo'lmaydi.
+    """
+
+    def order(view: dict[str, Any]) -> tuple[bool, float, str]:
+        started = view["started_at"]
+        return started is None, started or 0.0, view["id"]
 
     return sorted(views, key=order)
 

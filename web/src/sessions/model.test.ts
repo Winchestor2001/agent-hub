@@ -5,7 +5,6 @@ import {
   agentChoices,
   baseName,
   elapsed,
-  groupLive,
   paneActivity,
   promptPrefix,
   pruneSelection,
@@ -74,23 +73,16 @@ describe("splitByProject", () => {
     expect(split.others.map((p) => p.id)).toEqual(["b", "c"]);
   });
 
+  it("holatdan qat'i nazar kelgan tartib saqlanadi (blocked joyidan ko'chmaydi)", () => {
+    const panes = [pane("a", { state: "idle" }), pane("b", { state: "blocked" }), pane("c", { state: "working" })];
+    expect(splitByProject(panes, null).mine.map((p) => p.id)).toEqual(["a", "b", "c"]);
+    expect(splitByProject(panes, "p1").others.map((p) => p.id)).toEqual(["a", "b", "c"]);
+  });
+
   it("loyiha tanlanmagan bo'lsa hammasi ko'rinadi", () => {
     const split = splitByProject([pane("a", { project_id: "p1" }), pane("b", { project_id: null })], null);
     expect(split.mine.map((p) => p.id)).toEqual(["a", "b"]);
     expect(split.others).toEqual([]);
-  });
-});
-
-describe("groupLive", () => {
-  it("blocked alohida, tartib saqlanadi", () => {
-    const groups = groupLive([
-      pane("a", { state: "blocked" }),
-      pane("b"),
-      pane("c", { state: "blocked" }),
-      pane("d", { state: "idle" }),
-    ]);
-    expect(groups.blocked.map((p) => p.id)).toEqual(["a", "c"]);
-    expect(groups.others.map((p) => p.id)).toEqual(["b", "d"]);
   });
 });
 

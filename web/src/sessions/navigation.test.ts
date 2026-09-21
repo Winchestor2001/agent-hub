@@ -1,36 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LivePane } from "../api/types";
-import { focusIndex, isTextInput, navigationOrder, nextPaneId, shortcutStep } from "./navigation";
-
-function pane(id: string, state: string, startedAt: number): LivePane {
-  return {
-    id,
-    agent: "claude",
-    title: "",
-    cwd: "/repo",
-    state,
-    raw_state: state,
-    approximate: false,
-    alive: true,
-    session_id: "",
-    runner_id: "r1",
-    runner_name: "mac",
-    started_at: startedAt,
-    last_output_at: null,
-    ended_at: null,
-    exit_code: null,
-    project_id: "p",
-    task: null,
-  };
-}
-
-describe("navigationOrder", () => {
-  it("puts blocked first, then keeps start order regardless of recent output", () => {
-    const panes = [pane("c", "working", 30), pane("a", "idle", 10), pane("b", "blocked", 20), pane("d", "blocked", 5)];
-    expect(navigationOrder(panes)).toEqual(["d", "b", "a", "c"]);
-  });
-});
+import { focusIndex, isTextInput, nextPaneId, shortcutStep } from "./navigation";
 
 describe("nextPaneId", () => {
   const order = ["a", "b", "c"];

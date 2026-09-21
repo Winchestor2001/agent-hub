@@ -1,19 +1,7 @@
 import type { LivePane, PastSession, TaskItem } from "../api/types";
 
-/** `blocked` — agent foydalanuvchidan javob kutmoqda; ro'yxatda alohida va tepada. */
+/** `blocked` — agent foydalanuvchidan javob kutmoqda; qator ajratib ko'rsatiladi, joyi o'zgarmaydi. */
 export const BLOCKED = "blocked";
-
-export interface LiveGroups {
-  blocked: LivePane[];
-  others: LivePane[];
-}
-
-/** Backend tartibi (holat, keyin oxirgi chiqish) saqlanadi. */
-export function groupLive(panes: readonly LivePane[]): LiveGroups {
-  const groups: LiveGroups = { blocked: [], others: [] };
-  for (const pane of panes) (pane.state === BLOCKED ? groups.blocked : groups.others).push(pane);
-  return groups;
-}
 
 export interface ProjectPanes {
   mine: LivePane[];

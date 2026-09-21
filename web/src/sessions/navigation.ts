@@ -1,20 +1,5 @@
 import { useEffect } from "react";
 
-import type { LivePane } from "../api/types";
-import { BLOCKED } from "./model";
-
-/**
- * Shortcut tartibi: avval javob kutayotganlar, keyin boshlanish vaqti bo'yicha.
- * Ro'yxat oxirgi chiqish bo'yicha saralanadi va terminal ulanishi o'zi chiqish beradi —
- * o'sha tartib bilan o'tilsa, pane'lar har bosishda joy almashib, "keyingisi" sakraydi.
- */
-export function navigationOrder(panes: readonly LivePane[]): string[] {
-  const rank = (pane: LivePane) => (pane.state === BLOCKED ? 0 : 1);
-  return panes
-    .toSorted((a, b) => rank(a) - rank(b) || (a.started_at ?? 0) - (b.started_at ?? 0) || a.id.localeCompare(b.id))
-    .map((pane) => pane.id);
-}
-
 /** Keyingi/oldingi sessiya (aylanma). Joriy ro'yxatda bo'lmasa — oldinga birinchisi, orqaga oxirgisi. */
 export function nextPaneId(order: readonly string[], current: string | null, step: 1 | -1): string | null {
   if (order.length === 0) return null;

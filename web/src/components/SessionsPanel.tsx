@@ -15,7 +15,6 @@ import { useI18n } from "../i18n/context";
 import {
   BLOCKED,
   baseName,
-  groupLive,
   paneActivity,
   pruneSelection,
   sessionKey,
@@ -61,7 +60,8 @@ export function SessionsPanel({
   const projectId = showAll ? null : (project?.id ?? null);
   // Xatoda eski ro'yxat ko'rsatilmaydi: KanBot o'chsa "javob kutmoqda" ham yo'qoladi.
   const split = live.data && !live.error ? splitByProject(live.data.live, projectId) : null;
-  const groups = split ? groupLive(split.mine) : null;
+  // Tartib backenddan barqaror keladi (boshlanish vaqti): holat o'zgarsa ham qator ko'chmaydi.
+  const panes = split?.mine ?? null;
   const finished = live.error ? [] : splitByProject(live.data?.finished ?? [], projectId).mine;
 
   return (
@@ -81,19 +81,14 @@ export function SessionsPanel({
       }
     >
       <div className="sessions-body" onKeyDown={moveSessionFocus}>
-      {groups && groups.blocked.length > 0 && (
-        <Section title={t("sessions.blocked")} count={groups.blocked.length} className="section-blocked">
-          <LiveList panes={groups.blocked} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />
-        </Section>
-      )}
-      <Section title={t("sessions.live")} count={groups?.others.length}>
-        <QueryBody error={live.error} loaded={groups !== null} empty={groups?.others.length === 0}>
-          {groups && <LiveList panes={groups.others} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />}
+      <Section title={t("sessions.live")} count={panes?.length}>
+        <QueryBody error={live.error} loaded={panes !== null} empty={panes?.length === 0}>
+          {panes && <LiveList panes={panes} names={names} current={terminalPaneId} onOpenTask={onOpenTask} onOpenTerminal={onOpenTerminal} />}
         </QueryBody>
         {split && project && (
           <ScopeHint project={project} showAll={showAll} others={split.others} onToggle={onToggleShowAll} />
         )}
-        {groups && <p className="muted session-hint">{t("sessions.shortcut_hint")}</p>}
+        {panes && <p className="muted session-hint">{t("sessions.shortcut_hint")}</p>}
       </Section>
       {finished.length > 0 && (
         <FinishedSection
@@ -168,19 +163,17 @@ function moveSessionFocus(event: KeyboardEvent<HTMLDivElement>) {
 function Section({
   title,
   count,
-  className,
   action,
   children,
 }: {
   title: string;
   count?: number | undefined;
-  className?: string;
   /** Sarlavha o'ng tomonidagi tugma. */
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className={className ? `section ${className}` : "section"}>
+    <div className="section">
       <h3 className="section-title">
         {title}
         {count !== undefined && <span className="count">{count}</span>}
