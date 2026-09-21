@@ -92,7 +92,16 @@ def test_too_large_file_is_not_left_behind(project: Project) -> None:
     with pytest.raises(UploadError) as err:
         uploads.store(directory, project.dirs[0], "big.png", uploads.chunked(data), now=NOW)
     assert err.value.code == "upload_too_large"
+    assert err.value.params["limit"] == uploads.MAX_FILE_BYTES
+    assert err.value.params["limit_mb"] == 10
     assert list(directory.iterdir()) == []
+
+
+def test_check_name_rejects_video_and_accepts_image() -> None:
+    uploads.check_name("shot.PNG")
+    with pytest.raises(UploadError) as err:
+        uploads.check_name("clip.mp4")
+    assert err.value.code == "upload_type_invalid"
 
 
 def test_empty_file_is_rejected(project: Project) -> None:

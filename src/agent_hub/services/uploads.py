@@ -24,7 +24,8 @@ from agent_hub.services.linking import is_within, real_path
 UPLOAD_ROOT = Path(".agent-hub") / "uploads"
 INBOX_DIR = "inbox"
 
-MAX_FILE_BYTES = 10 * 1024 * 1024
+MIB = 1024 * 1024
+MAX_FILE_BYTES = 10 * MIB
 MAX_FILES = 10
 MAX_NAME_LENGTH = 80
 CHUNK_SIZE = 64 * 1024
@@ -140,7 +141,7 @@ def store(
             for chunk in chunks:
                 size += len(chunk)
                 if size > MAX_FILE_BYTES:
-                    raise UploadError("upload_too_large", name=raw_name, limit=MAX_FILE_BYTES)
+                    raise too_large(raw_name)
                 handle.write(chunk)
     except BaseException:
         target.unlink(missing_ok=True)
@@ -149,6 +150,18 @@ def store(
         target.unlink(missing_ok=True)
         raise UploadError("upload_empty", name=raw_name)
     return StoredFile(name=target.name, path=target.relative_to(base_dir).as_posix(), size=size)
+
+
+def too_large(name: str) -> UploadError:
+    """`limit` — bayt, `limit_mb` — foydalanuvchiga ko'rsatiladigan qiymat."""
+    return UploadError(
+        "upload_too_large", name=name, limit=MAX_FILE_BYTES, limit_mb=MAX_FILE_BYTES // MIB
+    )
+
+
+def check_name(raw_name: str) -> None:
+    """Fayl turi ruxsatmi; tanani o'qishdan oldin — katta video ham asl sabab bilan rad etiladi."""
+    _safe_name(raw_name)
 
 
 def check_count(count: int) -> None:
@@ -186,6 +199,6 @@ async def read_upload(reader: Callable[[int], Awaitable[bytes]], name: str) -> l
     while chunk := await reader(CHUNK_SIZE):
         size += len(chunk)
         if size > MAX_FILE_BYTES:
-            raise UploadError("upload_too_large", name=name, limit=MAX_FILE_BYTES)
+            raise too_large(name)
         parts.append(chunk)
     return parts

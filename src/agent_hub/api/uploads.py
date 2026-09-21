@@ -23,6 +23,8 @@ async def upload_files(
 ) -> dict[str, Any]:
     project = hub.project(project_id)
     uploads.check_count(len(files))
+    for upload in files:
+        uploads.check_name(upload.filename or "")
     base = uploads.project_dir(project, cwd)
     directory = uploads.uploads_dir(project, cwd, task_id)
 

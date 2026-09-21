@@ -55,6 +55,25 @@ describe("translator", () => {
   });
 });
 
+describe("yuklash xatolari", () => {
+  const tooLarge = new ApiError(413, "upload_too_large", { name: "clip.png", limit: 10485760, limit_mb: 10 });
+  const badType = new ApiError(415, "upload_type_invalid", { name: "clip.mp4", allowed: [".png", ".pdf"] });
+
+  it("limit baytda emas, MB da ko'rsatiladi", () => {
+    expect(createTranslator("uz").message(errorMessage(tooLarge))).toBe(
+      "«clip.png» juda katta (har bir fayl uchun chegara: 10 MB)",
+    );
+    expect(createTranslator("ru").message(errorMessage(tooLarge))).toContain("10 МБ");
+  });
+
+  it("qo'llab-quvvatlanmaydigan tur xabarida ruxsat etilgan turlar sanaladi", () => {
+    expect(createTranslator("uz").message(errorMessage(badType))).toBe(
+      "«clip.mp4» — bu fayl turi qo'llab-quvvatlanmaydi. Mumkin: .png, .pdf",
+    );
+    expect(createTranslator("ru").message(errorMessage(badType))).toContain(".png, .pdf");
+  });
+});
+
 /** Tilga bog'liq bo'lmagan matnlar: nom, versiya, qisqartma va terminlar. */
 const SAME_IN_RU = new Set([
   "app.title",

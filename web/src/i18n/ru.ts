@@ -251,6 +251,7 @@ export const ru: Dictionary = {
   "terminal.reconnect": "Переподключиться",
   "terminal.error_invalid_keys": "Клавиша отклонена",
   "terminal.error_bad_message": "Сообщение отклонено",
+  "terminal.upload_no_project": "Файл не загружен: папка этой сессии не относится ни к одному проекту",
   "terminal.ended": "Сессия завершена — ввод не дойдёт до pane",
 
   "banner.backend_unreachable": "Нет связи с backend Agent Hub. Данные не обновляются.",
@@ -313,8 +314,8 @@ export const ru: Dictionary = {
   "error.pane_alive": "Сессия ещё работает — убрать нельзя",
   "error.session_id_invalid": "Неверный ID сессии",
 
-  "error.upload_type_invalid": "«{name}» — неподдерживаемый тип файла",
-  "error.upload_too_large": "«{name}» слишком большой (предел: {limit} байт)",
+  "error.upload_type_invalid": "«{name}» — этот тип файла не поддерживается. Можно: {allowed}",
+  "error.upload_too_large": "«{name}» слишком большой (предел для одного файла: {limit_mb} МБ)",
   "error.upload_too_many": "Нельзя загрузить больше {limit} файлов за раз (выбрано: {count})",
   "error.upload_empty": "«{name}» пустой — не загружен",
   "error.upload_name_invalid": "Неверное имя файла: {name}",

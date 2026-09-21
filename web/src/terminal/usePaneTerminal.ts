@@ -17,6 +17,8 @@ export interface PaneTerminal {
   /** Backend rad etgan oxirgi xabar kodi (invalid_keys, bad_message). */
   error: string | null;
   sendKeys: (keys: string[]) => void;
+  /** Matnni oddiy paste kabi yozadi: agent bracketed paste yoqqan bo'lsa, shu rejimda. */
+  pasteText: (text: string) => void;
   reconnect: () => void;
 }
 
@@ -117,11 +119,17 @@ export function usePaneTerminal(containerRef: RefObject<HTMLDivElement | null>, 
     [send],
   );
 
+  const pasteText = useCallback((text: string) => {
+    // `paste` onData'ni chaqiradi — xabar odatdagi `input` yo'li bilan ketadi.
+    termRef.current?.paste(text);
+    termRef.current?.focus();
+  }, []);
+
   const reconnect = useCallback(() => {
     setStatus({ kind: "connecting" });
     setError(null);
     setAttempt((n) => n + 1);
   }, []);
 
-  return { status, error, sendKeys, reconnect };
+  return { status, error, sendKeys, pasteText, reconnect };
 }

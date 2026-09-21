@@ -50,7 +50,23 @@ def test_upload_rejects_unknown_type(api: ApiEnv) -> None:
 
 def test_upload_rejects_too_large(api: ApiEnv) -> None:
     big = b"x" * (uploads.MAX_FILE_BYTES + 1)
-    assert_error(upload(api, ("big.png", big)), 413, "upload_too_large")
+    resp = upload(api, ("big.png", big))
+    assert_error(resp, 413, "upload_too_large")
+    assert resp.json()["params"]["limit_mb"] == 10
+
+
+def test_upload_type_error_lists_allowed_types(api: ApiEnv) -> None:
+    resp = upload(api, ("clip.mp4", b"x"))
+    assert_error(resp, 415, "upload_type_invalid")
+    allowed = resp.json()["params"]["allowed"]
+    assert ".png" in allowed
+    assert ".mp4" not in allowed
+
+
+def test_upload_checks_type_before_size(api: ApiEnv) -> None:
+    # Katta video "juda katta" emas, asl sabab bilan (tur qo'llab-quvvatlanmaydi) rad etiladi.
+    big = b"x" * (uploads.MAX_FILE_BYTES + 1)
+    assert_error(upload(api, ("clip.mov", big)), 415, "upload_type_invalid")
 
 
 def test_upload_rejects_too_many(api: ApiEnv) -> None:

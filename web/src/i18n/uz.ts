@@ -251,6 +251,7 @@ export const uz = {
   "terminal.reconnect": "Qayta ulanish",
   "terminal.error_invalid_keys": "Tugma rad etildi",
   "terminal.error_bad_message": "Xabar rad etildi",
+  "terminal.upload_no_project": "Fayl yuklanmadi: bu sessiya papkasi hech bir loyihaga tegishli emas",
   "terminal.ended": "Sessiya tugagan — yozish pane'ga yetmaydi",
 
   "banner.backend_unreachable": "Agent Hub backend bilan aloqa yo'q. Ma'lumotlar yangilanmayapti.",
@@ -314,8 +315,8 @@ export const uz = {
   "error.pane_alive": "Sessiya hali ishlayapti — olib tashlanmaydi",
   "error.session_id_invalid": "Sessiya ID noto'g'ri",
 
-  "error.upload_type_invalid": "«{name}» — qo'llab-quvvatlanmaydigan fayl turi",
-  "error.upload_too_large": "«{name}» juda katta (chegara: {limit} bayt)",
+  "error.upload_type_invalid": "«{name}» — bu fayl turi qo'llab-quvvatlanmaydi. Mumkin: {allowed}",
+  "error.upload_too_large": "«{name}» juda katta (har bir fayl uchun chegara: {limit_mb} MB)",
   "error.upload_too_many": "Bir vaqtda {limit} tadan ko'p fayl yuklab bo'lmaydi ({count} ta tanlandi)",
   "error.upload_empty": "«{name}» bo'sh — yuklanmadi",
   "error.upload_name_invalid": "Fayl nomi noto'g'ri: {name}",

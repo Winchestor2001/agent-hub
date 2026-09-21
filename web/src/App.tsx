@@ -39,6 +39,9 @@ export function App() {
   const selected = items?.find((p) => p.id === selectedId) ?? items?.[0] ?? null;
   const selectedProjectId = selected?.id ?? null;
   const sessionProject = newSession && items?.find((p) => p.id === newSession.projectId);
+  const terminalPane = terminalPaneId
+    ? [...(live.data?.live ?? []), ...(live.data?.finished ?? [])].find((pane) => pane.id === terminalPaneId)
+    : undefined;
 
   // Shortcut panelda ko'rinayotgan sessiyalar orasida o'tadi.
   const paneOrder = useMemo(() => {
@@ -92,9 +95,8 @@ export function App() {
           <TerminalView
             key={terminalPaneId}
             paneId={terminalPaneId}
-            pane={[...(live.data?.live ?? []), ...(live.data?.finished ?? [])].find(
-              (pane) => pane.id === terminalPaneId,
-            )}
+            pane={terminalPane}
+            project={items?.find((p) => p.id === terminalPane?.project_id)}
             onBack={() => {
               setTerminalPaneId(null);
             }}
