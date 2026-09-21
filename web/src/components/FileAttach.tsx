@@ -6,6 +6,8 @@ import { useI18n } from "../i18n/context";
 import { formatSize } from "../uploads/model";
 import { ErrorText } from "./ErrorText";
 
+const FILE_ICONS: Record<UploadedFile["kind"], string> = { image: "🖼", video: "🎬", file: "📄" };
+
 interface FileAttachProps {
   projectId: string;
   /** Qaysi loyiha papkasiga yuklanadi (bo'sh — birinchisi). */
@@ -92,7 +94,7 @@ export function FileAttach({ projectId, cwd, taskId, files, onChange }: FileAtta
           {files.map((file) => (
             <li key={file.path}>
               <span className="file-kind" aria-hidden="true">
-                {file.kind === "image" ? "🖼" : "📄"}
+                {FILE_ICONS[file.kind]}
               </span>
               <span className="file-name mono">{file.name}</span>
               <span className="muted">{formatSize(file.size)}</span>

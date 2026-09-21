@@ -194,7 +194,7 @@ export interface UploadedFile {
   name: string;
   path: string;
   size: number;
-  kind: "image" | "file";
+  kind: "image" | "video" | "file";
 }
 
 export interface UploadsResponse {

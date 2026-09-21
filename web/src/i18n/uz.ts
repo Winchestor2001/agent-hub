@@ -130,7 +130,7 @@ export const uz = {
   "task_form.acceptance_hint": "har qatorda bittasi",
   "task_form.create": "Yaratish",
   "files.label": "Fayllar",
-  "files.hint": "rasm yoki hujjat: tanlang, sudrab tashlang yoki Ctrl+V bilan qo'ying",
+  "files.hint": "rasm, video yoki hujjat: tanlang, sudrab tashlang yoki Ctrl+V bilan qo'ying",
   "files.pick": "Fayl qo'shish",
   "files.drop": "Fayllarni shu yerga tashlang",
   "files.uploading": "Yuklanmoqda…",
@@ -315,7 +315,6 @@ export const uz = {
   "error.session_id_invalid": "Sessiya ID noto'g'ri",
 
   "error.upload_type_invalid": "«{name}» — bu fayl turi qo'llab-quvvatlanmaydi. Mumkin: {allowed}",
-  "error.upload_too_large": "«{name}» juda katta (har bir fayl uchun chegara: {limit_mb} MB)",
   "error.upload_too_many": "Bir vaqtda {limit} tadan ko'p fayl yuklab bo'lmaydi ({count} ta tanlandi)",
   "error.upload_empty": "«{name}» bo'sh — yuklanmadi",
   "error.upload_name_invalid": "Fayl nomi noto'g'ri: {name}",

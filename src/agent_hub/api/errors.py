@@ -45,7 +45,6 @@ _BACKLOG_STATUS = {
     "backlog_exists": 409,
 }
 _UPLOAD_STATUS = {
-    "upload_too_large": 413,
     "upload_type_invalid": 415,
     "upload_not_found": 404,
 }

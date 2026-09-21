@@ -12,11 +12,11 @@ saqlangan yo'l esa yozishdan oldin `is_within` bilan uploads papkasi ichida ekan
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from agent_hub.registry import Project
 from agent_hub.services.linking import is_within, real_path
@@ -24,16 +24,15 @@ from agent_hub.services.linking import is_within, real_path
 UPLOAD_ROOT = Path(".agent-hub") / "uploads"
 INBOX_DIR = "inbox"
 
-MIB = 1024 * 1024
-MAX_FILE_BYTES = 10 * MIB
 MAX_FILES = 10
 MAX_NAME_LENGTH = 80
 CHUNK_SIZE = 64 * 1024
 
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"})
+VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"})
 # `.svg` ataylab yo'q: ichida skript bo'lishi mumkin.
 DOC_EXTENSIONS = frozenset({".pdf", ".txt", ".md", ".csv", ".json", ".log", ".yaml", ".yml"})
-ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | DOC_EXTENSIONS
+ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | DOC_EXTENSIONS
 
 # Nomda faqat shu belgilar qoladi; qolgani `-` ga aylanadi.
 _UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
@@ -59,7 +58,10 @@ class StoredFile:
 
     @property
     def kind(self) -> str:
-        return "image" if Path(self.path).suffix.lower() in IMAGE_EXTENSIONS else "file"
+        suffix = Path(self.path).suffix.lower()
+        if suffix in IMAGE_EXTENSIONS:
+            return "image"
+        return "video" if suffix in VIDEO_EXTENSIONS else "file"
 
     def as_dict(self) -> dict[str, Any]:
         return {"name": self.name, "path": self.path, "size": self.size, "kind": self.kind}
@@ -129,7 +131,7 @@ def store(
     *,
     now: datetime | None = None,
 ) -> StoredFile:
-    """Bitta faylni saqlaydi; limitdan oshsa yarim yozilgan fayl o'chiriladi."""
+    """Bitta faylni bo'lak-bo'lak yozadi (hajm cheklanmagan); xatoda yarim fayl o'chiriladi."""
     stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
     target = _unique_path(directory, f"{stamp}-{_safe_name(raw_name)}")
     if not is_within(directory, base_dir / UPLOAD_ROOT):
@@ -140,8 +142,6 @@ def store(
         with target.open("wb") as handle:
             for chunk in chunks:
                 size += len(chunk)
-                if size > MAX_FILE_BYTES:
-                    raise too_large(raw_name)
                 handle.write(chunk)
     except BaseException:
         target.unlink(missing_ok=True)
@@ -152,15 +152,8 @@ def store(
     return StoredFile(name=target.name, path=target.relative_to(base_dir).as_posix(), size=size)
 
 
-def too_large(name: str) -> UploadError:
-    """`limit` — bayt, `limit_mb` — foydalanuvchiga ko'rsatiladigan qiymat."""
-    return UploadError(
-        "upload_too_large", name=name, limit=MAX_FILE_BYTES, limit_mb=MAX_FILE_BYTES // MIB
-    )
-
-
 def check_name(raw_name: str) -> None:
-    """Fayl turi ruxsatmi; tanani o'qishdan oldin — katta video ham asl sabab bilan rad etiladi."""
+    """Fayl turi ruxsatmi (fayl tanasiga tegilmaydi)."""
     _safe_name(raw_name)
 
 
@@ -192,13 +185,7 @@ def chunked(data: bytes, size: int = CHUNK_SIZE) -> Iterator[bytes]:
         yield data[start : start + size]
 
 
-async def read_upload(reader: Callable[[int], Awaitable[bytes]], name: str) -> list[bytes]:
-    """Yuklamani bo'lak-bo'lak o'qiydi; limitdan oshgan zahoti to'xtaydi (xotira chegaralangan)."""
-    parts: list[bytes] = []
-    size = 0
-    while chunk := await reader(CHUNK_SIZE):
-        size += len(chunk)
-        if size > MAX_FILE_BYTES:
-            raise too_large(name)
-        parts.append(chunk)
-    return parts
+def iter_file(file: BinaryIO, size: int = CHUNK_SIZE) -> Iterator[bytes]:
+    """Yuklangan faylni bo'laklab o'qiydi; butun fayl xotiraga olinmaydi."""
+    while chunk := file.read(size):
+        yield chunk

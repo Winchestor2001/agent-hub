@@ -128,10 +128,12 @@ ro'yxati tab fonda bo'lganda ham yangilanadi.
 **Sessiyalar paneli.** Jonli, javob kutayotgan va tugagan sessiyalar tanlangan loyiha bo'yicha ko'rsatiladi
 (sessiya loyihaga ishchi papkasi — cwd — orqali bog'lanadi). Boshqa loyihalarda yoki loyihadan tashqarida
 ochiq sessiyalar bo'lsa, «Jonli agentlar» ostida ularning soni (javob kutayotganlari qizil) yoziladi;
-**Hammasini ko'rsatish** barcha loyihalar sessiyalarini ochadi, **Faqat <loyiha>** qaytaradi.
+**Hammasini ko'rsatish** barcha loyihalar sessiyalarini ochadi, **Faqat <loyiha>** qaytaradi. Jonli sessiyalar
+barqaror tartibda turadi (boshlanish vaqti bo'yicha, eskisi tepada): holat yoki chiqish o'zgarsa qator joyidan
+ko'chmaydi, faqat yangi sessiya oxiriga qo'shiladi yoki yopilgani yo'qoladi.
 
-**Javob kutayotgan sessiyalar.** Ruxsat yoki javob kutayotgan agentlar Sessiyalar panelida «Javob kutmoqda»
-bo'limida birinchi turadi, soni (barcha loyihalar bo'yicha) tab sarlavhasida ko'rinadi: `(2) Agent Hub`.
+**Javob kutayotgan sessiyalar.** Ruxsat yoki javob kutayotgan agent qatori Sessiyalar panelida o'z joyida
+qizil fon bilan ajralib turadi, soni (barcha loyihalar bo'yicha) tab sarlavhasida ko'rinadi: `(2) Agent Hub`.
 
 - Brauzer bildirishnomasi: yuqori paneldagi **Bildirishnomalar** tugmasini bosib ruxsat bering. Sessiya
   javob kuta boshlaganda, Agent Hub tabi fokusda bo'lmasa bildirishnoma chiqadi; bosilsa shu sessiya
@@ -147,11 +149,19 @@ saqlanadi, nomiga vaqt belgisi qo'shiladi (mavjud fayl hech qachon ustiga yozilm
 tavsifiga yoki sessiya promptiga nisbiy ko'rinishda qo'shiladi, shuning uchun claude/codex ularni o'z ishchi
 papkasidan qo'shimcha ruxsatsiz o'qiydi.
 
-- Ruxsat etilgan turlar: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.heic`, `.pdf`, `.txt`, `.md`, `.csv`,
-  `.json`, `.log`, `.yaml`, `.yml`. `.svg` ataylab qabul qilinmaydi (ichida skript bo'lishi mumkin).
-- Chegaralar: bitta fayl 10 MB gacha, bir martada 10 tagacha.
+- Ruxsat etilgan turlar: rasm — `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.heic`; video — `.mp4`, `.mov`,
+  `.webm`, `.m4v`, `.mkv`, `.avi`; hujjat — `.pdf`, `.txt`, `.md`, `.csv`, `.json`, `.log`, `.yaml`,
+  `.yml`. `.svg` ataylab qabul qilinmaydi (ichida skript bo'lishi mumkin). Boshqa tur rad etilganda xabarda
+  ruxsat etilganlar sanaladi.
+- Chegaralar: bir martada 10 tagacha fayl; bitta fayl hajmiga limit yo'q — katta video ham diskka
+  bo'lak-bo'lak yoziladi, xotirada to'planmaydi. Diskda joy yetarli bo'lishi kerak.
 - `.agent-hub/uploads/.gitignore` o'zi yaratiladi (`*`), shuning uchun yuklangan fayllar repoga tushmaydi;
   loyihaning o'z `.gitignore` fayliga tegilmaydi. Keraksiz bo'lsa papkani qo'lda o'chirsa bo'ladi.
+
+Ishlayotgan sessiya terminalida ham fayl yoki skrinshotni `Ctrl+V` (macOS: `⌘V`) bilan qo'yish mumkin: fayl
+sessiya loyihasiga yuklanadi va uning yo'li pane'ga yoziladi (sessiya papkasi loyiha papkasining o'zi bo'lsa
+nisbiy, ichki papkasida bo'lsa absolyut yo'l). Oddiy matn paste'i o'zgarmaydi. Sessiya hech bir loyihaga
+tegishli bo'lmasa, fayl yuklanmaydi va terminal panelida sababi yoziladi.
 
 **Jarayonga o'tganda sessiya.** Vazifa **In Progress** ustuniga ko'chirilganda (sudrab yoki detaldagi status
 tanlovidan) va unda tirik sessiya bo'lmasa, yangi sessiya dialogi shu vazifa oldindan tanlangan holda
@@ -161,7 +171,7 @@ ochiladi — agent va papkani tasdiqlab **Boshlash** bosiladi. Dialog o'zi ishga
 
 | Tugma | Amal |
 |---|---|
-| Alt+Shift+↓ / ↑ (macOS: ⌥⇧↓ / ↑) | Panelda ko'rinayotgan keyingi / oldingi jonli sessiya terminali (aylanma; avval javob kutayotganlar, keyin boshlanish tartibida). Terminal fokusda bo'lsa ham ishlaydi, matn maydonlarida va dialog ochiqligida ishlamaydi |
+| Alt+Shift+↓ / ↑ (macOS: ⌥⇧↓ / ↑) | Panelda ko'rinayotgan keyingi / oldingi jonli sessiya terminali (aylanma; panelda ko'rinadigan tartibda). Terminal fokusda bo'lsa ham ishlaydi, matn maydonlarida va dialog ochiqligida ishlamaydi |
 | ↑ / ↓ / Home / End | Sessiya nomi fokusda bo'lsa — ro'yxatdagi keyingi sessiyaga o'tish |
 | Enter | Fokusdagi sessiya terminalini ochish |
 

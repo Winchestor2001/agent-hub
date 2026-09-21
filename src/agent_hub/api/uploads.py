@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from agent_hub.services import uploads
 
@@ -30,6 +31,9 @@ async def upload_files(
 
     stored: list[uploads.StoredFile] = []
     for upload in files:
-        parts = await uploads.read_upload(upload.read, upload.filename or "")
-        stored.append(uploads.store(directory, base, upload.filename or "", parts))
+        # Katta video event loop'ni to'xtatmasligi uchun yozish threadpool'da.
+        item = await run_in_threadpool(
+            uploads.store, directory, base, upload.filename or "", uploads.iter_file(upload.file)
+        )
+        stored.append(item)
     return {"files": [item.as_dict() for item in stored]}

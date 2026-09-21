@@ -48,25 +48,33 @@ def test_upload_rejects_unknown_type(api: ApiEnv) -> None:
     assert_error(upload(api, ("virus.exe", b"MZ")), 415, "upload_type_invalid")
 
 
-def test_upload_rejects_too_large(api: ApiEnv) -> None:
-    big = b"x" * (uploads.MAX_FILE_BYTES + 1)
+def test_upload_has_no_size_limit(api: ApiEnv) -> None:
+    big = b"x" * (11 * 1024 * 1024)
     resp = upload(api, ("big.png", big))
-    assert_error(resp, 413, "upload_too_large")
-    assert resp.json()["params"]["limit_mb"] == 10
+    assert resp.status_code == 201, resp.text
+    [item] = resp.json()["files"]
+    assert item["size"] == len(big)
+    assert (api.backend / item["path"]).stat().st_size == len(big)
+
+
+def test_upload_accepts_video(api: ApiEnv) -> None:
+    clip = b"\x00\x00\x00\x18ftypmp42" + b"0" * 64
+    resp = upload(api, ("Demo clip.MOV", clip), task_id="TASK-7")
+    assert resp.status_code == 201, resp.text
+    [item] = resp.json()["files"]
+    assert item["kind"] == "video"
+    assert item["path"].startswith(".agent-hub/uploads/task-7/")
+    assert item["path"].endswith("-Demo-clip.mov")
+    assert (api.backend / item["path"]).read_bytes() == clip
 
 
 def test_upload_type_error_lists_allowed_types(api: ApiEnv) -> None:
-    resp = upload(api, ("clip.mp4", b"x"))
+    resp = upload(api, ("notes.svg", b"<svg/>"))
     assert_error(resp, 415, "upload_type_invalid")
     allowed = resp.json()["params"]["allowed"]
     assert ".png" in allowed
-    assert ".mp4" not in allowed
-
-
-def test_upload_checks_type_before_size(api: ApiEnv) -> None:
-    # Katta video "juda katta" emas, asl sabab bilan (tur qo'llab-quvvatlanmaydi) rad etiladi.
-    big = b"x" * (uploads.MAX_FILE_BYTES + 1)
-    assert_error(upload(api, ("clip.mov", big)), 415, "upload_type_invalid")
+    assert ".mp4" in allowed
+    assert ".svg" not in allowed
 
 
 def test_upload_rejects_too_many(api: ApiEnv) -> None:

@@ -1,7 +1,9 @@
-"""`services/uploads.py`: nom tozalash, limitlar va yo'l chegaralari."""
+"""`services/uploads.py`: nom tozalash, turlar va yo'l chegaralari."""
 
 from __future__ import annotations
 
+import io
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -86,21 +88,42 @@ def test_same_name_does_not_overwrite(project: Project) -> None:
     assert (project.dirs[0] / first).read_bytes() == b"aaa"
 
 
-def test_too_large_file_is_not_left_behind(project: Project) -> None:
+def test_large_file_is_stored_without_limit(project: Project) -> None:
     directory = uploads.uploads_dir(project)
-    data = b"x" * (uploads.MAX_FILE_BYTES + 1)
-    with pytest.raises(UploadError) as err:
-        uploads.store(directory, project.dirs[0], "big.png", uploads.chunked(data), now=NOW)
-    assert err.value.code == "upload_too_large"
-    assert err.value.params["limit"] == uploads.MAX_FILE_BYTES
-    assert err.value.params["limit_mb"] == 10
+    data = b"x" * (11 * 1024 * 1024)
+    stored = uploads.store(directory, project.dirs[0], "big.png", uploads.chunked(data), now=NOW)
+    assert stored.size == len(data)
+    assert (project.dirs[0] / stored.path).stat().st_size == len(data)
+
+
+def test_failed_write_is_not_left_behind(project: Project) -> None:
+    directory = uploads.uploads_dir(project)
+
+    def chunks() -> Iterator[bytes]:
+        yield b"abc"
+        raise OSError("disk to'ldi")
+
+    with pytest.raises(OSError, match="disk"):
+        uploads.store(directory, project.dirs[0], "clip.mp4", chunks(), now=NOW)
     assert list(directory.iterdir()) == []
 
 
-def test_check_name_rejects_video_and_accepts_image() -> None:
+@pytest.mark.parametrize("name", ["clip.mp4", "clip.MOV", "a.webm", "a.m4v", "a.mkv", "a.avi"])
+def test_video_types_are_allowed(project: Project, name: str) -> None:
+    path = store(project, name, b"video")
+    assert uploads.StoredFile(name=name, path=path, size=5).kind == "video"
+
+
+def test_kinds() -> None:
+    assert uploads.StoredFile(name="a", path="x/a.png", size=1).kind == "image"
+    assert uploads.StoredFile(name="a", path="x/a.pdf", size=1).kind == "file"
+
+
+def test_check_name_accepts_video_and_rejects_unknown_type() -> None:
     uploads.check_name("shot.PNG")
+    uploads.check_name("clip.mp4")
     with pytest.raises(UploadError) as err:
-        uploads.check_name("clip.mp4")
+        uploads.check_name("virus.exe")
     assert err.value.code == "upload_type_invalid"
 
 
@@ -164,19 +187,7 @@ def test_resolve_rejects_paths_outside_uploads(project: Project, path: str) -> N
     assert err.value.code == "upload_not_found"
 
 
-async def test_read_upload_stops_at_limit() -> None:
-    async def reader(size: int) -> bytes:
-        return b"x" * size
-
-    with pytest.raises(UploadError) as err:
-        await uploads.read_upload(reader, "big.png")
-    assert err.value.code == "upload_too_large"
-
-
-async def test_read_upload_collects_chunks() -> None:
-    remaining = [b"ab", b"cd", b""]
-
-    async def reader(size: int) -> bytes:
-        return remaining.pop(0)
-
-    assert await uploads.read_upload(reader, "a.png") == [b"ab", b"cd"]
+def test_iter_file_reads_in_chunks() -> None:
+    chunks = list(uploads.iter_file(io.BytesIO(b"abcdefg"), size=3))
+    assert chunks == [b"abc", b"def", b"g"]
+    assert list(uploads.iter_file(io.BytesIO(b""))) == []
