@@ -142,6 +142,17 @@ qizil fon bilan ajralib turadi, soni (barcha loyihalar bo'yicha) tab sarlavhasid
 - Holat hook'lardan olinadi. Hook bo'lmasa (masalan, Codex) holat ekrandan taxminiy aniqlanadi va «≈» bilan
   belgilanadi; bunday sessiyada javob kutish har doim ham aniqlanmaydi.
 
+**Limit foizi.** Yuqori panelda Claude Code va Codex CLI'ning joriy rate-limit foizi (5 soatlik va
+haftalik) ko'rinadi, tugash vaqti tooltip'da yoziladi, foiz 50% va 75% dan oshganda rangi sariq/qizilga
+o'zgaradi; har 5 soniyada yangilanadi. Ma'lumot faqat lokal fayllardan o'qiladi, tarmoqqa so'rov
+yubormaydi:
+
+- Codex uchun qo'shimcha sozlash shart emas — foiz oxirgi Codex sessiyasi rollout faylidan o'qiladi.
+- Claude Code bu ma'lumotni faqat interaktiv sessiyada `statusLine` buyrug'iga beradi, boshqa hech qanday
+  faylga yozmaydi. Shu sababli Claude uchun foizni ko'rish uchun `~/.claude/statusline.sh` (`settings.json`
+  dagi `statusLine`) oxirgi qiymatni `~/.claude/agent-hub-rate-limits.json` keshiga yozib turadigan qilib
+  sozlangan bo'lishi kerak; bunday sozlash bo'lmasa Claude uchun «ma'lumot yo'q» ko'rsatiladi.
+
 **Media fayllar.** Vazifa yaratish va yangi sessiya dialoglarida fayl biriktirsa bo'ladi: **Fayl tanlash**,
 maydonga sudrab tashlash yoki skrinshotni `Ctrl+V` (macOS: `⌘V`) bilan qo'yish. Fayl darhol loyiha papkasi
 ichiga — `.agent-hub/uploads/<vazifa-id>/` yoki vazifa hali yo'q bo'lsa `.agent-hub/uploads/inbox/` ga —

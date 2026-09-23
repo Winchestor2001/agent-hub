@@ -9,6 +9,7 @@ import type {
   FolderListing,
   FolderSuggestions,
   Health,
+  LimitsResponse,
   Project,
   ProjectCreate,
   ProjectsResponse,
@@ -33,6 +34,8 @@ export const PAST_LIMIT = 50;
 /** Yangilash ketayotganda holat tez, aks holda kamdan-kam so'raladi (brew chaqiruvi arzon emas). */
 export const UPDATES_POLL_MS = 2000;
 export const UPDATES_IDLE_MS = 60_000;
+/** Claude/Codex rate-limit foizi — foydalanuvchi so'ragan tezlikda yangilanadi. */
+export const LIMITS_POLL_MS = 5000;
 
 export const queryKeys = {
   health: ["health"],
@@ -47,6 +50,7 @@ export const queryKeys = {
   folderSuggestions: ["folders", "suggestions"],
   folder: (path: string) => ["folders", "browse", path] as const,
   updates: ["updates"],
+  limits: ["limits"],
 };
 
 const enc = encodeURIComponent;
@@ -182,6 +186,15 @@ export function useUpdates() {
     queryFn: ({ signal }) => apiFetch<UpdatesResponse>("/api/updates", { signal }),
     refetchInterval: ({ state }) =>
       state.data && anyRunning(state.data.agents) ? UPDATES_POLL_MS : UPDATES_IDLE_MS,
+  });
+}
+
+/** Claude/Codex rate-limit foizi — faqat lokal fayllardan (statusline keshi, Codex sessiyasi). */
+export function useLimits() {
+  return useQuery({
+    queryKey: queryKeys.limits,
+    queryFn: ({ signal }) => apiFetch<LimitsResponse>("/api/limits", { signal }),
+    refetchInterval: LIMITS_POLL_MS,
   });
 }
 

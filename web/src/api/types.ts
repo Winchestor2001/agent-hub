@@ -275,3 +275,27 @@ export interface UpdatesResponse {
   brew: boolean;
   agents: AgentUpdate[];
 }
+
+export interface LimitWindow {
+  used_percent: number;
+  /** epoch soniya; noma'lum bo'lsa `null`. */
+  resets_at: number | null;
+}
+
+/** Bitta agentning joriy rate-limit holati (`services/limits.py`). */
+export interface AgentLimits {
+  agent: string;
+  /** `false` — ma'lumot yo'q (kesh/sessiya topilmadi), boshqa maydonlar shu holda ahamiyatsiz. */
+  available: boolean;
+  five_hour: LimitWindow | null;
+  weekly: LimitWindow | null;
+  /** epoch soniya — ma'lumot qachon olingan. */
+  updated_at: number | null;
+  /** Foiz eskirgan (agent uzoq vaqt faol bo'lmagan) — baribir ko'rsatiladi, faqat belgilanadi. */
+  stale: boolean;
+}
+
+export interface LimitsResponse {
+  claude: AgentLimits;
+  codex: AgentLimits;
+}

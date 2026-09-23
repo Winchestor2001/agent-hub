@@ -236,6 +236,14 @@ export const uz = {
   "updates.confirm_yes": "Yangilash",
   "updates.output": "brew chiqishi",
 
+  "limits.five_hour": "{agent} 5s {percent}%",
+  "limits.weekly": "{agent} 7k {percent}%",
+  "limits.resets_at": "{time} da tiklanadi",
+  "limits.stale": "eskirgan",
+  "limits.unavailable": "{agent}: ma'lumot yo'q",
+  "limits.unavailable_title_claude": "Claude limitini ko'rish uchun ~/.claude/statusline.sh maxsus skript bilan sozlangan bo'lishi kerak",
+  "limits.unavailable_title_codex": "Codex limiti hali noma'lum — yaqinda faol Codex sessiyasi kerak",
+
   "terminal.back": "← Doska",
   "terminal.back_title": "Doskaga qaytish",
   "terminal.quick_keys": "Tezkor tugmalar",

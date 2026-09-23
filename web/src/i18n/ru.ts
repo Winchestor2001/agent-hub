@@ -236,6 +236,14 @@ export const ru: Dictionary = {
   "updates.confirm_yes": "Обновить",
   "updates.output": "вывод brew",
 
+  "limits.five_hour": "{agent} 5ч {percent}%",
+  "limits.weekly": "{agent} 7д {percent}%",
+  "limits.resets_at": "сброс в {time}",
+  "limits.stale": "устарело",
+  "limits.unavailable": "{agent}: нет данных",
+  "limits.unavailable_title_claude": "Чтобы видеть лимит Claude, нужно настроить ~/.claude/statusline.sh со специальным скриптом",
+  "limits.unavailable_title_codex": "Лимит Codex пока неизвестен — нужна недавняя активная сессия Codex",
+
   "terminal.back": "← Доска",
   "terminal.back_title": "Вернуться к доске",
   "terminal.quick_keys": "Быстрые клавиши",

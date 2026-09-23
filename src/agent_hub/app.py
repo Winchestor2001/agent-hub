@@ -14,6 +14,7 @@ from agent_hub.api import (
     events,
     folders,
     health,
+    limits,
     projects,
     sessions,
     tasks,
@@ -65,7 +66,18 @@ def create_app(
     app.state.hub = hub
     app.state.events = event_hub
     install_error_handlers(app)
-    routers = (health, projects, folders, tasks, sessions, uploads, updates, terminal, events)
+    routers = (
+        health,
+        projects,
+        folders,
+        tasks,
+        sessions,
+        uploads,
+        updates,
+        limits,
+        terminal,
+        events,
+    )
     for module in routers:
         app.include_router(module.router)
 

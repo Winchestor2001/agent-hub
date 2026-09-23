@@ -131,6 +131,20 @@ textarea {
   font-size: 12px;
 }
 
+/* Claude/Codex rate-limit foizi (TopBar). */
+.topbar-limits {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.topbar-limits + .topbar-updates,
+.topbar-limits + .topbar-notify,
+.topbar-limits + .topbar-locale {
+  margin-left: 0;
+}
+
 /* Agent CLI'larini brew orqali yangilash tugmalari (TopBar). */
 .topbar-updates {
   position: relative;
