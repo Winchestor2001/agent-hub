@@ -15,6 +15,8 @@ import type {
   ProjectsResponse,
   ProjectUpdate,
   LivePane,
+  SessionModelSet,
+  SessionModelsResponse,
   SessionOptions,
   SessionResume,
   SessionsDelete,
@@ -43,6 +45,7 @@ export const queryKeys = {
   liveSessions: ["sessions", "live"],
   pastSessions: (projectId: string) => ["sessions", "past", projectId] as const,
   sessionOptions: ["sessions", "options"],
+  sessionModels: ["sessions", "models"],
   board: (projectId: string) => ["board", projectId] as const,
   tasks: (projectId: string) => ["task", projectId] as const,
   task: (projectId: string, taskId: string) => ["task", projectId, taskId] as const,
@@ -121,6 +124,23 @@ export function useSessionOptions() {
     queryKey: queryKeys.sessionOptions,
     queryFn: ({ signal }) => apiFetch<SessionOptions>("/api/sessions/options", { signal }),
     staleTime: Infinity,
+  });
+}
+
+export function useSessionModels(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.sessionModels,
+    queryFn: ({ signal }) => apiFetch<SessionModelsResponse>("/api/sessions/models", { signal }),
+    staleTime: Infinity,
+    enabled,
+  });
+}
+
+/** Ishlab turgan Claude sessiyasida modelni almashtirish (pane'ga `/model <id>` yuboriladi). */
+export function useSetSessionModel(paneId: string) {
+  return useMutation({
+    mutationFn: (model: string) =>
+      apiFetch<SessionModelSet>(`/api/sessions/${enc(paneId)}/model`, { method: "POST", body: { model } }),
   });
 }
 

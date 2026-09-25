@@ -1280,6 +1280,28 @@ button.session-open:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
+.model-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.model-picker-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.model-picker select {
+  max-width: 220px;
+}
+
+.model-picker input {
+  width: 190px;
+}
+
 .terminal-closed {
   display: flex;
   align-items: center;

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_hub.kanbot_client import SESSION_AGENTS
 from agent_hub.registry import Project
-from agent_hub.services import transcripts, uploads
+from agent_hub.services import models, transcripts, uploads
 from agent_hub.services.linking import live_session_ids, project_for_path
 from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE, TaskInfo, session_title
 
@@ -44,6 +44,14 @@ class SessionResume(BaseModel):
     session_id: str = Field(max_length=64)
 
 
+class ModelChoice(BaseModel):
+    """Bo'sh/noto'g'ri ID'ni servis `model_invalid` bilan rad etadi (422 validation_error emas)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = Field(max_length=1024)
+
+
 class SessionsDelete(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,6 +70,12 @@ async def _indexes(hub: Hub, projects: list[Project]) -> dict[str, TaskIndex | N
 async def session_options() -> dict[str, Any]:
     """Yangi sessiya dialogi uchun: ruxsat etilgan agentlar va prompt prefiksi (`{task_id}`)."""
     return {"agents": list(SESSION_AGENTS), "prompt_template": SESSION_PROMPT_TEMPLATE}
+
+
+@router.get("/api/sessions/models")
+async def session_models() -> dict[str, Any]:
+    """Sessiya ichida tanlanadigan Claude modellari (katalogda yo'q ID ham qabul qilinadi)."""
+    return {"models": models.catalog()}
 
 
 @router.get("/api/sessions")
@@ -186,6 +200,22 @@ async def kill_session(hub: HubDep, pane_id: str) -> dict[str, Any]:
     except ValueError as exc:
         raise ApiError(422, "pane_id_invalid", pane_id=pane_id) from exc
     return {"ok": True}
+
+
+@router.post("/api/sessions/{pane_id}/model")
+async def set_session_model(hub: HubDep, pane_id: str, body: ModelChoice) -> dict[str, Any]:
+    """Ishlab turgan Claude sessiyasida modelni almashtiradi (`/model <id>` yuboriladi).
+
+    Claude Code buni foydalanuvchi settings'ida `model` sifatida ham saqlaydi: yangi sessiyalar
+    defaulti o'zgaradi.
+    """
+    try:
+        pane = await hub.kanbot.get_pane(pane_id)
+    except ValueError as exc:
+        raise ApiError(422, "pane_id_invalid", pane_id=pane_id) from exc
+    state = await hub.state.resolve(pane)
+    await hub.sessions.set_model(pane, state.state, body.model)
+    return {"ok": True, "model": body.model}
 
 
 @router.delete("/api/sessions/{pane_id}")

@@ -216,6 +216,24 @@ export interface SessionStart {
   files?: string[];
 }
 
+export type SessionModelGroup = "current" | "legacy" | "alias";
+
+/** Sessiya ichida tanlanadigan Claude modeli (`GET /api/sessions/models`). */
+export interface SessionModel {
+  id: string;
+  label: string;
+  group: SessionModelGroup;
+}
+
+export interface SessionModelsResponse {
+  models: SessionModel[];
+}
+
+export interface SessionModelSet {
+  ok: boolean;
+  model: string;
+}
+
 export interface SessionResume {
   agent: string;
   session_id: string;

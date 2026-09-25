@@ -35,7 +35,14 @@ class ApiError(Exception):
 
 
 _REGISTRY_STATUS = {"project_not_found": 404, "project_exists": 409, "registry_invalid": 500}
-_SESSION_STATUS = {"runner_offline": 409, "agent_unavailable": 409, "runner_unsafe": 409}
+_SESSION_STATUS = {
+    "runner_offline": 409,
+    "agent_unavailable": 409,
+    "runner_unsafe": 409,
+    "model_agent_unsupported": 409,
+    "pane_not_alive": 409,
+    "pane_not_idle": 409,
+}
 _BACKLOG_STATUS = {
     "backlog_not_found": 503,
     "backlog_cli_missing": 503,

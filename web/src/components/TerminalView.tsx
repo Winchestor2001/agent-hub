@@ -10,6 +10,7 @@ import { closeMessage, QUICK_KEYS } from "../terminal/protocol";
 import { usePaneTerminal } from "../terminal/usePaneTerminal";
 import { usePasteUpload } from "../terminal/usePasteUpload";
 import { ErrorText } from "./ErrorText";
+import { ModelPicker } from "./ModelPicker";
 import { StateBadge } from "./SessionBits";
 
 interface TerminalViewProps {
@@ -66,6 +67,7 @@ export function TerminalView({ paneId, pane, project, onBack }: TerminalViewProp
             {key.label}
           </button>
         ))}
+        {pane?.agent === "claude" && <ModelPicker pane={pane} />}
         {pane && !pane.alive && <span className="muted">{t("terminal.ended")}</span>}
         {errorKey && (
           <span className="error-text">{isMessageKey(errorKey) ? message({ key: errorKey }) : error}</span>

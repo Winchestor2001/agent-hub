@@ -10,6 +10,7 @@ from typing import Any, cast
 from agent_hub.kanbot_client import SESSION_AGENTS, AgentName, AgentSession, KanbotClient, Pane
 from agent_hub.registry import Project
 from agent_hub.services.linking import is_valid_session_id, is_within, real_path
+from agent_hub.services.models import MAX_MODEL_LENGTH, is_valid_model
 
 SESSION_PROMPT_TEMPLATE = (
     "Работай только над {task_id}. Прочитай `backlog instructions overview` и задачу, "
@@ -126,6 +127,22 @@ class SessionService:
             title=session_title(task, fallback=project.name),
             runner_id=runner_id,
         )
+
+    async def set_model(self, pane: Pane, state: str, model: str) -> None:
+        """Ishlab turgan Claude pane'iga `/model <id>` yuboradi.
+
+        Faqat `idle` holatda: aks holda matn ruxsat dialogiga yoki yarim yozilgan promptga tushadi.
+        Claude Code `/model <nom>` ni foydalanuvchi settings'ining `model` maydoniga ham yozadi.
+        """
+        if not is_valid_model(model):
+            raise SessionError("model_invalid", model=model[:MAX_MODEL_LENGTH])
+        if pane.agent != "claude":
+            raise SessionError("model_agent_unsupported", agent=pane.agent)
+        if not pane.alive:
+            raise SessionError("pane_not_alive", pane_id=pane.id)
+        if state != "idle":
+            raise SessionError("pane_not_idle", pane_id=pane.id, state=state)
+        await self._kanbot.send_text(pane.id, f"/model {model}", enter=True)
 
     async def resume(self, project: Project, session: AgentSession, *, title: str = "") -> Pane:
         """Asl cwd va runner'da, prompt'siz (codex resume prompt qabul qilmaydi)."""

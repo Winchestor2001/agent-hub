@@ -351,3 +351,86 @@ def test_delete_past_sessions_rejected(api: ApiEnv) -> None:
         404,
         "project_not_found",
     )
+
+
+# --- sessiya ichida model tanlash ------------------------------------------------------------
+
+
+def test_session_models_catalog(api: ApiEnv) -> None:
+    models = api.client.get("/api/sessions/models").json()["models"]
+    ids = [item["id"] for item in models]
+    assert len(ids) == len(set(ids))
+    assert {"claude-opus-4-8", "claude-opus-4-7", "claude-opus-5-5", "opus"} <= set(ids)
+    assert all(set(item) == {"id", "label", "group"} for item in models)
+
+
+def test_session_models_work_without_kanbot(api: ApiEnv) -> None:
+    api.kanbot_down = True
+    assert api.client.get("/api/sessions/models").status_code == 200
+
+
+def test_set_model_types_slash_command_into_idle_claude_pane(api: ApiEnv) -> None:
+    api.pane(id="p1", state="idle")
+    resp = api.client.post("/api/sessions/p1/model", json={"model": "claude-opus-4-8"})
+    assert resp.json() == {"ok": True, "model": "claude-opus-4-8"}
+    assert api.inputs == [{"pane": "p1", "text": "/model claude-opus-4-8", "enter": True}]
+
+
+def test_set_model_uses_screen_corrected_state(api: ApiEnv) -> None:
+    """KanBot `blocked` desa-yu, ekranda bo'sh kiritish qatori turgan pane UI'da idle."""
+    api.pane(id="p1", state="blocked")
+    api.screens["p1"] = IDLE_SCREEN
+    api.client.post("/api/sessions/p1/model", json={"model": "opus"}).raise_for_status()
+    assert [item["text"] for item in api.inputs] == ["/model opus"]
+
+
+@pytest.mark.parametrize("state", ["working", "unknown", "done"])
+def test_set_model_needs_idle_pane(api: ApiEnv, state: str) -> None:
+    api.pane(id="p1", state=state)
+    body = assert_error(
+        api.client.post("/api/sessions/p1/model", json={"model": "opus"}), 409, "pane_not_idle"
+    )
+    assert body["params"] == {"pane_id": "p1", "state": state}
+    assert api.inputs == []
+
+
+def test_set_model_not_into_permission_prompt(api: ApiEnv) -> None:
+    api.pane(id="p1", state="blocked")
+    api.screens["p1"] = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n"
+    resp = api.client.post("/api/sessions/p1/model", json={"model": "opus"})
+    assert_error(resp, 409, "pane_not_idle")
+    assert api.inputs == []
+
+
+def test_set_model_rejects_other_agents_and_dead_panes(api: ApiEnv) -> None:
+    api.pane(id="codex", agent="codex", state="idle")
+    api.pane(id="dead", state="idle", alive=False)
+    body = {"model": "opus"}
+    resp = api.client.post("/api/sessions/codex/model", json=body)
+    assert_error(resp, 409, "model_agent_unsupported")
+    assert_error(api.client.post("/api/sessions/dead/model", json=body), 409, "pane_not_alive")
+    assert api.inputs == []
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["", "opus 4", "opus\n/exit", "opus\r", "-opus", "opus;ls", "opus[1m", "a" * 201],
+)
+def test_set_model_rejects_invalid_ids(api: ApiEnv, model: str) -> None:
+    api.pane(id="p1", state="idle")
+    resp = api.client.post("/api/sessions/p1/model", json={"model": model})
+    assert_error(resp, 422, "model_invalid")
+    assert api.inputs == []
+
+
+def test_set_model_request_errors(api: ApiEnv) -> None:
+    api.pane(id="p1", state="idle")
+    body = {"model": "opus"}
+    assert_error(api.client.post("/api/sessions/zzz/model", json=body), 404, "pane_not_found")
+    assert_error(api.client.post("/api/sessions/a.b/model", json=body), 422, "pane_id_invalid")
+    assert_error(api.client.post("/api/sessions/p1/model", json={}), 422, "validation_error")
+    extra = {"model": "opus", "text": "x"}
+    assert_error(api.client.post("/api/sessions/p1/model", json=extra), 422, "validation_error")
+    api.kanbot_down = True
+    assert_error(api.client.post("/api/sessions/p1/model", json=body), 503, "kanbot_unavailable")
+    assert api.inputs == []

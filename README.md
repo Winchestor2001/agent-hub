@@ -189,6 +189,19 @@ ochiladi — agent va papkani tasdiqlab **Boshlash** bosiladi. Dialog o'zi ishga
 Terminal ustidagi tezkor tugmalar (Enter, y, n, Esc, Ctrl-C) pane'ga to'g'ridan-to'g'ri yuboriladi — ruxsat
 so'rovlarini shu yerdan tasdiqlash mumkin.
 
+**Model tanlash (faqat Claude).** Claude sessiyasi terminali ustidagi **Model** ro'yxatidan model tanlanib
+**O'zgartirish** bosiladi. Ro'yxatda joriy modellar, eski modellar (Opus 4.8, 4.7, 4.6…) va aliaslar
+(`opus`, `sonnet`, `opus[1m]`…) bor; terminaldagi `/model` picker eski modellarni ko'rsatmaydi. Ro'yxatda
+yo'q modelni «Boshqa ID…» orqali to'liq ID bilan yozsa bo'ladi. Agent Hub pane'ga `/model <id>` yuboradi,
+shuning uchun:
+
+- faqat tirik va kutayotgan (idle) sessiyada ishlaydi — ruxsat dialogi yoki yarim yozilgan promptga matn
+  tushmasligi uchun band sessiyada tugma o'chiq turadi;
+- Claude Code `/model <nom>` ni `~/.claude/settings.json` dagi `model` ga ham yozadi, ya'ni tanlov **yangi
+  sessiyalar uchun ham default** bo'lib qoladi (bu Agent Hub emas, Claude Code xatti-harakati);
+- ID noma'lum bo'lsa, Claude Code o'zi rad etadi — xabar terminalda ko'rinadi;
+- Codex sessiyalarida va yangi sessiya dialogida model tanlash yo'q.
+
 **Tugagan sessiyalar.** Agent chiqqan pane «Tugagan» bo'limiga o'tadi (chiqish kodi bilan), terminali
 ko'rish uchun ochiladi. `×` bitta pane'ni, **Tozalash** hammasini KanBot ro'yxatidan olib tashlaydi; ochiq
 terminali yopiladi. Hali ishlayotgan pane olib tashlanmaydi. Suhbat tarixi o'chmaydi: sessiya «O'tgan

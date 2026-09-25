@@ -261,6 +261,20 @@ export const ru: Dictionary = {
   "terminal.ended": "Сессия завершена — ввод не дойдёт до pane",
   "terminal.upload_no_project": "Файл не загружен: папка этой сессии не относится ни к одному проекту",
 
+  "model.label": "Модель",
+  "model.choose": "— выберите модель —",
+  "model.custom": "Другой ID…",
+  "model.custom_placeholder": "claude-opus-4-8",
+  "model.group_current": "Актуальные модели",
+  "model.group_legacy": "Устаревшие модели",
+  "model.group_alias": "Алиасы",
+  "model.apply": "Сменить",
+  "model.applying": "Отправка…",
+  "model.sent": "Отправлено: /model {model}",
+  "model.default_hint": "Claude Code сохранит выбор и для новых сессий (поле model в settings.json)",
+  "model.busy": "Модель меняется только когда сессия ждёт ввода (idle)",
+  "model.ended": "Сессия завершена — модель не изменится",
+
   "banner.backend_unreachable": "Нет связи с backend Agent Hub. Данные не обновляются.",
   "banner.kanbot_unavailable":
     "KanBot не работает — сессии не видны, новую открыть нельзя. Запуск: make dev-kanbot",
@@ -319,6 +333,10 @@ export const ru: Dictionary = {
   "error.session_active": "Сессия сейчас открыта",
   "error.session_file_not_found": "Файл сессии не найден на этом компьютере (возможно, сессия на другом раннере): {session_id}",
   "error.pane_alive": "Сессия ещё работает — убрать нельзя",
+  "error.model_invalid": "Неверный ID модели: «{model}». Нужно одно слово (буквы, цифры и . _ : / -)",
+  "error.model_agent_unsupported": "Смена модели доступна только для Claude (эта сессия: {agent})",
+  "error.pane_not_alive": "Сессия завершена",
+  "error.pane_not_idle": "Сессия занята (состояние: {state}) — модель меняется только в режиме ожидания",
   "error.session_id_invalid": "Неверный ID сессии",
 
   "error.upload_type_invalid": "«{name}» — этот тип файла не поддерживается. Можно: {allowed}",

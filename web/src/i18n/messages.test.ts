@@ -82,6 +82,7 @@ const SAME_IN_RU = new Set([
   "card.subtask_of",
   "task.milestone",
   "task.dod",
+  "model.custom_placeholder",
 ]);
 
 describe("ru", () => {

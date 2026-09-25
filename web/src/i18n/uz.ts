@@ -261,6 +261,20 @@ export const uz = {
   "terminal.ended": "Sessiya tugagan — yozish pane'ga yetmaydi",
   "terminal.upload_no_project": "Fayl yuklanmadi: bu sessiya papkasi hech bir loyihaga tegishli emas",
 
+  "model.label": "Model",
+  "model.choose": "— model tanlang —",
+  "model.custom": "Boshqa ID…",
+  "model.custom_placeholder": "claude-opus-4-8",
+  "model.group_current": "Joriy modellar",
+  "model.group_legacy": "Eski modellar",
+  "model.group_alias": "Aliaslar",
+  "model.apply": "O'zgartirish",
+  "model.applying": "Yuborilmoqda…",
+  "model.sent": "Yuborildi: /model {model}",
+  "model.default_hint": "Claude Code tanlovni yangi sessiyalar uchun ham default qilib saqlaydi (settings.json dagi model)",
+  "model.busy": "Model faqat sessiya kutayotganda (idle) o'zgaradi",
+  "model.ended": "Sessiya tugagan — model o'zgarmaydi",
+
   "banner.backend_unreachable": "Agent Hub backend bilan aloqa yo'q. Ma'lumotlar yangilanmayapti.",
   "banner.kanbot_unavailable":
     "KanBot ishlamayapti — sessiyalar ko'rinmaydi va yangisini ochib bo'lmaydi. Ishga tushirish: make dev-kanbot",
@@ -320,6 +334,10 @@ export const uz = {
   "error.session_active": "Sessiya hozir ochiq",
   "error.session_file_not_found": "Sessiya fayli bu kompyuterda topilmadi (sessiya boshqa runner'da bo'lishi mumkin): {session_id}",
   "error.pane_alive": "Sessiya hali ishlayapti — olib tashlanmaydi",
+  "error.model_invalid": "Model ID noto'g'ri: «{model}». Bitta so'z bo'lishi kerak (harf, raqam va . _ : / -)",
+  "error.model_agent_unsupported": "Model tanlash faqat Claude uchun (bu sessiya: {agent})",
+  "error.pane_not_alive": "Sessiya tugagan",
+  "error.pane_not_idle": "Sessiya band (holat: {state}) — model faqat kutish holatida o'zgaradi",
   "error.session_id_invalid": "Sessiya ID noto'g'ri",
 
   "error.upload_type_invalid": "«{name}» — bu fayl turi qo'llab-quvvatlanmaydi. Mumkin: {allowed}",

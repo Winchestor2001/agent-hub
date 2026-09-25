@@ -90,6 +90,8 @@ class ApiEnv:
     screens: dict[str, str] = field(default_factory=dict)
     started: list[dict[str, Any]] = field(default_factory=list)
     killed: list[str] = field(default_factory=list)
+    # Pane'ga yuborilgan matn/tugmalar: {"pane": id, "text": ..., "enter": ...}.
+    inputs: list[dict[str, Any]] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
     kanbot_down: bool = False
 
@@ -163,6 +165,11 @@ def _install_kanbot_routes(env: ApiEnv) -> None:
         env.killed.append(pane_id)
         return response
 
+    def pane_input(request: httpx.Request, pane_id: str) -> httpx.Response:
+        response = guarded({"ok": True})
+        env.inputs.append({"pane": pane_id, **json.loads(request.content)})
+        return response
+
     def get_pane(request: httpx.Request, pane_id: str) -> httpx.Response:
         pane = next((p for p in env.panes if p["id"] == pane_id), None)
         if pane is None:
@@ -186,6 +193,7 @@ def _install_kanbot_routes(env: ApiEnv) -> None:
     router.post("/api/panes/start").mock(side_effect=start)
     router.get(path__regex=r"^/api/panes/(?P<pane_id>[^/]+)/read$").mock(side_effect=read)
     router.post(path__regex=r"^/api/panes/(?P<pane_id>[^/]+)/kill$").mock(side_effect=kill)
+    router.post(path__regex=r"^/api/panes/(?P<pane_id>[^/]+)/input$").mock(side_effect=pane_input)
 
 
 @pytest.fixture
