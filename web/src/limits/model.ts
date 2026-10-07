@@ -17,16 +17,51 @@ export interface LimitBadge {
   window: LimitWindow;
 }
 
-/** Mavjud oynalar (5 soatlik va/yoki haftalik) — yo'qlari ro'yxatga kirmaydi. */
+/**
+ * TopBar uchun ixcham primary badge.
+ * To'liq 5h/7d tafsilotlar hover/focus card ichida qoladi.
+ */
 export function limitBadges(item: AgentLimits): LimitBadge[] {
-  const badges: LimitBadge[] = [];
-  if (item.five_hour) badges.push({ kind: "five_hour", window: item.five_hour });
-  if (item.weekly) badges.push({ kind: "weekly", window: item.weekly });
-  return badges;
+  if (item.agent === "codex") {
+    if (item.five_hour) return [{ kind: "five_hour", window: item.five_hour }];
+    if (item.weekly) return [{ kind: "weekly", window: item.weekly }];
+    return [];
+  }
+  if (item.weekly) return [{ kind: "weekly", window: item.weekly }];
+  if (item.five_hour) return [{ kind: "five_hour", window: item.five_hour }];
+  return [];
 }
 
 /** Brauzer vaqt zonasida soat:daqiqa; `resets_at` yo'q bo'lsa `null`. */
 export function formatResetTime(resetsAt: number | null): string | null {
   if (resetsAt === null) return null;
   return new Date(resetsAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Foiz UI'da butun son sifatida ko'rsatiladi. */
+export function formatLimitPercent(usedPercent: number): string {
+  return `${String(Math.floor(usedPercent))}%`;
+}
+
+/** Tooltip/card uchun sana + vaqt; `null` bo'lsa `null`. */
+export function formatResetDateTime(resetsAt: number | null): string | null {
+  if (resetsAt === null) return null;
+  return new Date(resetsAt * 1000).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Ma'lumot nechchi daqiqa oldin yangilanganini ixcham ko'rsatadi. */
+export function formatAge(updatedAt: number | null, nowMs = Date.now()): string | null {
+  if (updatedAt === null) return null;
+  const seconds = Math.max(0, Math.floor(nowMs / 1000 - updatedAt));
+  if (seconds < 60) return "<1m";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${String(minutes)}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${String(hours)}h`;
+  return `${String(Math.floor(hours / 24))}d`;
 }
