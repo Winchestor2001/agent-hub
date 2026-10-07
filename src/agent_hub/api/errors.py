@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from agent_hub.backlog_client import BacklogError
 from agent_hub.kanbot_client import KanbotError
 from agent_hub.registry import RegistryError
+from agent_hub.services.claude_config import ConfigError
 from agent_hub.services.sessions import SessionError
 from agent_hub.services.updates import UpdateError
 from agent_hub.services.uploads import UploadError
@@ -61,6 +62,15 @@ _UPDATE_STATUS = {
     "update_cask_missing": 409,
     "update_running": 409,
 }
+_CONFIG_STATUS = {
+    "config_scope_unknown": 404,
+    "config_not_found": 404,
+    "config_exists": 409,
+    "config_conflict": 409,
+    "config_symlink": 409,
+    "config_path_outside": 403,
+    "config_too_large": 413,
+}
 _KANBOT_STATUS = {
     "kanbot_unavailable": 503,
     "kanbot_no_runner": 409,
@@ -89,6 +99,8 @@ def _describe(exc: Exception) -> tuple[int, str, dict[str, Any], str | None]:
         return _UPDATE_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, UploadError):
         return _UPLOAD_STATUS.get(exc.code, 422), exc.code, exc.params, None
+    if isinstance(exc, ConfigError):
+        return _CONFIG_STATUS.get(exc.code, 422), exc.code, exc.params, None
     if isinstance(exc, BacklogError):
         return _BACKLOG_STATUS.get(exc.code, 502), exc.code, exc.params, str(exc)
     if isinstance(exc, KanbotError):
@@ -119,6 +131,7 @@ def install_error_handlers(app: FastAPI) -> None:
         SessionError,
         UpdateError,
         UploadError,
+        ConfigError,
         BacklogError,
         KanbotError,
     )

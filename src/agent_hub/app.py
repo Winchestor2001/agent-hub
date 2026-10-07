@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 
 from agent_hub import __version__
 from agent_hub.api import (
+    claude_config,
     events,
     folders,
     health,
@@ -75,6 +76,7 @@ def create_app(
         uploads,
         updates,
         limits,
+        claude_config,
         terminal,
         events,
     )

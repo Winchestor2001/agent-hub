@@ -13,6 +13,7 @@ from fastapi import Depends, Request
 from agent_hub.backlog_client import BacklogClient
 from agent_hub.kanbot_client import AgentSession, KanbotClient, KanbotError, Pane
 from agent_hub.registry import Project, Registry
+from agent_hub.services.claude_config import ClaudeConfigService
 from agent_hub.services.limits import LimitsService
 from agent_hub.services.sessions import SessionService
 from agent_hub.services.state import EffectiveState, StateResolver
@@ -50,6 +51,11 @@ class Hub:
         self.state = StateResolver.for_kanbot(kanbot)
         self.updates = UpdateService.detect()
         self.limits = LimitsService.for_settings(settings)
+        self.claude_config = ClaudeConfigService(
+            settings.claude_home or settings.home / ".claude",
+            settings.config_dir / "config-backups",
+            registry.load,
+        )
         self._backlog_factory = backlog_factory
         self._backlogs: dict[Path, BacklogClient] = {}
         # Fayli o'chirilgan (agent, session_id): runner qayta skanerlaguncha KanBot ko'rsataveradi.

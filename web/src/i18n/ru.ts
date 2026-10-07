@@ -374,6 +374,27 @@ export const ru: Dictionary = {
   "error.upload_name_invalid": "Неверное имя файла: {name}",
   "error.upload_not_found": "Загруженный файл не найден: {path}",
 
+  "error.config_kind_unknown": "Неизвестный тип конфигурации: {kind}",
+  "error.config_kind_scope": "«{kind}» не используется в этой области ({scope})",
+  "error.config_scope_unknown": "Область не найдена: {scope}",
+  "error.config_scope_missing": "Папки области нет: {path}",
+  "error.config_name_invalid": "Неверное имя: «{name}». Только строчные буквы, цифры и дефис (до 64 символов)",
+  "error.config_path_outside": "Путь вне разрешённой папки: {path}",
+  "error.config_symlink": "Запись через symlink запрещена: {path}",
+  "error.config_not_file": "Это не обычный файл: {path}",
+  "error.config_not_text": "Файл не текстовый (UTF-8)",
+  "error.config_too_large": "Файл слишком большой: {size} байт (лимит {limit})",
+  "error.config_exists": "Файл уже существует: {path}",
+  "error.config_not_found": "Файл не найден: {path}",
+  "error.config_conflict": "Файл изменился после открытия: {path}. Перезагрузите и внесите изменения заново",
+  "error.config_json_invalid": "Ошибка JSON (строка {line}, столбец {column}): {error}",
+  "error.config_json_not_object": "JSON должен быть объектом ({ … })",
+  "error.config_mcp_invalid": "«mcpServers» должен быть объектом",
+  "error.config_settings_hooks_invalid": "«hooks» должен быть объектом",
+  "error.config_frontmatter_invalid": "Ошибка frontmatter (блок ---): {error}",
+  "error.config_frontmatter_missing": "В начале файла нужен frontmatter (блок ---); поля: {fields}",
+  "error.config_frontmatter_field": "В frontmatter не заполнено поле «{field}»",
+
   "error.shell_enabled":
     "Включён опасный агент «{agent}». Отключить: kanbot config --disable shell glm kimi",
   "error.agent_enabled":
