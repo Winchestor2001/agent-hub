@@ -5,11 +5,13 @@ import { useI18n } from "../i18n/context";
 interface ModalProps {
   title: string;
   onClose: () => void;
+  /** Qo'shimcha klass (masalan, keng diff oynasi uchun). */
+  className?: string;
   children: ReactNode;
 }
 
 /** Native `<dialog>`: fokus ichida qoladi, Escape yopadi. */
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, className, children }: ModalProps) {
   const { t } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -27,7 +29,7 @@ export function Modal({ title, onClose, children }: ModalProps) {
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={className ? `modal ${className}` : "modal"}
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();

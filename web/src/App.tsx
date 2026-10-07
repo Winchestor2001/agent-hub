@@ -5,6 +5,7 @@ import { useLiveEvents } from "./api/events";
 import { useHealth, useLiveSessions, useProjects } from "./api/queries";
 import { Banners } from "./components/Banners";
 import { BoardPanel } from "./components/BoardPanel";
+import { ConfigView } from "./components/ConfigView";
 import { NewSessionDialog } from "./components/NewSessionDialog";
 import { ProjectsPanel } from "./components/ProjectsPanel";
 import { SessionsPanel } from "./components/SessionsPanel";
@@ -31,6 +32,8 @@ export function App() {
   const [terminalPaneId, setTerminalPaneId] = useState<string | null>(null);
   // Sessiyalar paneli odatda faqat tanlangan loyiha sessiyalarini ko'rsatadi.
   const [showAllSessions, setShowAllSessions] = useState(false);
+  // Claude konfiguratsiyasi ochiq bo'lsa asosiy panellar o'rnida ko'rinadi (boshlang'ich qamrov bilan).
+  const [configScope, setConfigScope] = useState<string | null>(null);
   const live = useLiveSessions();
   // Xatoda eski ro'yxat hisobga olinmaydi (panel ham uni ko'rsatmaydi).
   const livePanes = live.error ? undefined : live.data?.live;
@@ -82,14 +85,31 @@ export function App() {
 
   return (
     <div className="app">
-      <TopBar health={health.data} error={health.error} />
+      <TopBar
+        health={health.data}
+        error={health.error}
+        onOpenConfig={() => {
+          setConfigScope("global");
+        }}
+      />
       <Banners banners={banners} />
-      <main className="panels">
+      {configScope !== null && (
+        <ConfigView
+          initialScope={configScope}
+          onClose={() => {
+            setConfigScope(null);
+          }}
+        />
+      )}
+      <main className="panels" hidden={configScope !== null}>
         <ProjectsPanel
           projects={items}
           error={projects.error}
           selectedId={selected?.id ?? null}
           onSelect={selectProject}
+          onOpenConfig={(projectId) => {
+            setConfigScope(`project:${projectId}`);
+          }}
         />
         {terminalPaneId && (
           <TerminalView

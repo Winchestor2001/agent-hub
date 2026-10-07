@@ -83,12 +83,22 @@ const SAME_IN_RU = new Set([
   "task.milestone",
   "task.dod",
   "model.custom_placeholder",
+  "config.kind.claude_md",
+  "config.kind.claude_local_md",
+  "config.template.skill",
 ]);
+/** Fayl yo'llari (`.claude/rules/*.md`) har tilda bir xil. */
+const SAME_IN_RU_PREFIXES = ["config.kind_hint."];
 
 describe("ru", () => {
   it("SAME_IN_RU dan tashqari hamma matn tarjima qilingan", () => {
     const untranslated = Object.entries(uz)
-      .filter(([key, text]) => ru[key as keyof typeof uz] === text && !SAME_IN_RU.has(key))
+      .filter(
+        ([key, text]) =>
+          ru[key as keyof typeof uz] === text &&
+          !SAME_IN_RU.has(key) &&
+          !SAME_IN_RU_PREFIXES.some((prefix) => key.startsWith(prefix)),
+      )
       .map(([key]) => key);
     expect(untranslated).toEqual([]);
   });

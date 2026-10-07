@@ -113,6 +113,8 @@ textarea {
 .app {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
+  /* Tor oynada topbar sahifani kengaytirmasin — o'zi aylantiriladi. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
 }
 
@@ -121,9 +123,14 @@ textarea {
   align-items: center;
   gap: 16px;
   height: 36px;
+  overflow-x: auto;
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+}
+
+.topbar > * {
+  flex-shrink: 0;
 }
 
 .topbar h1 {
@@ -641,9 +648,19 @@ textarea {
   opacity: 0;
 }
 
+.project-config {
+  position: absolute;
+  top: 46px;
+  right: 3px;
+  font-size: 13px;
+  opacity: 0;
+}
+
 .project-row:hover .project-remove,
 .project-row:hover .project-edit,
+.project-row:hover .project-config,
 .project-edit:focus-visible,
+.project-config:focus-visible,
 .project-remove:focus-visible {
   opacity: 1;
 }
@@ -1559,4 +1576,441 @@ button.session-open:focus-visible {
 .session-selected {
   border-color: #7a2a28;
   background: var(--danger-bg);
+}
+
+/* --- Claude konfiguratsiyasi --- */
+
+.config-view {
+  grid-row: -2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.config-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.config-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-strong);
+}
+
+.config-scope {
+  max-width: 320px;
+}
+
+.config-root {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-close {
+  margin-left: auto;
+}
+
+.config-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 200px 280px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.config-body-guide {
+  grid-template-columns: 200px 280px minmax(0, 1fr) minmax(280px, 34%);
+}
+
+.config-kinds,
+.config-items,
+.config-guide {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.config-kinds {
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.config-kinds .list-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.config-kind-hint {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-items-head {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-items-head > input {
+  flex: 1;
+}
+
+.config-items-body {
+  flex: 1;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.config-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+}
+
+.config-item-meta > .mono {
+  overflow: hidden;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-skipped {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.chip-warn {
+  border-color: #6b5320;
+  color: var(--warn);
+}
+
+.chip-dirty {
+  border-color: #2f5fb3;
+  color: #8fb7ff;
+}
+
+.config-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+.config-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.config-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.config-editor-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.config-editor-title .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: min(320px, 100%);
+}
+
+.config-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-toolbar-hint {
+  font-size: 11px;
+}
+
+.config-textarea {
+  flex: 1;
+  min-height: 280px;
+  padding: 8px;
+  line-height: 1.45;
+  tab-size: 2;
+  white-space: pre;
+  resize: none;
+}
+
+.config-actions {
+  align-items: center;
+}
+
+.config-actions-spacer {
+  flex: 1;
+}
+
+.config-warning {
+  padding: 6px 8px;
+  border: 1px solid #5a4520;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: #f0c869;
+}
+
+.config-view > .config-warning {
+  margin: 6px 12px 0;
+}
+
+.config-stale,
+.config-unsaved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.config-guide {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+.config-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-guide-header > select {
+  flex: 1;
+}
+
+.config-guide-body {
+  flex: 1;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+.modal-wide {
+  width: min(960px, calc(100vw - 32px));
+}
+
+.config-diff {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.config-diff-line {
+  display: grid;
+  grid-template-columns: 40px 40px 16px minmax(0, 1fr);
+  white-space: pre;
+}
+
+.config-diff-no {
+  padding-right: 6px;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+
+.config-diff-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.config-diff-add {
+  background: #12261a;
+  color: #a6e3b4;
+}
+
+.config-diff-del {
+  background: #2a1215;
+  color: #ffb3ae;
+}
+
+.config-diff-skip {
+  padding: 2px 8px;
+  border-block: 1px dashed var(--border);
+  color: var(--muted);
+}
+
+.config-apply-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.config-apply-list,
+.config-apply-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.config-apply-results li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+}
+
+.config-result-scope {
+  min-width: 140px;
+  color: var(--fg-strong);
+}
+
+.config-result-ok > span:last-child {
+  color: var(--ok);
+}
+
+/* --- markdown (qo'llanmalar) --- */
+
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fg);
+  line-height: 1.55;
+}
+
+.markdown h3,
+.markdown h4,
+.markdown h5 {
+  margin: 6px 0 0;
+  color: var(--fg-strong);
+}
+
+.markdown h3 {
+  font-size: 15px;
+}
+
+.markdown h4 {
+  font-size: 13px;
+}
+
+.markdown h5 {
+  font-size: 12px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.markdown .markdown-depth-1 {
+  margin-left: 16px;
+}
+
+.markdown .markdown-depth-2,
+.markdown .markdown-depth-3 {
+  margin-left: 32px;
+}
+
+.markdown code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--panel-raised);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.markdown-code {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.markdown-code code {
+  padding: 0;
+  background: none;
+}
+
+.markdown blockquote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.markdown a {
+  color: var(--accent);
+}
+
+.markdown-table {
+  overflow-x: auto;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.markdown th,
+.markdown td {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+@media (max-width: 900px) {
+  .config-body,
+  .config-body-guide {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .config-kinds,
+  .config-items {
+    max-height: 220px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
 }

@@ -246,6 +246,33 @@ shuning uchun:
 - ID noma'lum bo'lsa, Claude Code o'zi rad etadi — xabar terminalda ko'rinadi;
 - Codex sessiyalarida va yangi sessiya dialogida model tanlash yo'q.
 
+**Claude konfiguratsiyasi.** Yuqori paneldagi **Konfiguratsiya** tugmasi (yoki loyiha qatoridagi `⚙`)
+Claude Code fayllarini asosiy panellar o'rnida ochadi; **← Doskaga qaytish** yopadi. Yuqorida qamrov
+tanlanadi: **Global** (`~/.claude` — barcha loyihalar) yoki loyiha papkasi (loyihaning qo'shimcha repolari
+alohida qamrov). Chapda turlar — CLAUDE.md, CLAUDE.local.md, sozlamalar (`settings.json`,
+`settings.local.json`), MCP (`.mcp.json`), qoidalar, buyruqlar, skill'lar, subagentlar va hook skriptlari;
+qamrovda bo'lmaydigan tur (masalan, globalda MCP) o'chiq turadi.
+
+- Ro'yxatda qidiruv nom va yo'l bo'yicha ishlaydi (90+ skill ham tez). **+ Yangi** — yangi element: nom
+  kiritiladi (kichik harf, raqam, `-`; hook'lar kengaytma bilan, `guard.sh`), matn **shablondan**, **fayl
+  yuklash** orqali yoki to'g'ridan-to'g'ri qo'yib to'ldiriladi. **Qo'llanma** — tanlangan tur bo'yicha
+  o'zbekcha yo'riqnoma (ustuvorlik, shablonlar, misollar).
+- **Saqlash** avval o'zgarishlar farqini (diff) ko'rsatadi, faqat **Diskka yozish** dan keyin yoziladi
+  (`⌘S`/`Ctrl+S` ham diff'ni ochadi). Fayl ochilgandan keyin boshqa joyda o'zgargan bo'lsa yozilmaydi:
+  ogohlantirish chiqadi, qoralamani nusxalab **Qayta yuklash** mumkin.
+- Mavjud faylni almashtirish yoki o'chirishdan oldin zaxira nusxa `~/.config/agent-hub/config-backups/` ga
+  (`0600`) saqlanadi; yangi `settings*.json` `0600`, hook skriptlari `0755` bilan yaratiladi, mavjud fayl
+  huquqi o'zgarmaydi. JSON, frontmatter (skill uchun `description`, subagent uchun `name` va
+  `description`) va hajm (512 KB) yozishdan oldin tekshiriladi.
+- **Qo'llash…** — joriy matnni global va/yoki belgilangan loyihalarga yozadi; natija har qamrov uchun
+  alohida (yaratildi / yangilandi / o'zgarmadi / xato). Mavjud fayllar faqat «almashtirish» belgilansa
+  yangilanadi.
+- Bir xil nomli skill yoki subagent ikki qamrovda bo'lsa, ro'yxatda «ustun» / «yopilgan» belgisi va
+  muharrirda ogohlantirish chiqadi (skill'da global, subagent'da loyiha ustun). `CLAUDE.local.md`
+  `.gitignore` da bo'lmasa ham ogohlantiriladi.
+- Agent Hub hech narsani git'ga qo'shmaydi va commit qilmaydi; symlink orqali yoki qamrovdan tashqariga
+  yozish rad etiladi.
+
 **Tugagan sessiyalar.** Agent chiqqan pane «Tugagan» bo'limiga o'tadi (chiqish kodi bilan), terminali
 ko'rish uchun ochiladi. `×` bitta pane'ni, **Tozalash** hammasini KanBot ro'yxatidan olib tashlaydi; ochiq
 terminali yopiladi. Hali ishlayotgan pane olib tashlanmaydi. Suhbat tarixi o'chmaydi: sessiya «O'tgan

@@ -14,9 +14,10 @@ interface ProjectsPanelProps {
   error: ApiError | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onOpenConfig: (id: string) => void;
 }
 
-export function ProjectsPanel({ projects, error, selectedId, onSelect }: ProjectsPanelProps) {
+export function ProjectsPanel({ projects, error, selectedId, onSelect, onOpenConfig }: ProjectsPanelProps) {
   const { t } = useI18n();
   const [adding, setAdding] = useState(false);
 
@@ -34,6 +35,7 @@ export function ProjectsPanel({ projects, error, selectedId, onSelect }: Project
             project={project}
             selected={project.id === selectedId}
             onSelect={onSelect}
+            onOpenConfig={onOpenConfig}
           />
         ))}
       </ul>
@@ -73,9 +75,10 @@ interface ProjectRowProps {
   project: ProjectItem;
   selected: boolean;
   onSelect: (id: string) => void;
+  onOpenConfig: (id: string) => void;
 }
 
-function ProjectRow({ project, selected, onSelect }: ProjectRowProps) {
+function ProjectRow({ project, selected, onSelect, onOpenConfig }: ProjectRowProps) {
   const { t } = useI18n();
   const remove = useRemoveProject();
   const [confirming, setConfirming] = useState(false);
@@ -119,6 +122,17 @@ function ProjectRow({ project, selected, onSelect }: ProjectRowProps) {
         }}
       >
         ✎
+      </button>
+      <button
+        type="button"
+        className="icon-button project-config"
+        title={t("config.open_project", { name: project.name })}
+        aria-label={t("config.open_project", { name: project.name })}
+        onClick={() => {
+          onOpenConfig(project.id);
+        }}
+      >
+        ⚙
       </button>
       {editing && (
         <AddProjectDialog

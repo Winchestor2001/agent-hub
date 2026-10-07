@@ -6,6 +6,18 @@ import type {
   AgentUpdate,
   BacklogInit,
   Board,
+  ConfigApply,
+  ConfigApplyResult,
+  ConfigDelete,
+  ConfigFile,
+  ConfigGuide,
+  ConfigGuideContent,
+  ConfigItemsResponse,
+  ConfigScopesResponse,
+  ConfigTemplate,
+  ConfigTemplateRendered,
+  ConfigWrite,
+  ConfigWriteResult,
   FolderListing,
   FolderSuggestions,
   Health,
@@ -54,6 +66,13 @@ export const queryKeys = {
   folder: (path: string) => ["folders", "browse", path] as const,
   updates: ["updates"],
   limits: ["limits"],
+  config: ["claude-config"],
+  configScopes: ["claude-config", "scopes"],
+  configItems: (scope: string, kind: string) => ["claude-config", "items", scope, kind] as const,
+  configFile: (scope: string, kind: string, name: string) => ["claude-config", "file", scope, kind, name] as const,
+  configTemplates: ["claude-config", "templates"],
+  configGuides: ["claude-config", "guides"],
+  configGuide: (id: string) => ["claude-config", "guides", id] as const,
 };
 
 const enc = encodeURIComponent;
@@ -446,5 +465,108 @@ export function useRemoveSessions() {
         client.invalidateQueries({ queryKey: ["sessions"] }),
         client.invalidateQueries({ queryKey: queryKeys.projects }),
       ]),
+  });
+}
+
+// --- Claude konfiguratsiyasi ---
+
+export function useConfigScopes() {
+  return useQuery({
+    queryKey: queryKeys.configScopes,
+    queryFn: ({ signal }) => apiFetch<ConfigScopesResponse>("/api/claude-config/scopes", { signal }),
+  });
+}
+
+export function useConfigItems(scope: string, kind: string) {
+  return useQuery({
+    queryKey: queryKeys.configItems(scope, kind),
+    queryFn: ({ signal }) =>
+      apiFetch<ConfigItemsResponse>(`/api/claude-config/items?scope=${enc(scope)}&kind=${enc(kind)}`, { signal }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Fayl matni; tahrir paytida fon yangilanishi matnni almashtirib yubormasin — faqat qo'lda qayta yuklanadi. */
+export function useConfigFile(scope: string, kind: string, name: string | null) {
+  return useQuery({
+    queryKey: queryKeys.configFile(scope, kind, name ?? ""),
+    queryFn: ({ signal }) =>
+      apiFetch<ConfigFile>(
+        `/api/claude-config/file?scope=${enc(scope)}&kind=${enc(kind)}&name=${enc(name ?? "")}`,
+        { signal },
+      ),
+    enabled: name !== null,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+}
+
+export function useConfigTemplates() {
+  return useQuery({
+    queryKey: queryKeys.configTemplates,
+    queryFn: ({ signal }) =>
+      apiFetch<{ templates: ConfigTemplate[] }>("/api/claude-config/templates", { signal }),
+    staleTime: Infinity,
+  });
+}
+
+export function fetchConfigTemplate(id: string, name: string): Promise<ConfigTemplateRendered> {
+  return apiFetch<ConfigTemplateRendered>(`/api/claude-config/templates/${enc(id)}?name=${enc(name)}`);
+}
+
+export function useConfigGuides() {
+  return useQuery({
+    queryKey: queryKeys.configGuides,
+    queryFn: ({ signal }) => apiFetch<{ guides: ConfigGuide[] }>("/api/claude-config/guides", { signal }),
+    staleTime: Infinity,
+  });
+}
+
+export function useConfigGuide(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.configGuide(id ?? ""),
+    queryFn: ({ signal }) => apiFetch<ConfigGuideContent>(`/api/claude-config/guides/${enc(id ?? "")}`, { signal }),
+    enabled: id !== null,
+    staleTime: Infinity,
+  });
+}
+
+function useInvalidateConfig() {
+  const client = useQueryClient();
+  // Ro'yxatlar (shadow belgilari boshqa qamrovlarga ham bog'liq) va ochiq fayllar.
+  return () =>
+    client.invalidateQueries({
+      queryKey: queryKeys.config,
+      predicate: (query) => query.queryKey[1] === "items" || query.queryKey[1] === "file",
+    });
+}
+
+export function useWriteConfig() {
+  const invalidate = useInvalidateConfig();
+  return useMutation({
+    mutationFn: (body: ConfigWrite) =>
+      apiFetch<ConfigWriteResult>("/api/claude-config/file", { method: "PUT", body }),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useDeleteConfig() {
+  const invalidate = useInvalidateConfig();
+  return useMutation({
+    mutationFn: ({ scope, kind, name, etag }: ConfigDelete) =>
+      apiFetch<{ scope: string; path: string; backup: string }>(
+        `/api/claude-config/file?scope=${enc(scope)}&kind=${enc(kind)}&name=${enc(name)}&etag=${enc(etag)}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useApplyConfig() {
+  const invalidate = useInvalidateConfig();
+  return useMutation({
+    mutationFn: (body: ConfigApply) =>
+      apiFetch<{ results: ConfigApplyResult[] }>("/api/claude-config/apply", { method: "POST", body }),
+    onSuccess: () => invalidate(),
   });
 }

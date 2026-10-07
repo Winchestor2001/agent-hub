@@ -17,7 +17,13 @@ function Indicator({ tone, label }: { tone: Tone; label: string }) {
   );
 }
 
-export function TopBar({ health, error }: { health: Health | undefined; error: ApiError | null }) {
+interface TopBarProps {
+  health: Health | undefined;
+  error: ApiError | null;
+  onOpenConfig: () => void;
+}
+
+export function TopBar({ health, error, onOpenConfig }: TopBarProps) {
   const { t } = useI18n();
   const kanbot = health?.kanbot;
   const runners = kanbot?.runners_online ?? 0;
@@ -44,6 +50,9 @@ export function TopBar({ health, error }: { health: Health | undefined; error: A
     <header className="topbar">
       <h1>{t("app.title")}</h1>
       <div className="indicators">{indicators}</div>
+      <button type="button" className="button button-small" title={t("config.open_title")} onClick={onOpenConfig}>
+        {t("config.open")}
+      </button>
       <LimitBadges />
       <UpdateButtons />
       <NotifyToggle />

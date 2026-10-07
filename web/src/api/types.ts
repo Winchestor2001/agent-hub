@@ -326,3 +326,133 @@ export interface LimitsResponse {
   claude: AgentLimits;
   codex: AgentLimits;
 }
+
+// --- Claude konfiguratsiyasi (`services/claude_config.py`) ---
+
+export type ConfigScopeKind = "global" | "project";
+
+export interface ConfigScope {
+  /** "global", "project:<id>" yoki "project:<id>:<n>" (loyihaning qo'shimcha papkasi). */
+  id: string;
+  kind: ConfigScopeKind;
+  root: string;
+  label: string;
+  project_id: string | null;
+  exists: boolean;
+}
+
+export interface ConfigKind {
+  id: string;
+  format: "markdown" | "frontmatter" | "json" | "script";
+  /** `true` — ko'p elementli papka (skills, agents...), aks holda belgilangan fayl(lar). */
+  collection: boolean;
+  layout: "file" | "skill";
+  extensions: string[];
+  scopes: ConfigScopeKind[];
+  fixed: Partial<Record<ConfigScopeKind, string[]>>;
+  required: string[];
+  /** Bir xil nom ikki qamrovda bo'lsa qaysi biri ustun. */
+  winner: ConfigScopeKind | null;
+}
+
+export interface ConfigScopesResponse {
+  scopes: ConfigScope[];
+  kinds: ConfigKind[];
+}
+
+export interface ConfigShadow {
+  scope: string;
+  winner: "this" | "other";
+}
+
+export interface ConfigItem {
+  name: string;
+  path: string;
+  exists: boolean;
+  size: number | null;
+  mtime: number | null;
+  symlink: boolean;
+  shadow: ConfigShadow[];
+}
+
+export interface ConfigItemsResponse {
+  items: ConfigItem[];
+  /** Nomi qoidaga mos kelmagani uchun ko'rsatilmagan elementlar. */
+  skipped: string[];
+}
+
+export type ConfigWarning = "local_not_ignored";
+
+export interface ConfigFile {
+  scope: string;
+  kind: string;
+  name: string;
+  path: string;
+  abs_path: string;
+  exists: boolean;
+  content: string | null;
+  etag: string | null;
+  mode: string | null;
+  warnings: ConfigWarning[];
+}
+
+export interface ConfigWrite {
+  scope: string;
+  kind: string;
+  name: string;
+  content: string;
+  /** `null` — yangi fayl. */
+  etag: string | null;
+}
+
+export interface ConfigWriteResult {
+  scope: string;
+  kind: string;
+  name: string;
+  path: string;
+  etag: string;
+  created: boolean;
+  backup: string | null;
+}
+
+export interface ConfigDelete {
+  scope: string;
+  kind: string;
+  name: string;
+  etag: string;
+}
+
+export interface ConfigApply {
+  kind: string;
+  name: string;
+  content: string;
+  scopes: string[];
+  overwrite: boolean;
+}
+
+export interface ConfigApplyResult {
+  scope: string;
+  ok: boolean;
+  status: "created" | "updated" | "unchanged" | "error";
+  error: ApiErrorBody | null;
+}
+
+export interface ConfigTemplate {
+  id: string;
+  kind: string;
+  name: string;
+}
+
+export interface ConfigTemplateRendered extends ConfigTemplate {
+  content: string;
+}
+
+export interface ConfigGuide {
+  id: string;
+  title: string;
+  kinds: string[];
+}
+
+export interface ConfigGuideContent extends ConfigGuide {
+  content: string;
+}
