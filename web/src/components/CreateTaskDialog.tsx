@@ -12,7 +12,7 @@ interface CreateTaskDialogProps {
   projectId: string;
   board: Board;
   onClose: () => void;
-  onCreated: (taskId: string) => void;
+  onCreated: (taskId: string, startSession: boolean) => void;
 }
 
 export function CreateTaskDialog({ projectId, board, onClose, onCreated }: CreateTaskDialogProps) {
@@ -26,6 +26,7 @@ export function CreateTaskDialog({ projectId, board, onClose, onCreated }: Creat
   const [milestone, setMilestone] = useState("");
   const [acceptance, setAcceptance] = useState("");
   const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [startSession, setStartSession] = useState(false);
   const listId = `new-task-labels-${projectId}`;
 
   function submit(event: SubmitEvent) {
@@ -42,7 +43,7 @@ export function CreateTaskDialog({ projectId, board, onClose, onCreated }: Creat
     if (files.length > 0) body.files = files.map((file) => file.path);
     createTask.mutate(body, {
       onSuccess: ({ id }) => {
-        onCreated(id);
+        onCreated(id, startSession);
         onClose();
       },
     });
@@ -137,6 +138,16 @@ export function CreateTaskDialog({ projectId, board, onClose, onCreated }: Creat
             }}
           />
         </Field>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={startSession}
+            onChange={(e) => {
+              setStartSession(e.target.checked);
+            }}
+          />
+          <span>{t("task_form.start_session_after_create")}</span>
+        </label>
         <FileAttach projectId={projectId} files={files} onChange={setFiles} />
         {createTask.error && <ErrorText error={createTask.error} />}
         <footer className="form-actions">

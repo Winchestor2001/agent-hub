@@ -1,7 +1,7 @@
 import { useState, type SubmitEvent } from "react";
 
 import { useBoard, useHealth, useSessionOptions, useStartSession } from "../api/queries";
-import type { ProjectItem, SessionStart, UploadedFile } from "../api/types";
+import type { ApiErrorBody, ProjectItem, SessionStart, UploadedFile } from "../api/types";
 import { useI18n } from "../i18n/context";
 import { agentChoices, promptPrefix, sessionTasks } from "../sessions/model";
 import { ErrorText } from "./ErrorText";
@@ -32,6 +32,8 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
   const [taskId, setTaskId] = useState(initialTaskId ?? "");
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState<UploadedFile[]>([]);
+  // Sessiya ochildi, lekin vazifa statusi o'zgarmadi: dialog ochiq qoladi, qayta Start yo'q.
+  const [lifecycleError, setLifecycleError] = useState<ApiErrorBody | null>(null);
 
   // Tanlanmagan bo'lsa — birinchi onlayn agent (options kelguncha bo'sh).
   const selectedAgent = agent ?? (choices.find((c) => c.online !== false) ?? choices[0])?.agent ?? "";
@@ -43,7 +45,12 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
     const body: SessionStart = { agent: selectedAgent, cwd, prompt: prompt.trim() };
     if (taskId) body.task_id = taskId;
     if (files.length > 0) body.files = files.map((file) => file.path);
-    startSession.mutate(body, { onSuccess: onClose });
+    startSession.mutate(body, {
+      onSuccess: (pane) => {
+        if (pane.lifecycle?.error) setLifecycleError(pane.lifecycle.error);
+        else onClose();
+      },
+    });
   }
 
   return (
@@ -102,6 +109,7 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
             <pre className="prompt-prefix">{promptPrefix(template, taskId)}</pre>
           </div>
         )}
+        {taskId && <p className="muted">{t("session_form.lifecycle_hint")}</p>}
         <Field
           label={t("session_form.prompt")}
           hint={taskId ? t("session_form.prompt_hint_task") : t("session_form.prompt_hint")}
@@ -124,18 +132,32 @@ export function NewSessionDialog({ project, initialTaskId, onClose }: NewSession
         />
         {kanbotDown && <p className="error-text">{t("session_form.kanbot_down")}</p>}
         {startSession.error && <ErrorText error={startSession.error} />}
-        <footer className="form-actions">
-          <button type="button" className="button" onClick={onClose}>
-            {t("common.cancel")}
-          </button>
-          <button
-            type="submit"
-            className="button button-primary"
-            disabled={startSession.isPending || !selectedAgent || !cwd}
-          >
-            {startSession.isPending ? t("session_form.starting") : t("session_form.start")}
-          </button>
-        </footer>
+        {lifecycleError ? (
+          <>
+            <div className="lifecycle-card" role="status">
+              <p className="warning-text">{t("session_form.lifecycle_failed")}</p>
+              <ErrorText error={lifecycleError} />
+            </div>
+            <footer className="form-actions">
+              <button type="button" className="button button-primary" onClick={onClose}>
+                {t("common.close")}
+              </button>
+            </footer>
+          </>
+        ) : (
+          <footer className="form-actions">
+            <button type="button" className="button" onClick={onClose}>
+              {t("common.cancel")}
+            </button>
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={startSession.isPending || !selectedAgent || !cwd}
+            >
+              {startSession.isPending ? t("session_form.starting") : t("session_form.start")}
+            </button>
+          </footer>
+        )}
       </form>
     </Modal>
   );

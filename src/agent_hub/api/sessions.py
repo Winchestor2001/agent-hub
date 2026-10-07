@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from agent_hub.backlog_client import BacklogError
 from agent_hub.kanbot_client import SESSION_AGENTS
 from agent_hub.registry import Project
 from agent_hub.services import models, transcripts, uploads
@@ -16,7 +17,7 @@ from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE, TaskInfo, sessi
 
 from .deps import Hub, HubDep
 from .errors import ApiError
-from .views import TaskIndex, pane_view, past_session_view, sort_panes
+from .views import TaskIndex, find_status, pane_view, past_session_view, sort_panes
 
 router = APIRouter()
 
@@ -56,6 +57,19 @@ class SessionsDelete(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sessions: list[SessionResume] = Field(min_length=1, max_length=MAX_DELETE)
+
+
+def _lifecycle(
+    task_status: str, *, promoted: bool = False, error: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Vazifa lifecycle natijasi; `error` (ApiErrorBody shakli) sessiyani bekor qilmaydi."""
+    return {"promoted": promoted, "status": task_status, "error": error}
+
+
+def _lifecycle_failed(task_status: str, exc: BacklogError) -> dict[str, Any]:
+    return _lifecycle(
+        task_status, error={"code": exc.code, "params": exc.params, "detail": str(exc)}
+    )
 
 
 async def _indexes(hub: Hub, projects: list[Project]) -> dict[str, TaskIndex | None]:
@@ -131,8 +145,26 @@ async def list_sessions(
 async def start_session(hub: HubDep, project_id: str, body: SessionStart) -> dict[str, Any]:
     project = hub.project(project_id)
     task = None
+    lifecycle: dict[str, Any] | None = None
+    promote_to: str | None = None
     if body.task_id:
-        task = (await TaskIndex.load(hub.backlog(project))).get(body.task_id)
+        backlog = hub.backlog(project)
+        task = (await TaskIndex.load(backlog)).get(body.task_id)
+        # Status topilmasa yoki o'qilmasa ham sessiya ochiladi: lifecycle — qulaylik, to'siq emas.
+        try:
+            statuses = await backlog.statuses()
+        except BacklogError as exc:
+            lifecycle = _lifecycle_failed(task.status, exc)
+        else:
+            in_progress = find_status(statuses, "In Progress")
+            if in_progress is None:
+                params = {"status": "In Progress", "allowed": statuses}
+                error = {"code": "lifecycle_status_missing", "params": params, "detail": None}
+                lifecycle = _lifecycle(task.status, error=error)
+            elif task.status in (in_progress, find_status(statuses, "Done")):
+                lifecycle = _lifecycle(task.status)
+            else:
+                promote_to = in_progress
     pane = await hub.sessions.start(
         project,
         body.agent,
@@ -141,7 +173,20 @@ async def start_session(hub: HubDep, project_id: str, body: SessionStart) -> dic
         prompt=body.prompt,
         files=uploads.resolve(project, body.files, body.cwd),
     )
-    return pane_view(pane, None, project.id, task)
+    if task is not None and promote_to is not None:
+        # Pane allaqachon ochilgan: bu yerdagi xato javobni yiqitsa, foydalanuvchi qayta bosib
+        # ikkinchi sessiya ochib qo'yadi. Shuning uchun xato lifecycle ichida qaytadi.
+        try:
+            await hub.backlog(project).set_status(task.id, promote_to)
+        except BacklogError as exc:
+            lifecycle = _lifecycle_failed(task.status, exc)
+        else:
+            task = task.model_copy(update={"status": promote_to})
+            lifecycle = _lifecycle(promote_to, promoted=True)
+    view = pane_view(pane, None, project.id, task)
+    if lifecycle is not None:
+        view["lifecycle"] = lifecycle
+    return view
 
 
 @router.post("/api/projects/{project_id}/sessions/resume", status_code=201)

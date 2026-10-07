@@ -8,7 +8,7 @@ from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from agent_hub.backlog_client import BacklogClient
 from agent_hub.kanbot_client import Pane
@@ -19,7 +19,7 @@ from agent_hub.services.sessions import files_block
 
 from .deps import Hub, HubDep, LiveData
 from .errors import ApiError
-from .views import TaskIndex, pane_view, project_view, sort_panes, task_view
+from .views import TaskIndex, find_status, pane_view, project_view, sort_panes, task_view
 
 router = APIRouter(prefix="/api/projects/{project_id}")
 
@@ -53,6 +53,12 @@ class LabelsAdd(BaseModel):
     labels: list[str] = Field(min_length=1, max_length=20)
 
 
+class ChecklistUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checked: StrictBool
+
+
 def _line(field: str, value: str, *, allow_comma: bool = True) -> str:
     """Bir qatorli qiymat: bo'sh emas, boshqaruv belgisiz; ro'yxat qiymatlarida vergul yo'q."""
     value = value.strip()
@@ -67,6 +73,14 @@ async def _check_status(backlog: BacklogClient, status: str) -> str:
     allowed = await backlog.statuses()
     if status not in allowed:
         raise ApiError(422, "status_invalid", status=status, allowed=allowed)
+    return status
+
+
+async def _named_status(backlog: BacklogClient, wanted: str) -> str:
+    statuses = await backlog.statuses()
+    status = find_status(statuses, wanted)
+    if status is None:
+        raise ApiError(422, "status_invalid", status=wanted, allowed=statuses)
     return status
 
 
@@ -163,3 +177,48 @@ async def add_labels(hub: HubDep, project_id: str, task_id: str, body: LabelsAdd
     labels = [_line("labels", label, allow_comma=False) for label in body.labels]
     await backlog.add_label(task.id, labels)
     return {"id": task.id, "labels": list(dict.fromkeys([*task.labels, *labels]))}
+
+
+@router.post("/tasks/{task_id}/complete")
+async def complete_task(hub: HubDep, project_id: str, task_id: str) -> dict[str, Any]:
+    """Nazoratli lifecycle yakuni: foydalanuvchi/agent tekshiruvdan keyin Done qiladi."""
+    backlog = hub.backlog(hub.project(project_id))
+    task = (await TaskIndex.load(backlog)).get(task_id)
+    status = await _named_status(backlog, "Done")
+    await backlog.set_status(task.id, status)
+    return {"id": task.id, "status": status}
+
+
+@router.post("/tasks/{task_id}/acceptance/{index}")
+async def set_acceptance(
+    hub: HubDep, project_id: str, task_id: str, index: int, body: ChecklistUpdate
+) -> dict[str, Any]:
+    backlog = hub.backlog(hub.project(project_id))
+    task = (await TaskIndex.load(backlog)).get(task_id)
+    detail = await backlog.view_task(task.id)
+    if not any(item.index == index for item in detail.acceptance_criteria):
+        raise ApiError(404, "checklist_item_not_found", task_id=task.id, index=index)
+    await backlog.set_acceptance(task.id, index, body.checked)
+    return {"id": task.id, "index": index, "checked": body.checked}
+
+
+@router.delete("/tasks/{task_id}")
+async def delete_task(hub: HubDep, project_id: str, task_id: str) -> dict[str, Any]:
+    """Taskni board'dan olib tashlaydi (`backlog task archive`).
+
+    Jonli agent sessiyasi bog'langan task o'chirilmaydi: agent ishlayotgan ish yo'qolmasin.
+    """
+    project = hub.project(project_id)
+    backlog = hub.backlog(project)
+    index, live = await asyncio.gather(TaskIndex.load(backlog), hub.live_or_none())
+    task = index.get(task_id)
+    live_sessions = _sessions_by_task(project, hub, index, live).get(task.id, [])
+    if live_sessions:
+        raise ApiError(409, "task_has_live_sessions", task_id=task.id, count=len(live_sessions))
+    statuses = await backlog.statuses()
+    terminal_status = statuses[-1] if statuses else None
+    if task.status == terminal_status:
+        await backlog.complete_task_cleanup(task.id)
+    else:
+        await backlog.archive_task(task.id)
+    return {"id": task.id, "archived": True}

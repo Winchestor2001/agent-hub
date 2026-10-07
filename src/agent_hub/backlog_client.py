@@ -477,6 +477,25 @@ class BacklogClient:
         finally:
             self.invalidate()
 
+    async def set_acceptance(self, task_id: str, index: int, checked: bool) -> None:
+        flag = "--check-ac" if checked else "--uncheck-ac"
+        try:
+            await self._run("task", "edit", flag, str(index), "--", task_id)
+        finally:
+            self.invalidate()
+
+    async def archive_task(self, task_id: str) -> None:
+        try:
+            await self._run("task", "archive", task_id)
+        finally:
+            self.invalidate()
+
+    async def complete_task_cleanup(self, task_id: str) -> None:
+        try:
+            await self._run("task", "complete", task_id)
+        finally:
+            self.invalidate()
+
 
 def _is_locked(message: str) -> bool:
     return "being modified by another process" in message

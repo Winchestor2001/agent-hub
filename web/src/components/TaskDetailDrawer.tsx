@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type SubmitEvent, type ReactNode } from "react";
 
-import { useAddLabels, useSetStatus, useTaskDetail } from "../api/queries";
+import {
+  useAddLabels,
+  useCompleteTask,
+  useDeleteTask,
+  useSetAcceptance,
+  useSetStatus,
+  useTaskDetail,
+} from "../api/queries";
 import type { Board, ChecklistItem, TaskDetail } from "../api/types";
 import { collectLabels, milestoneTitle, splitList } from "../board/model";
 import { useI18n } from "../i18n/context";
@@ -76,6 +83,7 @@ export function TaskDetailDrawer({
             onOpen={onOpen}
             onStatusChanged={onStatusChanged}
             onOpenTerminal={onOpenTerminal}
+            onClose={onClose}
           />
         ) : detail.error ? (
           <ErrorText error={detail.error} />
@@ -94,6 +102,7 @@ interface DetailBodyProps {
   onOpen: (taskId: string) => void;
   onStatusChanged: (taskId: string, status: string) => void;
   onOpenTerminal: (paneId: string) => void;
+  onClose: () => void;
 }
 
 function DetailBody({
@@ -103,11 +112,21 @@ function DetailBody({
   onOpen,
   onStatusChanged,
   onOpenTerminal,
+  onClose,
 }: DetailBodyProps) {
   const { t } = useI18n();
   const setStatus = useSetStatus(projectId);
+  const completeTask = useCompleteTask(projectId);
+  const deleteTask = useDeleteTask(projectId, onClose);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const statuses = board.statuses.includes(task.status) ? board.statuses : [...board.statuses, task.status];
   const byId = new Map(board.tasks.map((item) => [item.id.toLowerCase(), item]));
+  const doneStatus = statuses.find((status) => status.toLowerCase() === "done") ?? "Done";
+  const isDone = task.status === doneStatus;
+  const acceptanceDone = task.acceptance_criteria.filter((item) => item.checked).length;
+  const acceptanceTotal = task.acceptance_criteria.length;
+  const acceptanceReady = acceptanceTotal === 0 || acceptanceDone === acceptanceTotal;
+  const hasFinishedSession = task.sessions.some((pane) => !pane.alive || pane.state === "done");
 
   const taskLink = (id: string, fallbackTitle?: string) => {
     const item = byId.get(id.toLowerCase());
@@ -220,8 +239,38 @@ function DetailBody({
         )}
       </DetailSection>
 
+      <DetailSection title={t("task.lifecycle_title")}>
+        <div className="lifecycle-card">
+          <p className="muted">
+            {t("task.lifecycle_hint", {
+              done: acceptanceDone,
+              total: acceptanceTotal,
+              sessions: task.sessions.length,
+            })}
+          </p>
+          {!acceptanceReady && <p className="warning-text">{t("task.lifecycle_ac_pending")}</p>}
+          {hasFinishedSession && <p className="muted">{t("task.lifecycle_finished_session")}</p>}
+          {completeTask.error && <ErrorText error={completeTask.error} />}
+          <button
+            type="button"
+            className="button button-small button-primary"
+            disabled={completeTask.isPending || isDone || !acceptanceReady}
+            title={!acceptanceReady ? t("task.lifecycle_done_disabled") : undefined}
+            onClick={() => {
+              completeTask.mutate(task.id);
+            }}
+          >
+            {isDone
+              ? t("task.lifecycle_done_already")
+              : completeTask.isPending
+                ? t("common.saving")
+                : t("task.lifecycle_mark_done")}
+          </button>
+        </div>
+      </DetailSection>
+
       <Section title={t("task.description")} text={task.description} />
-      <Checklist title={t("task.acceptance")} items={task.acceptance_criteria} />
+      <AcceptanceChecklist projectId={projectId} task={task} />
       {task.definition_of_done.length > 0 && <Checklist title={t("task.dod")} items={task.definition_of_done} />}
       <Section title={t("task.plan")} text={task.implementation_plan} />
       <Section title={t("task.notes")} text={task.implementation_notes} />
@@ -240,6 +289,50 @@ function DetailBody({
         ) : (
           <Empty />
         )}
+      </DetailSection>
+      <DetailSection title={t("task.danger_zone")}>
+        <div className="danger-card">
+          <p className="muted">{t("task.delete_hint")}</p>
+          {confirmDelete ? (
+            <>
+              <p className="warning-text">{t("task.delete_confirm", { task: task.id })}</p>
+              {deleteTask.error && <ErrorText error={deleteTask.error} />}
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="button button-small"
+                  disabled={deleteTask.isPending}
+                  onClick={() => {
+                    setConfirmDelete(false);
+                    deleteTask.reset();
+                  }}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="button button-small button-danger"
+                  disabled={deleteTask.isPending}
+                  onClick={() => {
+                    deleteTask.mutate(task.id);
+                  }}
+                >
+                  {deleteTask.isPending ? t("task.deleting") : t("task.delete_yes")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="button button-small button-danger"
+              onClick={() => {
+                setConfirmDelete(true);
+              }}
+            >
+              {t("task.delete")}
+            </button>
+          )}
+        </div>
       </DetailSection>
     </>
   );
@@ -329,6 +422,42 @@ function Section({ title, text }: { title: string; text: string | null }) {
   return (
     <DetailSection title={title}>
       {text?.trim() ? <p className="prose">{text}</p> : <Empty />}
+    </DetailSection>
+  );
+}
+
+function AcceptanceChecklist({ projectId, task }: { projectId: string; task: TaskDetail }) {
+  const { t } = useI18n();
+  const setAcceptance = useSetAcceptance(projectId, task.id);
+  const done = task.acceptance_criteria.filter((item) => item.checked).length;
+  return (
+    <DetailSection title={`${t("task.acceptance")} ${String(done)}/${String(task.acceptance_criteria.length)}`}>
+      {task.acceptance_criteria.length > 0 ? (
+        <>
+          <ul className="checklist">
+            {task.acceptance_criteria.map((item) => (
+              <li key={item.index} className={item.checked ? "checked" : undefined}>
+                <label className="checklist-toggle">
+                  <input
+                    type="checkbox"
+                    checked={item.checked}
+                    disabled={setAcceptance.isPending}
+                    onChange={(event) => {
+                      setAcceptance.mutate({ index: item.index, checked: event.target.checked });
+                    }}
+                  />
+                  <span>
+                    <span className="muted">#{item.index}</span> {item.text}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {setAcceptance.error && <ErrorText error={setAcceptance.error} />}
+        </>
+      ) : (
+        <Empty />
+      )}
     </DetailSection>
   );
 }

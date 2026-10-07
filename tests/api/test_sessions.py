@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from agent_hub.backlog_client import CliResult
 from agent_hub.services.sessions import SESSION_PROMPT_TEMPLATE
 
 from .conftest import ApiEnv, assert_error, runner
@@ -142,6 +143,7 @@ def test_start_session_for_task(api: ApiEnv) -> None:
     data = resp.json()
     assert data["id"] == "new1"
     assert data["task"]["id"] == "TASK-1"
+    assert data["task"]["status"] == "In Progress"
     assert api.started == [
         {
             "agent": "claude",
@@ -153,6 +155,62 @@ def test_start_session_for_task(api: ApiEnv) -> None:
             "runner_id": "r1",
         }
     ]
+    assert api.backlog.commands("task", "edit") == [
+        ["task", "edit", "--status=In Progress", "--", "TASK-1"]
+    ]
+    assert data["lifecycle"] == {"promoted": True, "status": "In Progress", "error": None}
+
+
+def test_start_session_for_in_progress_task_does_not_rewrite_status(api: ApiEnv) -> None:
+    resp = api.client.post(
+        "/api/projects/leveling/sessions",
+        json={"agent": "claude", "cwd": str(api.web), "task_id": "TASK-2"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["task"]["status"] == "In Progress"
+    assert resp.json()["lifecycle"] == {"promoted": False, "status": "In Progress", "error": None}
+    assert api.backlog.commands("task", "edit") == []
+
+
+def test_start_session_without_task_has_no_lifecycle(api: ApiEnv) -> None:
+    resp = api.client.post("/api/projects/leveling/sessions", json={"agent": "claude"})
+    assert resp.status_code == 201
+    assert "lifecycle" not in resp.json()
+
+
+def test_start_session_when_project_has_no_in_progress_status(api: ApiEnv) -> None:
+    """Moslashtirilgan statuslar sessiyani bloklamaydi: pane ochiladi, lifecycle xatosi qaytadi."""
+    api.backlog.overrides["config", "get"] = CliResult(0, "Backlog, Doing, Done\n", "")
+    resp = api.client.post(
+        "/api/projects/leveling/sessions", json={"agent": "claude", "task_id": "TASK-1"}
+    )
+    assert resp.status_code == 201
+    assert len(api.started) == 1
+    assert api.backlog.commands("task", "edit") == []
+    data = resp.json()
+    assert data["task"]["status"] == "To Do"
+    assert data["lifecycle"]["promoted"] is False
+    assert data["lifecycle"]["error"]["code"] == "lifecycle_status_missing"
+    assert data["lifecycle"]["error"]["params"] == {
+        "status": "In Progress",
+        "allowed": ["Backlog", "Doing", "Done"],
+    }
+
+
+def test_start_session_keeps_pane_when_status_update_fails(api: ApiEnv) -> None:
+    """Pane ochilgach backlog xatosi javobni yiqitmaydi (aks holda qayta Start = 2 sessiya)."""
+    api.backlog.overrides["task", "edit"] = CliResult(2, "", "boom")
+    resp = api.client.post(
+        "/api/projects/leveling/sessions", json={"agent": "claude", "task_id": "TASK-1"}
+    )
+    assert resp.status_code == 201
+    assert len(api.started) == 1
+    data = resp.json()
+    assert data["id"] == "new1"
+    assert data["task"]["status"] == "To Do"
+    assert data["lifecycle"]["promoted"] is False
+    assert data["lifecycle"]["error"]["code"] == "backlog_cli_error"
+    assert data["lifecycle"]["error"]["detail"] == "boom"
 
 
 @pytest.mark.parametrize(
@@ -180,6 +238,20 @@ def test_start_session_needs_safe_runner(api: ApiEnv) -> None:
     api.kanbot_down = True
     assert_error(api.client.post(url, json={"agent": "codex"}), 503, "kanbot_unavailable")
     assert api.started == []
+
+
+def test_start_session_does_not_promote_task_when_kanbot_is_down(api: ApiEnv) -> None:
+    api.kanbot_down = True
+    assert_error(
+        api.client.post(
+            "/api/projects/leveling/sessions",
+            json={"agent": "claude", "task_id": "TASK-1"},
+        ),
+        503,
+        "kanbot_unavailable",
+    )
+    assert api.started == []
+    assert api.backlog.commands("task", "edit") == []
 
 
 def test_resume_in_original_cwd(api: ApiEnv) -> None:

@@ -240,6 +240,58 @@ export function useSetStatus(projectId: string) {
   });
 }
 
+export function useCompleteTask(projectId: string) {
+  const invalidate = useInvalidateProject();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      apiFetch<{ id: string; status: string }>(
+        `/api/projects/${enc(projectId)}/tasks/${enc(taskId)}/complete`,
+        { method: "POST" },
+      ),
+    onSuccess: (_data, taskId) =>
+      Promise.all([
+        invalidate(projectId),
+        client.invalidateQueries({ queryKey: queryKeys.task(projectId, taskId) }),
+      ]),
+  });
+}
+
+export function useSetAcceptance(projectId: string, taskId: string) {
+  const client = useQueryClient();
+  const invalidate = useInvalidateProject();
+  return useMutation({
+    mutationFn: ({ index, checked }: { index: number; checked: boolean }) =>
+      apiFetch<{ id: string; index: number; checked: boolean }>(
+        `/api/projects/${enc(projectId)}/tasks/${enc(taskId)}/acceptance/${String(index)}`,
+        { method: "POST", body: { checked } },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        invalidate(projectId),
+        client.invalidateQueries({ queryKey: queryKeys.task(projectId, taskId) }),
+      ]),
+  });
+}
+
+/** `onDeleted` hook darajasida chaqiriladi: kesh tozalanib drawer tanasi unmount bo'lsa ham ishlaydi. */
+export function useDeleteTask(projectId: string, onDeleted?: (taskId: string) => void) {
+  const client = useQueryClient();
+  const invalidate = useInvalidateProject();
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      apiFetch<{ id: string; archived: boolean }>(
+        `/api/projects/${enc(projectId)}/tasks/${enc(taskId)}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: async (_data, taskId) => {
+      onDeleted?.(taskId);
+      client.removeQueries({ queryKey: queryKeys.task(projectId, taskId) });
+      await invalidate(projectId);
+    },
+  });
+}
+
 export function useAddLabels(projectId: string) {
   const invalidate = useInvalidateProject();
   return useMutation({

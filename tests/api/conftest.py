@@ -35,6 +35,7 @@ class FakeBacklogCli:
         self.cwds: list[Path] = []
         # ("task", "edit") kabi kalit bo'yicha majburiy javob (xatolarni sinash uchun).
         self.overrides: dict[tuple[str, str] | str, CliResult] = {}
+        self.task_overrides: dict[str, dict[str, Any]] = {}
 
     def commands(self, *prefix: str) -> list[list[str]]:
         return [call for call in self.calls if tuple(call[: len(prefix)]) == prefix]
@@ -51,7 +52,10 @@ class FakeBacklogCli:
             (cwd / ".backlog" / "config.yml").write_text(f'project_name: "{args[1]}"\n')
             return CliResult(0, "Initialized\n", "")
         if key == ("task", "list"):
-            return CliResult(0, fixture_text("backlog/task_list.json"), "")
+            data = json.loads(fixture_text("backlog/task_list.json"))
+            for task in data["tasks"]:
+                task.update(self.task_overrides.get(task["id"], {}))
+            return CliResult(0, json.dumps(data), "")
         if key == ("task", "view"):
             return self._view(args[-1])
         if args[:3] == ["config", "get", "statuses"]:
@@ -64,6 +68,10 @@ class FakeBacklogCli:
             return CliResult(0, fixture_text("backlog/task_create.txt"), "")
         if key == ("task", "edit"):
             return CliResult(0, f"Updated task {args[-1]}\n", "")
+        if key == ("task", "archive"):
+            return CliResult(0, f"Archived task {args[-1]}\n", "")
+        if key == ("task", "complete"):
+            return CliResult(0, f"Completed task {args[-1]}\n", "")
         raise AssertionError(f"kutilmagan backlog buyrug'i: {args}")
 
     def _view(self, task_id: str) -> CliResult:
@@ -73,6 +81,7 @@ class FakeBacklogCli:
             return CliResult(1, "", fixture_text("backlog/task_not_found.stderr"))
         data = json.loads(fixture_text("backlog/task_view.json"))
         data["task"].update(summary)
+        data["task"].update(self.task_overrides.get(task_id, {}))
         return CliResult(0, json.dumps(data), "")
 
 

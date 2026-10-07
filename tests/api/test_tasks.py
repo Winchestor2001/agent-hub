@@ -177,6 +177,51 @@ def test_set_status(api: ApiEnv) -> None:
     assert len(api.backlog.commands("task", "edit")) == 1
 
 
+def test_complete_task(api: ApiEnv) -> None:
+    resp = api.client.post("/api/projects/leveling/tasks/task-2/complete")
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "TASK-2", "status": "Done"}
+    assert api.backlog.commands("task", "edit") == [
+        ["task", "edit", "--status=Done", "--", "TASK-2"]
+    ]
+
+
+def test_set_acceptance(api: ApiEnv) -> None:
+    resp = api.client.post(
+        "/api/projects/leveling/tasks/task-001/acceptance/2", json={"checked": True}
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "TASK-1", "index": 2, "checked": True}
+    resp = api.client.post(
+        "/api/projects/leveling/tasks/task-001/acceptance/1", json={"checked": False}
+    )
+    assert resp.status_code == 200
+    assert api.backlog.commands("task", "edit") == [
+        ["task", "edit", "--check-ac", "2", "--", "TASK-1"],
+        ["task", "edit", "--uncheck-ac", "1", "--", "TASK-1"],
+    ]
+
+
+def test_set_acceptance_rejected(api: ApiEnv) -> None:
+    assert_error(
+        api.client.post(
+            "/api/projects/leveling/tasks/task-001/acceptance/99",
+            json={"checked": True},
+        ),
+        404,
+        "checklist_item_not_found",
+    )
+    assert_error(
+        api.client.post(
+            "/api/projects/leveling/tasks/task-001/acceptance/1",
+            json={"checked": "yes"},
+        ),
+        422,
+        "validation_error",
+    )
+    assert api.backlog.commands("task", "edit") == []
+
+
 def test_add_labels(api: ApiEnv) -> None:
     resp = api.client.post(
         "/api/projects/leveling/tasks/TASK-2/labels", json={"labels": ["backend", " api "]}
@@ -191,6 +236,34 @@ def test_add_labels(api: ApiEnv) -> None:
         422,
         "validation_error",
     )
+
+
+def test_delete_task_archives(api: ApiEnv) -> None:
+    resp = api.client.delete("/api/projects/leveling/tasks/task-2")
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "TASK-2", "archived": True}
+    assert api.backlog.commands("task", "archive") == [["task", "archive", "TASK-2"]]
+    assert api.backlog.commands("task", "complete") == []
+
+
+def test_delete_done_task_completes_cleanup(api: ApiEnv) -> None:
+    api.backlog.task_overrides["TASK-2"] = {"status": "Done"}
+    resp = api.client.delete("/api/projects/leveling/tasks/task-2")
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "TASK-2", "archived": True}
+    assert api.backlog.commands("task", "archive") == []
+    assert api.backlog.commands("task", "complete") == [["task", "complete", "TASK-2"]]
+
+
+def test_delete_task_blocks_live_sessions(api: ApiEnv) -> None:
+    api.pane(id="p1", title="TASK-1 · Login", state="working")
+    body = assert_error(
+        api.client.delete("/api/projects/leveling/tasks/task-001"),
+        409,
+        "task_has_live_sessions",
+    )
+    assert body["params"] == {"task_id": "TASK-1", "count": 1}
+    assert api.backlog.commands("task", "archive") == []
 
 
 def test_mutation_cli_errors(api: ApiEnv) -> None:

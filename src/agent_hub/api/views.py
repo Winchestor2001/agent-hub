@@ -16,6 +16,11 @@ from agent_hub.services.summary import ProjectSummary
 from .errors import ApiError
 
 
+def find_status(statuses: Sequence[str], wanted: str) -> str | None:
+    """Loyiha statuslaridan nomi bo'yicha (katta-kichik harfsiz) moslik; yo'q bo'lsa `None`."""
+    return next((status for status in statuses if status.lower() == wanted.lower()), None)
+
+
 @dataclass(frozen=True)
 class TaskIndex:
     """Loyiha vazifalari kanonik kalit bo'yicha (`TASK-001` va `task-1` — bitta)."""

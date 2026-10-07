@@ -83,6 +83,15 @@ export interface LivePane {
   exit_code: number | null;
   project_id: string | null;
   task: TaskRef | null;
+  /** Faqat vazifali sessiya ochilganda: vazifa statusi avtomatik o'zgardimi. */
+  lifecycle?: TaskLifecycle;
+}
+
+export interface TaskLifecycle {
+  promoted: boolean;
+  status: string;
+  /** Sessiya ochilgan, lekin status o'zgarmagan bo'lsa — sababi. */
+  error: ApiErrorBody | null;
 }
 
 export interface PastSession {

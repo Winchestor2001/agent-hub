@@ -203,7 +203,10 @@ function BoardView({
           onClose={() => {
             setCreating(false);
           }}
-          onCreated={onOpenTask}
+          onCreated={(taskId, startSession) => {
+            onOpenTask(taskId);
+            if (startSession) onStartSession(taskId);
+          }}
         />
       )}
     </div>
