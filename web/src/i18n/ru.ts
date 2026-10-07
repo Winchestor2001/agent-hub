@@ -376,6 +376,8 @@ export const ru: Dictionary = {
 
   "error.config_kind_unknown": "Неизвестный тип конфигурации: {kind}",
   "error.config_kind_scope": "«{kind}» не используется в этой области ({scope})",
+  "error.config_template_unknown": "Шаблон не найден: {template}",
+  "error.config_guide_unknown": "Руководство не найдено: {guide}",
   "error.config_scope_unknown": "Область не найдена: {scope}",
   "error.config_scope_missing": "Папки области нет: {path}",
   "error.config_name_invalid": "Неверное имя: «{name}». Только строчные буквы, цифры и дефис (до 64 символов)",

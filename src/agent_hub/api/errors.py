@@ -64,6 +64,8 @@ _UPDATE_STATUS = {
 }
 _CONFIG_STATUS = {
     "config_scope_unknown": 404,
+    "config_template_unknown": 404,
+    "config_guide_unknown": 404,
     "config_not_found": 404,
     "config_exists": 409,
     "config_conflict": 409,

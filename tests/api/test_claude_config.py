@@ -104,3 +104,42 @@ def test_nothing_is_committed(api: ApiEnv) -> None:
     """Agent Hub faqat fayl yozadi: hech qanday git buyrug'i (commit, add) chaqirilmaydi."""
     source = (Path(__file__).parents[2] / "src/agent_hub/services/claude_config.py").read_text()
     assert '"commit"' not in source and '"add"' not in source
+
+
+def test_templates_and_guides_endpoints(api: ApiEnv) -> None:
+    listing = api.client.get("/api/claude-config/templates").json()["templates"]
+    assert {"id": "skill", "kind": "skills", "name": "my-skill"} in listing
+    skill = api.client.get("/api/claude-config/templates/skill", params={"name": "deploy"}).json()
+    assert "name: deploy" in skill["content"]
+    assert_error(
+        api.client.get("/api/claude-config/templates/nope"), 404, "config_template_unknown"
+    )
+    guides = api.client.get("/api/claude-config/guides").json()["guides"]
+    assert guides[0]["id"] == "overview"
+    guide = api.client.get("/api/claude-config/guides/skills").json()
+    assert guide["content"].startswith("# Skill")
+    assert_error(api.client.get("/api/claude-config/guides/nope"), 404, "config_guide_unknown")
+
+
+def test_user_text_is_saved_through_same_rules(api: ApiEnv) -> None:
+    """Foydalanuvchi o'z faylini yuklasa ham xuddi shu validatsiya va yo'l qoidalari ishlaydi."""
+    own = '{"mcpServers": {"db": {"command": "db-mcp"}}}'
+    resp = put(api, kind="mcp", name="mcp", content=own)
+    assert resp.status_code == 200, resp.text
+    assert (api.backend / ".mcp.json").read_text() == own
+    assert_error(
+        put(api, kind="mcp", name="mcp", content="not json", etag=resp.json()["etag"]),
+        422,
+        "config_json_invalid",
+    )
+    rendered = api.client.get("/api/claude-config/templates/skill").json()
+    applied = api.client.post(
+        "/api/claude-config/apply",
+        json={
+            "kind": "skills",
+            "name": "my-skill",
+            "content": rendered["content"],
+            "scopes": ["project:leveling"],
+        },
+    )
+    assert applied.json()["results"][0]["status"] == "created"

@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from agent_hub.services import claude_templates
 from agent_hub.services.claude_config import KINDS, MAX_SIZE
 
 from .deps import HubDep
@@ -85,3 +86,25 @@ def config_apply(hub: HubDep, body: ConfigApply) -> dict[str, Any]:
         body.kind, body.name, body.content, body.scopes, overwrite=body.overwrite
     )
     return {"results": results}
+
+
+@router.get("/api/claude-config/templates")
+def config_templates() -> dict[str, Any]:
+    return {"templates": claude_templates.templates()}
+
+
+@router.get("/api/claude-config/templates/{template_id}")
+def config_template(
+    template_id: str, name: str | None = Query(default=None, max_length=80)
+) -> dict[str, Any]:
+    return claude_templates.render(template_id, name)
+
+
+@router.get("/api/claude-config/guides")
+def config_guides() -> dict[str, Any]:
+    return {"guides": claude_templates.guides()}
+
+
+@router.get("/api/claude-config/guides/{guide_id}")
+def config_guide(guide_id: str) -> dict[str, Any]:
+    return claude_templates.guide(guide_id)

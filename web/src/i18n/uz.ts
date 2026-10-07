@@ -377,6 +377,8 @@ export const uz = {
 
   "error.config_kind_unknown": "Noma'lum konfiguratsiya turi: {kind}",
   "error.config_kind_scope": "«{kind}» bu qamrovda ishlatilmaydi ({scope})",
+  "error.config_template_unknown": "Shablon topilmadi: {template}",
+  "error.config_guide_unknown": "Qo'llanma topilmadi: {guide}",
   "error.config_scope_unknown": "Qamrov topilmadi: {scope}",
   "error.config_scope_missing": "Qamrov papkasi yo'q: {path}",
   "error.config_name_invalid": "Nom noto'g'ri: «{name}». Faqat kichik harf, raqam va tire (64 belgigacha)",
