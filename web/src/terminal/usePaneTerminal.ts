@@ -19,6 +19,8 @@ export interface PaneTerminal {
   sendKeys: (keys: string[]) => void;
   /** Matnni oddiy paste kabi yozadi: agent bracketed paste yoqqan bo'lsa, shu rejimda. */
   pasteText: (text: string) => void;
+  /** Terminal selection'ini clipboard'ga yozadi; selection bo'lmasa false. */
+  copySelection: () => boolean;
   reconnect: () => void;
 }
 
@@ -46,6 +48,7 @@ export function usePaneTerminal(containerRef: RefObject<HTMLDivElement | null>, 
       fontFamily: '"SF Mono", Menlo, ui-monospace, monospace',
       fontSize: 12,
       cursorBlink: true,
+      macOptionClickForcesSelection: true,
       scrollback: 5000,
       theme: { background: "#0d1016", foreground: "#d7dae0", cursor: "#d7dae0", selectionBackground: "#2f5fb366" },
     });
@@ -54,6 +57,13 @@ export function usePaneTerminal(containerRef: RefObject<HTMLDivElement | null>, 
     term.open(container);
     fit.fit();
     termRef.current = term;
+    term.attachCustomKeyEventHandler((event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c" && term.hasSelection()) {
+        if (event.type === "keydown") void navigator.clipboard.writeText(term.getSelection());
+        return false;
+      }
+      return true;
+    });
 
     const input = term.onData((data) => {
       send({ type: "input", data });
@@ -125,11 +135,19 @@ export function usePaneTerminal(containerRef: RefObject<HTMLDivElement | null>, 
     termRef.current?.focus();
   }, []);
 
+  const copySelection = useCallback(() => {
+    const term = termRef.current;
+    if (!term?.hasSelection()) return false;
+    void navigator.clipboard.writeText(term.getSelection());
+    term.focus();
+    return true;
+  }, []);
+
   const reconnect = useCallback(() => {
     setStatus({ kind: "connecting" });
     setError(null);
     setAttempt((n) => n + 1);
   }, []);
 
-  return { status, error, sendKeys, pasteText, reconnect };
+  return { status, error, sendKeys, pasteText, copySelection, reconnect };
 }

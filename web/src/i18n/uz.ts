@@ -136,6 +136,8 @@ export const uz = {
   "files.uploading": "Yuklanmoqda…",
   "files.remove": "Ro'yxatdan olib tashlash",
   "files.count": "{count} ta fayl biriktirildi",
+  "terminal.copy_selection": "Nusxa",
+  "terminal.copy_selection_title": "Terminaldagi tanlangan matnni nusxalash. Codex mouse rejimida matn tanlash uchun Option bosib sudrang.",
 
   "sessions.live": "Jonli agentlar",
   "sessions.past": "O'tgan sessiyalar",

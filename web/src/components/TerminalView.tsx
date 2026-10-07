@@ -26,7 +26,7 @@ interface TerminalViewProps {
 export function TerminalView({ paneId, pane, project, onBack }: TerminalViewProps) {
   const { t, message } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
-  const { status, error, sendKeys, pasteText, reconnect } = usePaneTerminal(containerRef, paneId);
+  const { status, error, sendKeys, pasteText, copySelection, reconnect } = usePaneTerminal(containerRef, paneId);
   const pasteUpload = usePasteUpload({
     pane,
     project,
@@ -67,6 +67,15 @@ export function TerminalView({ paneId, pane, project, onBack }: TerminalViewProp
             {key.label}
           </button>
         ))}
+        <button
+          type="button"
+          className="button button-small"
+          title={t("terminal.copy_selection_title")}
+          disabled={status.kind !== "open"}
+          onClick={copySelection}
+        >
+          {t("terminal.copy_selection")}
+        </button>
         {pane?.agent === "claude" && <ModelPicker pane={pane} />}
         {pane && !pane.alive && <span className="muted">{t("terminal.ended")}</span>}
         {errorKey && (
@@ -86,7 +95,13 @@ export function TerminalView({ paneId, pane, project, onBack }: TerminalViewProp
           )}
         </div>
       )}
-      <div className="terminal-screen" ref={containerRef} onPasteCapture={pasteUpload.onPasteCapture} />
+      <div
+        className="terminal-screen"
+        ref={containerRef}
+        onPasteCapture={pasteUpload.onPasteCapture}
+        onDragOver={pasteUpload.onDragOver}
+        onDrop={pasteUpload.onDrop}
+      />
     </section>
   );
 }

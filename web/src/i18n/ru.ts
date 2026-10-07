@@ -136,6 +136,8 @@ export const ru: Dictionary = {
   "files.uploading": "Загрузка…",
   "files.remove": "Убрать из списка",
   "files.count": "Прикреплено файлов: {count}",
+  "terminal.copy_selection": "Копировать",
+  "terminal.copy_selection_title": "Скопировать выделенный текст терминала. В mouse-режиме Codex выделяйте текст с зажатым Option.",
 
   "sessions.live": "Активные агенты",
   "sessions.past": "Прошлые сессии",

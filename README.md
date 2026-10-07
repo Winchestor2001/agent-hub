@@ -1,14 +1,14 @@
 # Agent Hub
 
-Claude Code va Codex sessiyalari (KanBot orqali) hamda Backlog.md vazifalari uchun lokal veb UI.
-Bitta brauzer oynasida loyihalar, vazifalar doskasi, agent sessiyalari va ularning jonli terminali.
+Claude Code va Codex sessiyalari (KanBot orqali) hamda Backlog.md vazifalari uchun lokal UI.
+Bitta brauzer yoki macOS `.app` oynasida loyihalar, vazifalar doskasi, agent sessiyalari va ularning jonli terminali.
 Manzil: `http://127.0.0.1:8700`. Hammasi faqat `127.0.0.1` da tinglaydi.
 Ilova telemetriya yubormaydi va tashqi so'rov qilmaydi.
 
 ```
-brauzer ──► Agent Hub (127.0.0.1:8700) ──► KanBot server (127.0.0.1:8787) ◄── KanBot runner (--safe)
-                 │                                                               │
-                 └──► backlog CLI (loyiha papkalarida)                  claude / codex pane'lari
+brauzer / Agent Hub.app ──► Agent Hub (127.0.0.1:8700) ──► KanBot server (127.0.0.1:8787) ◄── KanBot runner (--safe)
+                                   │                                                               │
+                                   └──► backlog CLI (loyiha papkalarida)                  claude / codex pane'lari
 ```
 
 - **Agent Hub** (`python -m agent_hub`): FastAPI backend va build qilingan React UI, bitta jarayon.
@@ -81,6 +81,50 @@ CLI'lardan biri boshqa joyga ko'chsa, `make install` ni qayta ishga tushiring.
 
 Boshqa portlar: `make install AGENT_HUB_PORT=8711 KANBOT_PORT=8797` (`make status` va `make uninstall` ga ham
 xuddi shu qiymatlarni bering).
+
+## macOS `.app` oynasi
+
+Agent Hub `.app` brauzer tabini almashtiradigan yengil native wrapper. U backendni ichiga ko'maydi:
+avval `make install` yoki `make dev` orqali `http://127.0.0.1:8700` dagi Agent Hub ishlashi kerak,
+`.app` esa shu lokal UI'ni `WKWebView` oynasida ochadi.
+
+Yig'ish:
+
+```sh
+make macos-app
+```
+
+Natija: `dist/Agent Hub.app`. App `local.agent-hub.app` bundle identifier, `pyproject.toml`
+versiyasi, va `AgentHub.icns` icon bilan yig'iladi. Ochish:
+
+```sh
+open "dist/Agent Hub.app"
+```
+
+Backend ishlamayotgan bo'lsa, oyna health xatosini ko'rsatadi va `make install` buyrug'ini nusxalash,
+qayta urinish yoki UI'ni brauzerda ochish tugmalarini beradi. Boshqa port ishlatsangiz, app'ni yig'ishda
+portni bering:
+
+```sh
+make macos-app AGENT_HUB_PORT=8711
+```
+
+Release zip kerak bo'lsa:
+
+```sh
+make macos-release
+```
+
+Bu `dist/Agent Hub.app` ni qayta yig'adi va `dist/AgentHub-macos-<version>.zip`
+artefaktini yaratadi. Zip faqat `.app` bundle'ni o'z ichiga oladi; `~/.config/agent-hub`,
+`~/.claude`, `~/.codex`, `~/Library/LaunchAgents` yoki log fayllariga tegmaydi.
+
+`.app` autostart servis emas. Login paytida backend, KanBot server va runner'ni `make install`
+o'rnatgan launchd servislar ishga tushiradi. App faqat shu lokal servislarni ochadigan wrapper,
+shuning uchun `.app` ni rebuild qilish yoki zipdan almashtirish launchd plist'larini qayta yozmaydi
+va tirik agent pane'larini to'xtatmaydi. Servislarni yangilash yoki restart qilish kerak bo'lsa,
+status menu'dagi **Servislarni yangilash/restart…** Terminalda `make install` ni ochadi; shu yo'l
+mavjud launchd xavfsizlik tekshiruvlarini saqlaydi.
 
 ## Loyiha qo'shish
 

@@ -1,8 +1,9 @@
-import { useState, type ClipboardEvent } from "react";
+import { useEffect, useState, type ClipboardEvent, type DragEvent } from "react";
 
 import { useUploadFiles } from "../api/queries";
 import type { LivePane, Project } from "../api/types";
 import { panePastePath, paneUploadDir } from "../uploads/model";
+import { nativePasteFiles, NATIVE_PASTE_EVENT } from "./nativePaste";
 
 interface PasteUploadOptions {
   /** Jonli ro'yxatdagi ma'lumot; hali kelmagan bo'lsa undefined. */
@@ -27,13 +28,7 @@ export function usePasteUpload({ pane, project, active, paste }: PasteUploadOpti
   const upload = useUploadFiles(project?.id ?? "");
   const [noProject, setNoProject] = useState(false);
 
-  function onPasteCapture(event: ClipboardEvent<HTMLElement>) {
-    const files = Array.from(event.clipboardData.files);
-    if (files.length === 0 || !active) return;
-    // Finder'dan nusxalangan faylda text/plain ham bo'ladi (fayl nomi) — u aralashmasin.
-    event.preventDefault();
-    event.stopPropagation();
-
+  function uploadFiles(files: File[]) {
     const dir = pane && project ? paneUploadDir(pane.cwd, project.dirs) : null;
     if (!pane || !dir) {
       setNoProject(true);
@@ -51,5 +46,41 @@ export function usePasteUpload({ pane, project, active, paste }: PasteUploadOpti
     );
   }
 
-  return { onPasteCapture, uploading: upload.isPending, error: upload.error, noProject };
+  function onPasteCapture(event: ClipboardEvent<HTMLElement>) {
+    const files = Array.from(event.clipboardData.files);
+    if (files.length === 0 || !active) return;
+    // Finder'dan nusxalangan faylda text/plain ham bo'ladi (fayl nomi) — u aralashmasin.
+    event.preventDefault();
+    event.stopPropagation();
+    uploadFiles(files);
+  }
+
+  function onDragOver(event: DragEvent<HTMLElement>) {
+    if (!active || Array.from(event.dataTransfer.items).every((item) => item.kind !== "file")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function onDrop(event: DragEvent<HTMLElement>) {
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0 || !active) return;
+    event.preventDefault();
+    event.stopPropagation();
+    uploadFiles(files);
+  }
+
+  useEffect(() => {
+    function onNativePaste(event: Event) {
+      if (!active) return;
+      const files = nativePasteFiles(event instanceof CustomEvent ? event.detail : null);
+      if (files.length > 0) uploadFiles(files);
+    }
+
+    window.addEventListener(NATIVE_PASTE_EVENT, onNativePaste);
+    return () => {
+      window.removeEventListener(NATIVE_PASTE_EVENT, onNativePaste);
+    };
+  });
+
+  return { onPasteCapture, onDragOver, onDrop, uploading: upload.isPending, error: upload.error, noProject };
 }

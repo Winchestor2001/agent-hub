@@ -14,7 +14,7 @@ LABEL_PREFIX ?= local.agent-hub
 PORT_ARGS = --agent-hub-port $(AGENT_HUB_PORT) --kanbot-port $(KANBOT_PORT) --label-prefix $(LABEL_PREFIX)
 SERVICE_ARGS = $(PORT_ARGS)$(if $(FORCE), --force)
 
-.PHONY: help sync build lint typecheck test test-integration check dev dev-web dev-kanbot dev-runner \
+.PHONY: help sync build macos-app macos-release lint typecheck test test-integration check dev dev-web dev-kanbot dev-runner \
 	install uninstall status logs logs-truncate
 
 help: ## Buyruqlar ro'yxati
@@ -26,6 +26,12 @@ sync: ## Python va npm bog'liqliklarini o'rnatish
 
 build: ## Frontend build (src/agent_hub/static)
 	cd web && $(NPM) run build
+
+macos-app: build ## macOS .app wrapper (dist/Agent Hub.app)
+	scripts/build-macos-app.sh
+
+macos-release: build ## macOS .app zip artefakti (dist/AgentHub-macos-*.zip)
+	scripts/package-macos-app.sh
 
 lint: ## ruff + eslint
 	$(UV) run ruff check

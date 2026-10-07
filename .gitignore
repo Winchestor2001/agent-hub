@@ -11,6 +11,10 @@ web/node_modules/
 web/*.tsbuildinfo
 src/agent_hub/static/
 
+# macOS app
+dist/
+macos/AgentHubApp/.build/
+
 # OS / editor
 .DS_Store
 *.log
