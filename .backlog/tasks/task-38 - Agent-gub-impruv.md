@@ -1,11 +1,11 @@
 ---
 id: TASK-38
 title: Agent gub impruv
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-24 16:12'
-updated_date: '2026-09-24 16:38'
+updated_date: '2026-10-07 11:40'
 labels: []
 dependencies: []
 ordinal: 38000
@@ -19,11 +19,11 @@ Agent Hub'da Claude Code loyiha tuzilmasini (CLAUDE.md, CLAUDE.local.md, .mcp.js
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Sessiya ichida model tanlash ishlaydi (TASK-38.1)
-- [ ] #2 Konfiguratsiya backend'i xavfsiz yozish bilan ishlaydi (TASK-38.2)
-- [ ] #3 Shablonlar va o'zbekcha qo'llanmalar mavjud (TASK-38.3)
-- [ ] #4 ConfigView UI global va loyiha qamrovlarida ishlaydi (TASK-38.4)
-- [ ] #5 make check yashil
+- [x] #1 Sessiya ichida model tanlash ishlaydi (TASK-38.1)
+- [x] #2 Konfiguratsiya backend'i xavfsiz yozish bilan ishlaydi (TASK-38.2)
+- [x] #3 Shablonlar va o'zbekcha qo'llanmalar mavjud (TASK-38.3)
+- [x] #4 ConfigView UI global va loyiha qamrovlarida ishlaydi (TASK-38.4)
+- [x] #5 make check yashil
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,3 +50,15 @@ Kutilayotgan qarorlar (foydalanuvchi tasdig'i): global MCP (~/.claude.json) fayl
  8.6 Chegara: Codex '/model' uchun va yangi sessiya dialogida model tanlash (KanBot qo'llamaydi, idle bo'lgach '/model' yuborish kerak, boshlang'ich prompt bilan poyga) — alohida qaror.
 Kutilayotgan qarorlar (qo'shimcha): '/model' default'ni o'zgartirishi (A: qabul qilish va UI'da ogohlantirish; B: yuborgach settings.json 'model' ni oldingi qiymatga qaytarish; C: picker'da 's' tugmasini yuborish).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Subtasklar yakunlandi: 38.1 (model tanlash, brauzer va haqiqiy sessiyada tekshirilgan), 38.2 (dda09a6), 38.3 (9f6790e), 38.4 (6f0df8c). Yakuniy make check: pytest 736 passed, vitest 145 passed, eslint, tsc yashil.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Agent Hub'ga ikki imkoniyat qo'shildi. 1) Sessiya ichida Claude modelini UI orqali tanlash (TASK-38.1). 2) Claude Code konfiguratsiyasini global va loyiha qamrovlarida brauzerdan boshqarish (TASK-38.2–38.4): xavfsiz yozish (etag/409, zaxira nusxa, symlink va yo'l himoyasi), tayyor shablonlar, o'zbekcha qo'llanmalar va ConfigView UI. Har subtask o'z tekshiruvi bilan yopildi; yakuniy make check yashil (pytest 736, vitest 145, eslint, tsc).
+<!-- SECTION:FINAL_SUMMARY:END -->
