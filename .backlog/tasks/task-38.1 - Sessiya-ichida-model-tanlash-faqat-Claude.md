@@ -1,11 +1,11 @@
 ---
 id: TASK-38.1
 title: Sessiya ichida model tanlash (faqat Claude)
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-24 16:38'
-updated_date: '2026-09-24 16:49'
+updated_date: '2026-10-07 11:04'
 labels: []
 dependencies: []
 parent_task_id: TASK-38
@@ -20,13 +20,13 @@ Hozir modelni faqat terminaldagi /model pickeri orqali almashtirish mumkin: bu n
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Terminal panelida model tanlagich faqat claude agenti uchun ko'rinadi, codex panelida ko'rinmaydi
-- [ ] #2 Katalogda claude-opus-5-5, claude-opus-5, claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-fable-5-1, claude-sonnet-5, claude-sonnet-4-6, claude-haiku-4-5-20251001 va aliaslar (opus, sonnet, haiku, fable, best, opusplan) bor; foydalanuvchi o'z model ID sini ham kirita oladi
-- [ ] #3 Tanlash pane'ga '/model <id>' va Enter yuboradi; tirik bo'lmagan, claude bo'lmagan yoki idle holatda bo'lmagan pane uchun backend so'rovni mos xato kodi bilan rad etadi, UI'da tanlagich o'chirilgan
+- [x] #1 Terminal panelida model tanlagich faqat claude agenti uchun ko'rinadi, codex panelida ko'rinmaydi
+- [x] #2 Katalogda claude-opus-5-5, claude-opus-5, claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-fable-5-1, claude-sonnet-5, claude-sonnet-4-6, claude-haiku-4-5-20251001 va aliaslar (opus, sonnet, haiku, fable, best, opusplan) bor; foydalanuvchi o'z model ID sini ham kirita oladi
+- [x] #3 Tanlash pane'ga '/model <id>' va Enter yuboradi; tirik bo'lmagan, claude bo'lmagan yoki idle holatda bo'lmagan pane uchun backend so'rovni mos xato kodi bilan rad etadi, UI'da tanlagich o'chirilgan
 - [x] #4 Noto'g'ri model ID (bo'shliq, boshqaruv belgilari, ruxsat etilmagan belgilar, uzunlik) backendda rad etiladi; ID orqali pane'ga qo'shimcha buyruq yuborib bo'lmaydi
-- [ ] #5 UI'da '/model yangi sessiyalar uchun ham default bo'ladi' ogohlantirishi uz va ru tilida ko'rinadi
+- [x] #5 UI'da '/model yangi sessiyalar uchun ham default bo'ladi' ogohlantirishi uz va ru tilida ko'rinadi
 - [x] #6 Yangi xato kodlari uchun uz+ru tarjima bor (test_i18n_keys o'tadi); pytest va vitest testlari yozilgan; make check yashil
-- [ ] #7 Haqiqiy Claude sessiyasida eski model (masalan claude-opus-4-8) bilan qo'lda tekshirilgan; sinovdan keyin settings.json dagi model qiymati oldingi holatiga qaytarilgan
+- [x] #7 Haqiqiy Claude sessiyasida eski model (masalan claude-opus-4-8) bilan qo'lda tekshirilgan; sinovdan keyin settings.json dagi model qiymati oldingi holatiga qaytarilgan
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -48,4 +48,17 @@ Backend tayyor: services/models.py (katalog + ID tekshiruvi), SessionService.set
 Tekshiruv (AC #4, #6): tests/test_models.py + tests/api/test_sessions.py (ID inyeksiyasi 'opus\n/exit', bo'shliq, boshqaruv belgilari, uzunlik; working/blocked/done/dead/codex pane rad etiladi). Haqiqiy pane'da (alohida vaqtinchalik backend :8711, yangi test sessiyasi, keyin o'chirildi): working paytida pane_not_idle; idle bo'lgach '/model sonnet' -> 200, pane status qatori 'Sonnet 5'; 'opus\n/exit' -> model_invalid; settings.json dagi model 'sonnet' o'zgarmadi. Katalog AC #2 ro'yxati bilan skript orqali solishtirildi (yetishmaydigan yo'q).
 
 Ochiq: brauzerda UI tekshiruvi bajarilmadi (Chrome kengaytmasi http://127.0.0.1:5173 ni 2 marta 'error page' bilan ochmadi, curl 200 edi). Vaqtinchalik SSR-render skripti (o'chirilgan) uz/ru da guruhlar, 'Opus 4.8 · claude-opus-4-8', 'Boshqa ID…' va working/tugagan pane'da o'chirilgan select + sababni ko'rsatdi, lekin tanlash->yuborish oqimi, default-ogohlantirish (tanlangandan keyin chiqadi) va codex'da ko'rinmasligi haqiqiy DOM'da tekshirilmagan (AC #1, #2-UI, #3-UI, #5). AC #7 (eski model bilan sinov) foydalanuvchi settings.json defaultini vaqtincha o'zgartiradi, shuning uchun ruxsatsiz bajarilmadi.
+
+2026-10-07 brauzer tekshiruvi (Playwright headless Chromium, vaqtinchalik backend :8711, QA papkada yangi claude va codex sessiyalari):
+- AC#1: codex terminalida .model-picker 0 ta, claude terminalida 1 ta.
+- AC#2: select'da Joriy/Eski/Aliaslar guruhlari, AC ro'yxatidagi 15 ID'ning hammasi bor, 'Boshqa ID…' tanlanganda ID kiritish maydoni chiqadi.
+- AC#3/#5: claude-opus-4-8 tanlanganda uz ogohlantirish, til ru'ga almashtirilganda ru ogohlantirish ko'rindi; 'O'zgartirish' -> 'Yuborildi: /model claude-opus-4-8'; yuborilgandan keyin pane working bo'lgani uchun picker o'chdi va 'Model faqat sessiya kutayotganda (idle) o'zgaradi' sababi ko'rindi. Tugagan pane'da select va tugma disabled, sabab 'Sessiya tugagan — model o'zgarmaydi', backend 409 pane_not_alive.
+- AC#7: haqiqiy Claude ekranida 'Set model to Opus 4.8 and saved as your default for new sessions', status qatori 'Opus 4.8'. ~/.claude/settings.json oldindan zaxiralangan; farq faqat "model": "claude-opus-4-8" edi, zaxiradan tiklandi (cmp bir xil, model kaliti yo'q - oldingi holat).
+- QA pane'lar o'ldirilib KanBot ro'yxatidan olib tashlandi.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Claude sessiyasi ichida model tanlash: TerminalView'da faqat claude uchun ModelPicker (joriy/eski/alias katalogi + ixtiyoriy ID), backend /model <id> ni faqat tirik, idle claude pane'ga yuboradi, noto'g'ri ID va holatlar mos xato kodlari bilan rad etiladi. pytest/vitest va make check yashil; brauzerda (Playwright) codex/claude ko'rinishi, katalog, uz/ru ogohlantirish, yuborish va o'chirilgan holatlar tekshirildi; haqiqiy sessiyada claude-opus-4-8 ga o'tildi va settings.json oldingi holatiga qaytarildi.
+<!-- SECTION:FINAL_SUMMARY:END -->
