@@ -140,6 +140,28 @@ final class ClaudeSessionsTests: XCTestCase {
         XCTAssertThrowsError(try adapter.gitState(temp.path)) { XCTAssertEqual($0 as? SessionError, .gitMissing) }
         XCTAssertThrowsError(try LocalClaudeCodeAdapter(executable: "/missing/claude").getVersion()) { XCTAssertEqual($0 as? SessionError, .cliMissing) }
     }
+    func testRenameAndRemoveAccount() throws {
+        try store.renameAccount(b.id, name: "  Work  ")
+        XCTAssertEqual(try store.account(b.id).name, "Work")
+        XCTAssertThrowsError(try store.renameAccount(b.id, name: " ")) { XCTAssertEqual($0 as? SessionError, .accountName) }
+        XCTAssertThrowsError(try store.addAccount(name: "")) { XCTAssertEqual($0 as? SessionError, .accountName) }
+        manager.discardDirectory = { try FileManager.default.removeItem(at: $0) }
+        // A login in progress holds the account's login lock.
+        do {
+            let lock = try FileLock(store.root.appendingPathComponent("locks/login-\(b.id).lock"))
+            XCTAssertThrowsError(try manager.removeAccount(b.id)) { XCTAssertEqual($0 as? SessionError, .locked) }
+            withExtendedLifetime(lock) {}
+        }
+        _ = try startA()
+        XCTAssertThrowsError(try manager.removeAccount(a.id)) { XCTAssertEqual($0 as? SessionError, .accountInUse) }
+        XCTAssertNoThrow(try store.account(a.id))
+        let folder = store.root.appendingPathComponent("accounts/\(b.id)")
+        try manager.removeAccount(b.id)
+        XCTAssertEqual(try store.accounts().map(\.id), [a.id])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.root.appendingPathComponent("accounts/logged-out-\(b.id)").path))
+        XCTAssertNoThrow(try store.addAccount(name: "Claude C"))
+    }
     func testLimitAndSameIdentityBlocked() throws {
         let session = try startA(); try manager.run(physical: session.physicalID!)
         try Data(a.id.utf8).write(to: URL(fileURLWithPath: b.configDir).appendingPathComponent("fake-auth"))
@@ -225,6 +247,8 @@ if args[:2]==['auth','status']:
  auth=config/'fake-auth'
  ok=auth.exists()
  print(json.dumps({'loggedIn':ok,'authMethod':'claude.ai' if ok else 'none','subscriptionType':'pro' if ok else None,'email':auth.read_text()+'@example.invalid' if ok else None})); sys.exit(0 if ok else 1)
+if args==['auth','logout']:
+ (config.parent.parent/('logged-out-'+config.parent.name)).write_text('1'); sys.exit(0)
 if args==['mcp','list']:
  print('github: https://secret-url - ! Needs authentication' if (config/'mcp-blocked').exists() else 'No MCP servers configured.')
  sys.exit(0)

@@ -7,6 +7,8 @@ public enum SessionError: String, Error, LocalizedError {
     case unsupported = "Claude CLI lacks required resume/fork/hooks capabilities."
     case authentication = "Target account is not independently authenticated with a Claude subscription."
     case accountLimit = "MVP supports two accounts."
+    case accountInUse = "This account has session history and can't be removed. Continue those sessions with another account instead."
+    case accountName = "Account name can't be empty."
     case sameAccount = "Choose a different account."
     case projectMissing = "Project moved or working directory missing."
     case gitMissing = "Git repository missing or unreadable."
@@ -146,15 +148,23 @@ public final class SessionStore {
         }
     }
     public func addAccount(name: String) throws -> Account {
-        try transaction {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw SessionError.accountName }
+        return try transaction {
             guard try accounts().count < 2 else { throw SessionError.accountLimit }
             let id = UUID().uuidString.lowercased()
             let dir = root.appendingPathComponent("accounts/\(id)/claude-config")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            try execute("INSERT INTO accounts(id,name,config_dir) VALUES(?,?,?)", [id, String(name.prefix(80)), dir.path])
+            try execute("INSERT INTO accounts(id,name,config_dir) VALUES(?,?,?)", [id, String(trimmed.prefix(80)), dir.path])
             try event("account selected", account: id)
             return try account(id)
         }
+    }
+    public func renameAccount(_ id: String, name: String) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw SessionError.accountName }
+        _ = try account(id)
+        try execute("UPDATE accounts SET name=? WHERE id=?", [String(trimmed.prefix(80)), id])
     }
     public func sessions() throws -> [ManagedSession] {
         try rows("""

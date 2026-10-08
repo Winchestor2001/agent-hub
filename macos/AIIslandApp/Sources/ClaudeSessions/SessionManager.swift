@@ -117,6 +117,30 @@ public final class SessionManager {
         try Data(command.utf8).write(to: path, options: .atomic); chmod(path.path, 0o700)
         return path
     }
+    /// Moves a removed account's folder aside; tests replace it to keep the user's Trash clean.
+    public var discardDirectory: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+
+    /// Removes an account that no session ever used. Its Claude login is signed out
+    /// through the CLI (best effort) and its private config folder goes to the Trash.
+    public func removeAccount(_ id: String) throws {
+        let loginLock = try FileLock(store.root.appendingPathComponent("locks/login-\(id).lock"))
+        defer { withExtendedLifetime(loginLock) {} }
+        let account = try store.account(id)
+        let used = try store.rows("SELECT 1 FROM physical_sessions WHERE account_id=? UNION ALL SELECT 1 FROM session_locks WHERE owner_account=? LIMIT 1", [id, id])
+        guard used.isEmpty else { throw SessionError.accountInUse }
+        func normalized(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }
+        let folder = URL(fileURLWithPath: account.configDir).deletingLastPathComponent()
+        guard normalized(folder) == normalized(store.root.appendingPathComponent("accounts/\(id)")) else { throw SessionError.unsafePath }
+        if FileManager.default.isExecutableFile(atPath: adapter.executable) {
+            _ = try? adapter.command(adapter.executable, ["auth", "logout"], account: account, cwd: account.configDir)
+        }
+        try store.transaction {
+            for table in ["usage_snapshots", "mcp_readiness"] { try store.execute("DELETE FROM \(table) WHERE account_id=?", [id]) }
+            try store.execute("DELETE FROM accounts WHERE id=?", [id])
+            try store.event("account removed", account: id)
+        }
+        if FileManager.default.fileExists(atPath: folder.path) { try discardDirectory(folder) }
+    }
     public func loginCommand(_ account: Account) throws -> URL {
         let path = store.root.appendingPathComponent("state/login-\(account.id).command")
         let command = "#!/bin/sh\nexec " + [runnerExecutable, "--claude-login", store.root.path, account.id].map(shellQuote).joined(separator: " ") + "\n"

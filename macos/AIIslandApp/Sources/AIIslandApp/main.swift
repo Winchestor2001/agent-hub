@@ -420,12 +420,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             try await Task.sleep(for: .milliseconds(300))
             guard let window = claudeAccounts?.window, let content = window.contentView else { throw SessionError.storage }
             content.layoutSubtreeIfNeeded()
-            let labels = allViews(content).compactMap { ($0 as? NSTextField)?.stringValue }
-            let buttons = allViews(content).compactMap { ($0 as? NSButton)?.title }
-            check(labels.contains { $0.contains("Claude A") && $0.contains("Claude B") }, "Both isolated accounts are visible")
-            check(labels.contains { $0.contains("96%") && $0.contains("reset") }, "Usage and reset render")
-            check(labels.contains { $0.contains("Auth refactoring") && $0.contains("feature/auth") }, "Logical session, provider and branch render")
-            check(buttons.contains("Continue with selected account") && buttons.contains("Sign in…"), "Manual handoff and login controls render")
+            var labels: [String] { allViews(content).compactMap { ($0 as? NSTextField)?.stringValue } }
+            var buttons: [NSButton] { allViews(content).compactMap { $0 as? NSButton } }
+            var menuItems: [String] { buttons.compactMap { ($0 as? NSPopUpButton)?.itemTitles }.flatMap { $0 } }
+            check(labels.contains("Claude A") && labels.contains("Claude B"), "Each account has its own card")
+            check(labels.contains { $0.contains("96%") && $0.contains("resets") }, "Usage and reset render on the account card")
+            check(labels.contains { $0.contains("Auth refactoring") } && labels.contains { $0.contains("Claude A") && $0.contains("feature/auth") },
+                  "Session card shows project, name, account and branch")
+            check(buttons.filter { $0.title == "Check" }.count == 2 && ["Rename…", "Sign in again…", "Remove…"].allSatisfy(menuItems.contains),
+                  "Each account card has its own check and management actions")
+            check(buttons.contains { $0.title == "Add account" && !$0.isEnabled }, "Add account is disabled at the two-account limit")
+            check(buttons.contains { $0.title == "Continue with…" } && menuItems.contains("Claude B — Ready"),
+                  "Continue menu lists the other account and its state")
             let texts = allViews(content).compactMap { ($0 as? NSTextView)?.string }
             check(texts.contains { $0.contains("handoff completed") }, "History renders from SQLite events")
             check(texts.contains { $0.contains("CLAUDE_CONFIG_DIR") && $0.contains(claude) }, "Diagnostics contain session identities")
@@ -439,6 +445,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
             check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
+            try store.execute("UPDATE accounts SET status='signed out' WHERE id=?", [b.id])
+            try store.renameAccount(b.id, name: "Work")
+            claudeAccounts?.refresh(); content.layoutSubtreeIfNeeded()
+            check(labels.contains("Work") && labels.contains { $0.hasPrefix("Signed out") } && buttons.contains { $0.title == "Sign in…" },
+                  "Renamed, signed-out account offers Sign in…")
             for size in [NSSize(width: 760, height: 780), NSSize(width: 1000, height: 850)] {
                 window.setContentSize(size); content.layoutSubtreeIfNeeded()
                 check(content.bounds.width >= 760 && content.bounds.height >= 780, "Accounts window lays out at \(Int(size.width))px")
@@ -449,6 +460,24 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             }
             window.close(); claudeAccounts?.showWindow(nil)
             check(window.isVisible, "Accounts window reopens safely")
+            // No real Claude CLI here: the fixture account must never trigger a real logout.
+            let remover = SessionManager(store: store, adapter: LocalClaudeCodeAdapter(executable: "/nonexistent/claude"))
+            remover.discardDirectory = { try FileManager.default.removeItem(at: $0) }
+            try remover.removeAccount(b.id)
+            claudeAccounts?.refresh(); content.layoutSubtreeIfNeeded()
+            check(!labels.contains("Work") && buttons.contains { $0.title == "Add account" && $0.isEnabled }, "Removing an unused account frees a slot")
+            check((try? remover.removeAccount(a.id)) == nil && labels.contains("Claude A"), "An account with session history is kept")
+            var opened: [URL] = []
+            claudeAccounts?.promptName = { _ in "  Side  " }
+            claudeAccounts?.openFile = { opened.append($0); return true }
+            if let add = buttons.first(where: { $0.title == "Add account" }) { add.performClick(nil) }
+            content.layoutSubtreeIfNeeded()
+            let added = try store.accounts().first { $0.name == "Side" }
+            let script = opened.first.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+            check(added != nil && labels.contains("Side") && opened.count == 1 && opened[0].pathExtension == "command"
+                  && script.contains(added?.id ?? "-") && script.contains("--claude-login")
+                  && !buttons.contains { $0.title == "Add account" && $0.isEnabled },
+                  "Add account names the account and immediately opens its sign-in")
             claudeAccounts?.window?.close()
         } catch { checks.append("FAIL: accounts regression: \((error as? SessionError)?.rawValue ?? "unexpected error")") }
         try? checks.joined(separator: "\n").write(to: report, atomically: true, encoding: .utf8)
