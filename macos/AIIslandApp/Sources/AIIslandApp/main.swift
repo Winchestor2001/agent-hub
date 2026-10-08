@@ -442,6 +442,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(island.frame.width == 280 && claudeAccounts?.islandSummary?.contains("Claude B auth ready") == true, "Island shows warning and standby account")
             let rings = allViews(compactContent).compactMap { $0 as? UsageRingView }
             check(rings.contains { abs($0.progress - 0.96) < 0.001 }, "Claude island ring prefers account usage over the global cache")
+            let popoverView = makeStatusPopoverView()
+            let popoverLabels = allViews(popoverView).compactMap { ($0 as? NSTextField)?.stringValue }
+            let popoverWindow = NSWindow(contentRect: popoverView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            popoverWindow.contentView = popoverView; popoverView.layoutSubtreeIfNeeded()
+            if let bitmap = popoverView.bitmapImageRepForCachingDisplay(in: popoverView.bounds) {
+                popoverView.cacheDisplay(in: popoverView.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])?.write(to: report.deletingPathExtension().appendingPathExtension("popover.png"))
+            }
+            check(popoverLabels.contains("Default") && popoverLabels.contains("Claude A  · NOW") && popoverLabels.contains("Claude B")
+                  && popoverLabels.contains { $0.hasPrefix("Ready") } && popoverLabels.contains { $0.hasPrefix("5H · 96% USED") }
+                  && popoverLabels.contains { $0.hasPrefix("5H · 12% USED") },
+                  "Claude card lists Default and every account, marking the one in use")
+            let orange = NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
+            check(rings.contains { $0.accent == .white } && rings.contains { $0.accent == orange }, "Codex is white and Claude is orange")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
             check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
@@ -844,10 +858,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         refreshSettingsPage()
     }
 
+    /// Claude is orange; Codex is white like ChatGPT. Island and popover share these.
     private func accentColor(for provider: Provider) -> NSColor {
-        provider == .codex
-            ? NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
-            : NSColor(calibratedRed: 0.77, green: 0.56, blue: 1, alpha: 1)
+        provider == .codex ? .white : NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
     }
 
     private func rebuildNotchContent() {
@@ -940,7 +953,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let bar = makeCompactStatusBar(accent: accent, progress: progress)
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
-        if provider == .claude { cell.toolTip = claudeAccounts?.islandSummary ?? claudeUsageSummary }
+        if provider == .claude { cell.toolTip = ([claudeAccounts?.islandSummary, claudeUsageSummary].compactMap { $0 }).joined(separator: "\n") }
         cell.addSubview(ring)
         cell.addSubview(bar)
         NSLayoutConstraint.activate([
@@ -1122,6 +1135,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         stack.addArrangedSubview(actions)
 
         root.addSubview(stack)
+        root.setFrameSize(NSSize(width: 356, height: max(root.frame.height, stack.fittingSize.height)))
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -1133,17 +1147,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func providerRow(for provider: Provider) -> NSStackView {
         let snapshot = snapshots.first(where: { $0.provider == provider }) ?? ConfigInventory.snapshot(for: provider)
-        let accent = provider == .codex
-            ? NSColor(calibratedRed: 1.0, green: 0.62, blue: 0.22, alpha: 1)
-            : NSColor(calibratedRed: 0.72, green: 0.55, blue: 1.0, alpha: 1)
-        let cardHeight: CGFloat = provider == .claude && claudeAccounts?.islandSummary != nil ? 142 : 124
-        let card = NSView(frame: NSRect(x: 0, y: 0, width: 324, height: cardHeight))
+        let accent = accentColor(for: provider)
+        let card = NSView(frame: NSRect(x: 0, y: 0, width: 324, height: 124))
         card.wantsLayer = true
         card.layer?.cornerRadius = 13
         card.layer?.backgroundColor = accent.withAlphaComponent(0.13).cgColor
         card.layer?.borderWidth = 1
         card.layer?.borderColor = accent.withAlphaComponent(0.42).cgColor
-        card.heightAnchor.constraint(equalToConstant: cardHeight).isActive = true
 
         let dot = NSTextField(labelWithString: snapshot.isInstalled ? "●" : "○")
         dot.textColor = accent
@@ -1174,16 +1184,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 content += unavailableUsageBarViews(title: "7D", accent: accent)
             }
         } else {
-            for (title, window) in [("5H", claudeUsage?.fiveHour), ("7D", claudeUsage?.sevenDay)] {
-                if let window {
-                    content += usageBarViews(
-                        title: title,
-                        window: CodexUsageWindow(usedPercent: Int(window.usedPercent.rounded()), resetsAt: window.resetsAt),
-                        accent: accent,
-                        suffix: claudeUsage?.stale == true ? " · LAST KNOWN" : ""
-                    )
-                } else {
-                    content += unavailableUsageBarViews(title: title, accent: accent)
+            let sources = claudeSources, current = currentClaudeSource
+            for (index, source) in sources.enumerated() {
+                if index > 0 { content.append(spacer(6)) }
+                let title = NSTextField(labelWithString: source.name + (source.name == current?.name ? "  · NOW" : ""))
+                title.font = .systemFont(ofSize: 13, weight: .bold); title.textColor = .white
+                let detail = NSTextField(labelWithString: source.detail)
+                detail.font = .systemFont(ofSize: 11, weight: .medium); detail.textColor = NSColor.white.withAlphaComponent(0.62)
+                let header = NSStackView(views: [title, NSView(), detail]); header.orientation = .horizontal
+                header.translatesAutoresizingMaskIntoConstraints = false
+                header.widthAnchor.constraint(equalToConstant: 296).isActive = true
+                content.append(header)
+                for (label, window) in [("5H", source.fiveHour), ("7D", source.sevenDay)] {
+                    if let window {
+                        content += usageBarViews(title: label, window: window, accent: accent, suffix: source.stale ? " · LAST KNOWN" : "")
+                    } else {
+                        content += unavailableUsageBarViews(title: label, accent: accent)
+                    }
                 }
             }
             if let summary = claudeAccounts?.islandSummary {
@@ -1203,6 +1220,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             copy.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
             copy.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
             copy.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+            card.heightAnchor.constraint(equalToConstant: max(124, copy.fittingSize.height + 26)),
         ])
         let row = NSStackView(views: [card])
         row.orientation = .horizontal
@@ -1211,15 +1229,61 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return row
     }
 
-    /// An AI Island session's own account usage wins; otherwise the global statusline cache.
-    private var claudeIslandPercent: Double? { claudeAccounts?.islandUsage ?? claudeUsage?.maxPercent }
+    /// One place Claude usage comes from: plain `claude` (~/.claude) or an AI Island account.
+    private struct ClaudeSource {
+        let name: String
+        let detail: String
+        let fiveHour: CodexUsageWindow?
+        let sevenDay: CodexUsageWindow?
+        let updated: Double?
+        let stale: Bool
+        var maxPercent: Double? { [fiveHour, sevenDay].compactMap { $0.map { Double($0.usedPercent) } }.max() }
+    }
+
+    private var claudeSources: [ClaudeSource] {
+        func window(_ w: ClaudeRateLimitWindow?) -> CodexUsageWindow? {
+            w.map { CodexUsageWindow(usedPercent: Int($0.usedPercent.rounded()), resetsAt: $0.resetsAt) }
+        }
+        var sources: [ClaudeSource] = []
+        if claudeLoggedIn != false || claudeUsage != nil {
+            sources.append(ClaudeSource(name: "Default", detail: "claude · ~/.claude", fiveHour: window(claudeUsage?.fiveHour),
+                                        sevenDay: window(claudeUsage?.sevenDay), updated: claudeUsage?.capturedAt, stale: claudeUsage?.stale ?? false))
+        }
+        for row in claudeAccounts?.usageRows ?? [] {
+            func window(_ name: String) -> CodexUsageWindow? {
+                row.windows.first { $0.window == name }.map { CodexUsageWindow(usedPercent: Int($0.percent.rounded()), resetsAt: $0.resetAt) }
+            }
+            let plan = ["unknown", ""].contains(row.account.subscription) ? "" : " · " + row.account.subscription.capitalized
+            let updated = row.windows.map(\.checkedAt).max()
+            sources.append(ClaudeSource(name: row.account.name, detail: row.status + plan, fiveHour: window("five_hour"),
+                                        sevenDay: window("seven_day"), updated: updated,
+                                        stale: updated.map { Date().timeIntervalSince1970 - $0 > ClaudeRateLimitCache.staleAfter } ?? false))
+        }
+        return sources
+    }
+
+    /// The source whose usage changed most recently (within the stale window) is the one in use now.
+    private var currentClaudeSource: ClaudeSource? {
+        claudeSources.filter { ($0.updated ?? 0) > Date().timeIntervalSince1970 - ClaudeRateLimitCache.staleAfter }
+            .max { ($0.updated ?? 0) < ($1.updated ?? 0) }
+    }
+
+    private var claudeIslandPercent: Double? {
+        currentClaudeSource?.maxPercent ?? claudeAccounts?.islandUsage ?? claudeUsage?.maxPercent
+    }
 
     private var claudeUsageSummary: String? {
-        guard let usage = claudeUsage else { return nil }
-        let parts = [("5H", usage.fiveHour), ("7D", usage.sevenDay)].compactMap { title, window in
-            window.map { "\(title) \(Int($0.usedPercent.rounded()))%" }
+        let lines = claudeSources.map { source in
+            let parts = [("5H", source.fiveHour), ("7D", source.sevenDay)].compactMap { title, w in w.map { "\(title) \($0.usedPercent)%" } }
+            return "\(source.name): " + (parts.isEmpty ? source.detail : parts.joined(separator: " · ")) + (source.name == currentClaudeSource?.name ? " (now)" : "")
         }
-        return parts.joined(separator: " · ") + (usage.stale ? " (last known)" : "")
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    private func spacer(_ height: CGFloat) -> NSView {
+        let view = NSView(); view.translatesAutoresizingMaskIntoConstraints = false
+        view.heightAnchor.constraint(equalToConstant: height).isActive = true
+        return view
     }
 
     private func usageBarViews(title: String, window: CodexUsageWindow, accent: NSColor, suffix: String = "") -> [NSView] {

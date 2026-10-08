@@ -265,9 +265,14 @@ public final class SessionManager {
                 windows.append((name, used, (r["resets_at"] as? NSNumber)?.doubleValue))
             }
         }
-        guard let max = windows.max(by: { $0.1 < $1.1 }) else { return false }
-        try store.execute("INSERT INTO usage_snapshots(account_id,physical_id,percent,reset_at,checked_at,window) VALUES(?,?,?,?,?,?)", [account, physical, String(max.1), max.2.map { String($0) }, store.now, max.0])
-        return max.1 >= 100
+        guard !windows.isEmpty else { return false }
+        let now = store.now
+        try store.transaction {
+            for (name, used, reset) in windows {
+                try store.execute("INSERT INTO usage_snapshots(account_id,physical_id,percent,reset_at,checked_at,window) VALUES(?,?,?,?,?,?)", [account, physical, String(used), reset.map { String($0) }, now, name])
+            }
+        }
+        return windows.contains { $0.1 >= 100 }
     }
     // Called before AppKit starts, so hooks and Terminal runners are headless.
     public static func handleCommandLine() -> Bool {

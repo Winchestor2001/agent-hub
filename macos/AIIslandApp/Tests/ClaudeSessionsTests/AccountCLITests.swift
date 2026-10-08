@@ -144,7 +144,13 @@ final class AccountCLITests: XCTestCase {
         XCTAssertThrowsError(try cli.plan(["2"], cwd: cwd)) { XCTAssertTrue("\($0)".contains("cca login 2")) }
 
         let input = #"{"model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":100,"resets_at":\#(Date().timeIntervalSince1970 + 3600)}}}"#
-        XCTAssertEqual(try cli.statusLine(account: a.id, input: Data(input.utf8)), "Opus · Personal · 5h 100%")
+        let line = try cli.statusLine(account: a.id, input: Data(input.utf8))
+        XCTAssertTrue(line.hasPrefix("\u{1B}[1;30;46m Personal "), line)
+        XCTAssertTrue(line.contains("Opus") && line.contains("5h 100% (resets in 59m)") && !line.contains("7d"), line)
+        let other = try cli.statusLine(account: b.id, input: Data(#"{"workspace":{"current_dir":"/tmp"},"context_window":{"remaining_percentage":41.6},"rate_limits":{"five_hour":{"used_percentage":12},"seven_day":{"used_percentage":80.4}}}"#.utf8))
+        XCTAssertTrue(other.hasPrefix("\u{1B}[1;30;45m Work ") && other.contains("/tmp") && other.contains("42% left") && other.contains("5h 12%") && other.contains("2;31m7d 80%"), other)
+        XCTAssertEqual(try store.usageWindows(b.id).map(\.window), ["five_hour", "seven_day"])
+        XCTAssertEqual(try store.usage(b.id)?.percent, 80.4)
         XCTAssertThrowsError(try cli.plan(["1"], cwd: cwd)) { XCTAssertTrue("\($0)".contains("reached its limit")) }
         XCTAssertTrue(cli.list(cwd: cwd).contains("100% (5h) · resets"))
     }

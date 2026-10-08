@@ -179,10 +179,19 @@ public final class SessionStore {
     public func physical(_ id: String) throws -> [String: String] {
         guard let row = try rows("SELECT * FROM physical_sessions WHERE id=?", [id]).first else { throw SessionError.sessionMissing }; return row
     }
+    /// The most limiting current window; this is what limit checks use.
     public func usage(_ account: String) throws -> UsageSnapshot? {
-        guard let r = try rows("SELECT * FROM usage_snapshots WHERE account_id=? ORDER BY id DESC LIMIT 1", [account]).first,
-              let percent = r["percent"].flatMap(Double.init), let time = r["checked_at"].flatMap(Double.init) else { return nil }
-        return UsageSnapshot(percent: percent, resetAt: r["reset_at"].flatMap(Double.init), checkedAt: time, window: r["window"]!)
+        try usageWindows(account).max { $0.percent < $1.percent }
+    }
+    /// Latest snapshot of each rate-limit window (five_hour first). A window whose reset has passed no longer applies.
+    public func usageWindows(_ account: String, now: Double = Date().timeIntervalSince1970) throws -> [UsageSnapshot] {
+        try ["five_hour", "seven_day"].compactMap { window in
+            guard let r = try rows("SELECT * FROM usage_snapshots WHERE account_id=? AND window=? ORDER BY id DESC LIMIT 1", [account, window]).first,
+                  let percent = r["percent"].flatMap(Double.init), let time = r["checked_at"].flatMap(Double.init) else { return nil }
+            let reset = r["reset_at"].flatMap(Double.init)
+            if let reset, reset <= now { return nil }
+            return UsageSnapshot(percent: percent, resetAt: reset, checkedAt: time, window: window)
+        }
     }
     public func event(_ kind: String, logical: String? = nil, physical: String? = nil, account: String? = nil) throws {
         // Fixed labels only: no subprocess output or hook bodies.

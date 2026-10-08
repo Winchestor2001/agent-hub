@@ -266,15 +266,50 @@ public final class AccountCLI {
         return path
     }
 
-    /// Handles a statusline call: stores rate limits and prints a short status.
+    /// Handles a statusline call: stores rate limits and prints the account badge plus the
+    /// same details as the user's global statusline (model, folder, branch, context, limits).
     public func statusLine(account id: String, input: Data) throws -> String {
         let account = try store.account(id)
         let json = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any] ?? [:]
         try manager.recordUsage(account: id, physical: nil, json: json)
-        let model = (json["model"] as? [String: Any])?["display_name"] as? String
-        var parts = [model, account.name].compactMap { $0 }
-        if let u = try store.usage(id), !u.stale { parts.append("\(u.window == "seven_day" ? "7d" : "5h") \(Int(u.percent))%") }
-        return parts.joined(separator: " · ")
+        let index = (try store.accounts().firstIndex { $0.id == id } ?? 0)
+        let esc = "\u{1B}[", reset = esc + "0m", dim = esc + "2m"
+        // Black text on a per-account background so the account is obvious at a glance.
+        let badges = ["46", "45", "43", "42"]
+        var line = "\(esc)1;30;\(badges[index % badges.count])m \(account.name) \(reset)"
+        func add(_ text: String, _ color: String = "2") { line += " \(dim)|\(reset) \(esc)\(color)m\(text)\(reset)" }
+        if let model = (json["model"] as? [String: Any])?["display_name"] as? String { add(model, "2;36") }
+        if let dir = (json["workspace"] as? [String: Any])?["current_dir"] as? String ?? json["cwd"] as? String {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            add(dir.hasPrefix(home) ? "~" + dir.dropFirst(home.count) : dir, "2;33")
+            if let branch = Self.branch(dir) { add(branch, "2;32") }
+        }
+        if let left = ((json["context_window"] as? [String: Any])?["remaining_percentage"] as? NSNumber)?.doubleValue {
+            add("\(Int(left.rounded()))% left")
+        }
+        let windows = try store.usageWindows(id, now: now())
+        for (name, label) in [("five_hour", "5h"), ("seven_day", "7d")] {
+            guard let w = windows.first(where: { $0.window == name }) else { continue }
+            let color = w.percent < 50 ? "2;32" : w.percent < 75 ? "2;33" : "2;31"
+            add("\(label) \(Int(w.percent))%" + (w.resetAt.map { " (resets in \(Self.countdown($0 - now())))" } ?? ""), color)
+        }
+        return line
+    }
+
+    static func countdown(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds)), d = s / 86_400, h = s % 86_400 / 3_600, m = s % 3_600 / 60
+        return d > 0 ? "\(d)d \(h)h" : h > 0 ? "\(h)h \(m)m" : "\(m)m"
+    }
+
+    static func branch(_ dir: String) -> String? {
+        let p = Process(), pipe = Pipe()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        p.arguments = ["-C", dir, "--no-optional-locks", "branch", "--show-current"]
+        p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return nil }
+        let out = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+        let name = String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return p.terminationStatus == 0 && !name.isEmpty ? name : nil
     }
 
     public func login(_ key: String) throws {

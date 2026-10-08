@@ -175,11 +175,11 @@ final class ClaudeAccountsWindow: NSWindowController {
         do {
             accounts = try store.accounts(); sessions = try store.sessions()
             let usage = try accounts.map { try store.usage($0.id) }
+            usageRows = try accounts.map { (account: $0, status: statusText($0), windows: try store.usageWindows($0.id)) }
             var parts: [String] = accounts.map { a in "\(a.id)|\(a.name)|\(a.status)|\(a.subscription)" }
-            parts += usage.map { (u: UsageSnapshot?) -> String in
-                guard let u else { return "-" }
-                return "\(u.percent)|\(u.resetAt ?? 0)|\(u.stale)|\(u.window)"
-            }
+            parts += usageRows.flatMap { row in row.windows.map { (u: UsageSnapshot) -> String in
+                "\(u.percent)|\(u.resetAt ?? 0)|\(u.stale)|\(u.window)"
+            } }
             parts += sessions.map { (s: ManagedSession) -> String in
                 "\(s.id)|\(s.name)|\(s.status)|\(s.accountID ?? "")|\(s.branch ?? "")|\(s.physicalID ?? "")"
             }
@@ -546,6 +546,8 @@ final class ClaudeAccountsWindow: NSWindowController {
         return (try? store.usage(id))?.percent
     }
     var hasAccounts: Bool { !accounts.isEmpty }
+    /// Every account with its display status and current 5h/7d windows, for the island.
+    private(set) var usageRows: [(account: Account, status: String, windows: [UsageSnapshot])] = []
 }
 
 /// Target for the project "Choose…" button inside the modal New session alert.
