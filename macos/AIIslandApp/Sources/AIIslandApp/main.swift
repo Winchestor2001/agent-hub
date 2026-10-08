@@ -350,6 +350,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var isCodexUsageLoading = false
     private var usageRefreshTimer: Timer?
     private var readCodexUsage: (@escaping @Sendable (CodexUsageSnapshot?) -> Void) -> Void = CodexUsageReader.read
+    private var claudeUsage: ClaudeRateLimits?
+    private var readClaudeUsage: () -> ClaudeRateLimits? = { ClaudeRateLimitCache.read() }
     private var claudeAccounts: ClaudeAccountsWindow?
     private var claudeLoggedIn: Bool?
     private let positionKey = "ai-island.position.v1"
@@ -427,10 +429,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let texts = allViews(content).compactMap { ($0 as? NSTextView)?.string }
             check(texts.contains { $0.contains("handoff completed") }, "History renders from SQLite events")
             check(texts.contains { $0.contains("CLAUDE_CONFIG_DIR") && $0.contains(claude) }, "Diagnostics contain session identities")
+            // A lower global cache value must not override the active session's account usage.
+            claudeUsage = ClaudeRateLimits(fiveHour: ClaudeRateLimitWindow(usedPercent: 12, resetsAt: nil),
+                                           sevenDay: nil, capturedAt: nil, stale: true)
             rebuildNotchContent(); collapseIsland()
             check(island.frame.width == 280 && claudeAccounts?.islandSummary?.contains("Claude B auth ready") == true, "Island shows warning and standby account")
             let rings = allViews(compactContent).compactMap { $0 as? UsageRingView }
-            check(rings.contains { abs($0.progress - 0.96) < 0.001 }, "Claude island ring reflects account usage")
+            check(rings.contains { abs($0.progress - 0.96) < 0.001 }, "Claude island ring prefers account usage over the global cache")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
             check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
@@ -463,6 +468,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 primary: CodexUsageWindow(usedPercent: count * 10, resetsAt: nil), secondary: nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { completion(usage) }
         }
+        var claudeCache: ClaudeRateLimits? = ClaudeRateLimits(
+            fiveHour: ClaudeRateLimitWindow(usedPercent: 55, resetsAt: Date().timeIntervalSince1970 + 3600),
+            sevenDay: nil, capturedAt: Date().timeIntervalSince1970 - 3600, stale: true)
+        readClaudeUsage = { claudeCache }
         func allViews(_ view: NSView) -> [NSView] {
             [view] + view.subviews.flatMap { allViews($0) }
         }
@@ -494,6 +503,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
         } ?? []
         check(labels.contains { $0.contains("40%") }, "Open card displays the updated percentage")
+        check(labels.contains { $0.hasPrefix("5H · 55% USED") && $0.hasSuffix("· LAST KNOWN") },
+              "Claude card shows the cached 5H window marked as last known")
+        check(labels.contains("7D · LIMIT UNAVAILABLE"), "Missing Claude 7D window shows LIMIT UNAVAILABLE")
+        if claudeAccounts?.islandUsage == nil {
+            check(rings.contains { abs($0.progress - 0.55) < 0.001 }, "Claude ring uses the cached maximum percentage")
+        }
+        claudeCache = nil
+        isCodexUsageLoading = true  // A hung Codex request must not block the Claude update.
+        refreshCodexUsage()
+        isCodexUsageLoading = false
+        let claudeLabels = statusPopover.contentViewController.map {
+            allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
+        } ?? []
+        check(claudeLabels.contains("5H · LIMIT UNAVAILABLE") && claudeLabels.contains("7D · LIMIT UNAVAILABLE"),
+              "Claude card falls back to LIMIT UNAVAILABLE without waiting for Codex")
         if requests.count == 4 {
             let intervals = [requests[1].timeIntervalSince(requests[0]), requests[3].timeIntervalSince(requests[1])]
             check(intervals.allSatisfy { (3...5).contains($0) }, "Automatic request intervals are between 3 and 5 seconds")
@@ -863,7 +887,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if provider == .codex, let primary = codexUsage?.primary {
             ring.progress = CGFloat(primary.usedPercent) / 100
         } else {
-            if provider == .claude, let usage = claudeAccounts?.islandUsage { ring.progress = CGFloat(usage) / 100 }
+            if provider == .claude, let usage = claudeIslandPercent { ring.progress = CGFloat(usage) / 100 }
             ring.isLoading = provider == .codex && isCodexUsageLoading
         }
         let mark = providerLogoView(for: provider, accent: accent)
@@ -877,7 +901,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let progress: CGFloat
         if provider == .codex, let usage = codexUsage?.primary {
             progress = CGFloat(usage.usedPercent) / 100
-        } else if provider == .claude, let usage = claudeAccounts?.islandUsage {
+        } else if provider == .claude, let usage = claudeIslandPercent {
             progress = CGFloat(usage) / 100
         } else if provider == .claude, snapshot?.isInstalled == true {
             progress = 1
@@ -887,7 +911,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let bar = makeCompactStatusBar(accent: accent, progress: progress)
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
-        if provider == .claude { cell.toolTip = claudeAccounts?.islandSummary }
+        if provider == .claude { cell.toolTip = claudeAccounts?.islandSummary ?? claudeUsageSummary }
         cell.addSubview(ring)
         cell.addSubview(bar)
         NSLayoutConstraint.activate([
@@ -969,6 +993,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func refreshCodexUsage() {
+        // The Claude cache is a small local file, so it is re-read on every tick
+        // and redrawn on its own, even while a Codex request is still in flight.
+        let claude = readClaudeUsage()
+        if claude != claudeUsage {
+            claudeUsage = claude
+            rebuildUsageViews()
+        }
         guard !isCodexUsageLoading else { return }
         isCodexUsageLoading = true
         if codexUsage == nil { rebuildNotchContent() }
@@ -977,13 +1008,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 guard let self else { return }
                 if let usage { self.codexUsage = usage }
                 self.isCodexUsageLoading = false
-                self.rebuildNotchContent()
-                guard self.statusPopover.isShown else { return }
-                let controller = NSViewController()
-                controller.view = self.makeStatusPopoverView()
-                self.statusPopover.contentViewController = controller
+                self.rebuildUsageViews()
             }
         }
+    }
+
+    private func rebuildUsageViews() {
+        rebuildNotchContent()
+        guard statusPopover.isShown else { return }
+        let controller = NSViewController()
+        controller.view = makeStatusPopoverView()
+        statusPopover.contentViewController = controller
     }
 
     private func refreshClaudeAuth() {
@@ -1072,7 +1107,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let accent = provider == .codex
             ? NSColor(calibratedRed: 1.0, green: 0.62, blue: 0.22, alpha: 1)
             : NSColor(calibratedRed: 0.72, green: 0.55, blue: 1.0, alpha: 1)
-        let cardHeight: CGFloat = provider == .codex ? 124 : 68
+        let cardHeight: CGFloat = provider == .claude && claudeAccounts?.islandSummary != nil ? 142 : 124
         let card = NSView(frame: NSRect(x: 0, y: 0, width: 324, height: cardHeight))
         card.wantsLayer = true
         card.layer?.cornerRadius = 13
@@ -1110,12 +1145,24 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 content += unavailableUsageBarViews(title: "7D", accent: accent)
             }
         } else {
-            let progressCaption = NSTextField(
-                labelWithString: claudeAccounts?.islandSummary ?? (snapshot.isInstalled ? "CONFIGURATION READY" : "CONFIGURATION NEEDED")
-            )
-            progressCaption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
-            progressCaption.textColor = accent.withAlphaComponent(0.9)
-            content += [progressCaption, makeStatusBar(accent: accent, progress: snapshot.isInstalled ? 1 : 0.08)]
+            for (title, window) in [("5H", claudeUsage?.fiveHour), ("7D", claudeUsage?.sevenDay)] {
+                if let window {
+                    content += usageBarViews(
+                        title: title,
+                        window: CodexUsageWindow(usedPercent: Int(window.usedPercent.rounded()), resetsAt: window.resetsAt),
+                        accent: accent,
+                        suffix: claudeUsage?.stale == true ? " · LAST KNOWN" : ""
+                    )
+                } else {
+                    content += unavailableUsageBarViews(title: title, accent: accent)
+                }
+            }
+            if let summary = claudeAccounts?.islandSummary {
+                let caption = NSTextField(labelWithString: summary)
+                caption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+                caption.textColor = accent.withAlphaComponent(0.9)
+                content.append(caption)
+            }
         }
         let copy = NSStackView(views: content)
         copy.orientation = .vertical
@@ -1135,9 +1182,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return row
     }
 
-    private func usageBarViews(title: String, window: CodexUsageWindow, accent: NSColor) -> [NSView] {
+    /// An AI Island session's own account usage wins; otherwise the global statusline cache.
+    private var claudeIslandPercent: Double? { claudeAccounts?.islandUsage ?? claudeUsage?.maxPercent }
+
+    private var claudeUsageSummary: String? {
+        guard let usage = claudeUsage else { return nil }
+        let parts = [("5H", usage.fiveHour), ("7D", usage.sevenDay)].compactMap { title, window in
+            window.map { "\(title) \(Int($0.usedPercent.rounded()))%" }
+        }
+        return parts.joined(separator: " · ") + (usage.stale ? " (last known)" : "")
+    }
+
+    private func usageBarViews(title: String, window: CodexUsageWindow, accent: NSColor, suffix: String = "") -> [NSView] {
         let reset = window.resetsAt.map { " · RESET \(Self.resetFormatter.string(from: Date(timeIntervalSince1970: $0)))" } ?? ""
-        let caption = NSTextField(labelWithString: "\(title) · \(window.usedPercent)% USED\(reset)")
+        let caption = NSTextField(labelWithString: "\(title) · \(window.usedPercent)% USED\(reset)\(suffix)")
         caption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
         caption.textColor = accent.withAlphaComponent(0.94)
         return [caption, makeStatusBar(accent: accent, progress: CGFloat(window.usedPercent) / 100)]
