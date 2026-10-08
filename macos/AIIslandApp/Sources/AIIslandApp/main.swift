@@ -444,6 +444,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(rings.contains { abs($0.progress - 0.96) < 0.001 }, "Claude island ring prefers account usage over the global cache")
             let popoverView = makeStatusPopoverView()
             let popoverLabels = allViews(popoverView).compactMap { ($0 as? NSTextField)?.stringValue }
+            let popoverButtons = allViews(popoverView).compactMap { $0 as? NSButton }
+            check(popoverButtons.map(\.toolTip) == ["Refresh limits", "Manage AI Island", "Update Claude Code and Codex CLI"]
+                  && popoverButtons.allSatisfy { $0.title.isEmpty && $0.image != nil },
+                  "Popover actions are icon buttons: Refresh, Settings, Update (no Accounts)")
+            var updateOpened: URL?
+            openUpdateScript = { updateOpened = $0; return true }
+            popoverButtons.last?.performClick(nil)
+            let updateText = updateOpened.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+            check(updateOpened?.pathExtension == "command" && updateText.contains("for cli in claude codex") && updateText.contains("\"$cli\" update"),
+                  "Update opens a Terminal script that updates Claude Code and Codex")
             let popoverWindow = NSWindow(contentRect: popoverView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             popoverWindow.contentView = popoverView; popoverView.layoutSubtreeIfNeeded()
             if let bitmap = popoverView.bitmapImageRepForCachingDisplay(in: popoverView.bounds) {
@@ -1115,22 +1125,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let actions = NSStackView()
         actions.orientation = .horizontal
         actions.spacing = 8
-        let refresh = NSButton(title: "↻ Refresh", target: self, action: #selector(refreshAndReopenPopover))
-        refresh.bezelStyle = .rounded
-        refresh.bezelColor = NSColor(calibratedWhite: 0.18, alpha: 1)
-        refresh.contentTintColor = .white
-        refresh.font = .systemFont(ofSize: 13, weight: .semibold)
-        let settings = NSButton(title: "Manage AI Island", target: self, action: #selector(openSettingsFromPopover))
-        settings.bezelStyle = .rounded
-        settings.bezelColor = NSColor(calibratedRed: 0.16, green: 0.38, blue: 0.78, alpha: 1)
-        settings.contentTintColor = .white
-        settings.font = .systemFont(ofSize: 13, weight: .semibold)
-        actions.addArrangedSubview(refresh)
-        actions.addArrangedSubview(settings)
-        if claudeAccounts?.hasAccounts == true {
-            let accounts = NSButton(title: "Accounts →", target: self, action: #selector(openClaudeAccounts))
-            accounts.bezelStyle = .rounded
-            actions.addArrangedSubview(accounts)
+        for (symbol, tip, action) in [("arrow.clockwise", "Refresh limits", #selector(refreshAndReopenPopover)),
+                                      ("gearshape", "Manage AI Island", #selector(openSettingsFromPopover)),
+                                      ("arrow.down.circle", "Update Claude Code and Codex CLI", #selector(updateCLIs))] {
+            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?
+                .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold)) ?? NSImage()
+            let button = NSButton(image: image, target: self, action: action)
+            button.title = ""; button.imagePosition = .imageOnly
+            button.bezelStyle = .rounded
+            button.bezelColor = NSColor(calibratedWhite: 0.18, alpha: 1)
+            button.contentTintColor = .white
+            button.toolTip = tip
+            button.setAccessibilityLabel(tip)
+            button.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            actions.addArrangedSubview(button)
         }
         stack.addArrangedSubview(actions)
 
@@ -1337,6 +1345,35 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             fill.widthAnchor.constraint(equalTo: track.widthAnchor, multiplier: progress),
         ])
         return track
+    }
+
+    /// Runs each CLI's own updater (it knows whether it came from Homebrew, npm or a native install).
+    static let updateScript = """
+    #!/bin/sh
+    # AI Island: update Claude Code and Codex CLI.
+    for cli in claude codex; do
+      echo
+      if command -v "$cli" >/dev/null 2>&1; then
+        echo "==> Updating $cli ($("$cli" --version 2>/dev/null | head -1))"
+        "$cli" update || echo "$cli update failed."
+        echo "==> $cli is now $("$cli" --version 2>/dev/null | head -1)"
+      else
+        echo "==> $cli not found, skipped."
+      fi
+    done
+    echo
+    echo "Done. You can close this window."
+    """
+    /// Regression hook: records the script instead of opening Terminal.
+    var openUpdateScript: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+
+    @objc private func updateCLIs() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ai-island-update.command")
+        do {
+            try Data(Self.updateScript.utf8).write(to: url, options: .atomic)
+            chmod(url.path, 0o700)
+            if !openUpdateScript(url) { presentConfigurationError("Terminal could not open the update script.") }
+        } catch { presentConfigurationError("Unable to prepare the CLI update.") }
     }
 
     @objc private func refreshAndReopenPopover() {
