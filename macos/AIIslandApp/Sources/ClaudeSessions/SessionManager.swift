@@ -234,16 +234,7 @@ public final class SessionManager {
         let logical = row["logical_id"]!, account = row["account_id"]!
         let session = try store.sessions().first(where: { $0.id == logical })
         if event == "StatusLine" {
-            guard let rates = json["rate_limits"] as? [String: Any] else { return }
-            var windows: [(String, Double, Double?)] = []
-            for name in ["five_hour", "seven_day"] {
-                if let r = rates[name] as? [String: Any], let used = r["used_percentage"] as? Double, used.isFinite, (0...100).contains(used) {
-                    windows.append((name, used, r["resets_at"] as? Double))
-                }
-            }
-            guard let max = windows.max(by: { $0.1 < $1.1 }) else { return }
-            try store.execute("INSERT INTO usage_snapshots(account_id,physical_id,percent,reset_at,checked_at,window) VALUES(?,?,?,?,?,?)", [account, physical, String(max.1), max.2.map { String($0) }, store.now, max.0])
-            if max.1 >= 100 { try store.event("usage limit reached", logical: logical, physical: physical, account: account) }
+            if try recordUsage(account: account, physical: physical, json: json) { try store.event("usage limit reached", logical: logical, physical: physical, account: account) }
             return
         }
         guard ["SessionStart", "Stop", "SessionEnd", "PostToolUse", "PostCompact", "StopFailure"].contains(event),
@@ -264,9 +255,31 @@ public final class SessionManager {
             }
         }
     }
+    /// Stores the statusline's rate limits for an account; true when a window is at 100%.
+    @discardableResult
+    public func recordUsage(account: String, physical: String?, json: [String: Any]) throws -> Bool {
+        guard let rates = json["rate_limits"] as? [String: Any] else { return false }
+        var windows: [(String, Double, Double?)] = []
+        for name in ["five_hour", "seven_day"] {
+            if let r = rates[name] as? [String: Any], let used = (r["used_percentage"] as? NSNumber)?.doubleValue, used.isFinite, (0...100).contains(used) {
+                windows.append((name, used, (r["resets_at"] as? NSNumber)?.doubleValue))
+            }
+        }
+        guard let max = windows.max(by: { $0.1 < $1.1 }) else { return false }
+        try store.execute("INSERT INTO usage_snapshots(account_id,physical_id,percent,reset_at,checked_at,window) VALUES(?,?,?,?,?,?)", [account, physical, String(max.1), max.2.map { String($0) }, store.now, max.0])
+        return max.1 >= 100
+    }
     // Called before AppKit starts, so hooks and Terminal runners are headless.
     public static func handleCommandLine() -> Bool {
         let args = CommandLine.arguments
+        if args.count >= 2, args[1] == "--cca" { exit(AccountCLI.main(Array(args.dropFirst(2)))) }
+        if args.count == 4, args[1] == "--cca-statusline" {
+            // A statusline must never break Claude's prompt: errors print nothing.
+            let input = FileHandle.standardInput.readDataToEndOfFile()
+            if let store = try? SessionStore(root: URL(fileURLWithPath: args[2])),
+               let line = try? AccountCLI(manager: SessionManager(store: store)).statusLine(account: args[3], input: input) { print(line) }
+            return true
+        }
         guard args.count >= 4, ["--claude-run", "--claude-event", "--claude-login"].contains(args[1]) else { return false }
         do {
             let store = try SessionStore(root: URL(fileURLWithPath: args[2]))
