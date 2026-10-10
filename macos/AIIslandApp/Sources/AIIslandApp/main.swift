@@ -648,9 +648,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 popoverView.cacheDisplay(in: popoverView.bounds, to: bitmap)
                 try bitmap.representation(using: .png, properties: [:])?.write(to: report.deletingPathExtension().appendingPathExtension("popover.png"))
             }
-            check(popoverLabels.contains("Default") && popoverLabels.contains("Claude A  · NOW") && popoverLabels.contains("Claude B")
-                  && popoverLabels.contains { $0.hasPrefix("Ready") } && popoverLabels.contains { $0.hasPrefix("5H · 96% USED") }
-                  && popoverLabels.contains { $0.hasPrefix("5H · 12% USED") },
+            check(popoverLabels.contains("Default") && popoverLabels.contains("Claude A · now") && popoverLabels.contains("Claude B")
+                  && popoverLabels.contains { $0.hasPrefix("Ready") } && popoverLabels.contains { $0.hasPrefix("5H · 96% used") }
+                  && popoverLabels.contains { $0.hasPrefix("5H · 12% used") },
                   "Claude card lists Default and every account, marking the one in use")
             let orange = NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
             // Provider identity lives in the logo; the ring itself is colored by limit level.
@@ -790,9 +790,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
         } ?? []
         check(labels.contains { $0.contains("40%") }, "Open card displays the updated percentage")
-        check(labels.contains { $0.hasPrefix("5H · 55% USED") && $0.hasSuffix("· LAST KNOWN") },
+        check(labels.contains { $0.hasPrefix("5H · 55% used") && $0.hasSuffix("· last known") },
               "Claude card shows the cached 5H window marked as last known")
-        check(labels.contains("7D · LIMIT UNAVAILABLE"), "Missing Claude 7D window shows LIMIT UNAVAILABLE")
+        check(labels.contains("7D · not available"), "Missing Claude 7D window shows not available next to the known 5H")
         if claudeAccounts?.islandUsage == nil {
             check(rings.contains { abs($0.progress - 0.55) < 0.001 }, "Claude ring shows the cached 5H window")
         }
@@ -803,8 +803,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let claudeLabels = statusPopover.contentViewController.map {
             allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
         } ?? []
-        check(claudeLabels.contains("5H · LIMIT UNAVAILABLE") && claudeLabels.contains("7D · LIMIT UNAVAILABLE"),
-              "Claude card falls back to LIMIT UNAVAILABLE without waiting for Codex")
+        check(claudeLabels.contains("Limits not available yet") && !claudeLabels.contains { $0.hasSuffix("LIMIT UNAVAILABLE") },
+              "Claude card without any window shows one quiet line, without waiting for Codex")
         rebuildNotchContent()
         if claudeAccounts?.islandUsage == nil, let claude = islandCell(.claude) {
             // A configured Claude without any recorded usage once rendered a full bar.
@@ -838,7 +838,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                                 secondary: CodexUsageWindow(usedPercent: percent, resetsAt: nil))
                 rebuildUsageViews()
                 let popoverBar = statusPopover.contentViewController.flatMap { controller -> NSView? in
-                    let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · \(percent)% USED") == true }
+                    let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · \(percent)% used") == true }
                     guard let stack = caption?.superview as? NSStackView,
                           let index = stack.arrangedSubviews.firstIndex(where: { $0 === caption }),
                           stack.arrangedSubviews.indices.contains(index + 1) else { return nil }
@@ -884,6 +884,49 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
               },
               "Island stays 58pt wide and a 100% number fits readable inside each cell")
         snapshot(compactContent, "island")
+        // Popover captions: plain case, proportional font, time left until reset with the absolute time in a tooltip.
+        let now = Date().timeIntervalSince1970
+        let fiveHourReset = now + 2 * 3_600 + 15 * 60 + 30, sevenDayReset = now + 3 * 86_400 + 4 * 3_600 + 30
+        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 40, resetsAt: fiveHourReset),
+                                        secondary: CodexUsageWindow(usedPercent: 72, resetsAt: sevenDayReset))
+        rebuildUsageViews()
+        func popoverFields() -> [NSTextField] {
+            statusPopover.contentViewController.map { allViews($0.view).compactMap { $0 as? NSTextField } } ?? []
+        }
+        var fields = popoverFields()
+        let fiveHourCaption = fields.first { $0.stringValue.hasPrefix("5H · 40% used") }
+        let sevenDayCaption = fields.first { $0.stringValue.hasPrefix("7D · 72% used") }
+        check(fiveHourCaption?.stringValue == "5H · 40% used · resets in 2h 15m"
+              && sevenDayCaption?.stringValue == "7D · 72% used · resets in 3d 4h",
+              "Popover shows the time left until each window resets")
+        let year = String(Calendar.current.component(.year, from: Date(timeIntervalSince1970: sevenDayReset)))
+        check(fiveHourCaption?.toolTip == Self.resetTooltip(fiveHourReset) && fiveHourCaption?.toolTip?.hasPrefix("Resets at ") == true
+              && fiveHourCaption?.toolTip?.contains(year) == false && sevenDayCaption?.toolTip?.contains(year) == true,
+              "The absolute reset time is in the tooltip, with the date when it is days away")
+        let texts = fields.map(\.stringValue)
+        let captions = texts.filter { $0.hasPrefix("5H · ") || $0.hasPrefix("7D · ") }
+        check(texts.contains("Live AI limits") && !captions.isEmpty
+              && captions.allSatisfy { $0.contains(" used") || $0.hasSuffix(" not available") }
+              && !texts.contains { $0.contains("USED") || $0.contains("UNAVAILABLE") || $0.contains("RESET") || $0 == "LIVE AI LIMITS" },
+              "Popover captions are in plain case")
+        check(fields.allSatisfy { $0.font?.isFixedPitch == false }, "Popover text uses the proportional system font")
+        check(!texts.contains { ["LOCAL", "OFFLINE"].contains($0) || $0.contains("managed file") },
+              "Popover has no LOCAL/OFFLINE badge or managed file count")
+        if let view = statusPopover.contentViewController?.view { snapshot(view, "popover") }
+        codexUsage = nil
+        rebuildUsageViews()
+        fields = popoverFields()
+        check(fields.contains { $0.stringValue == "Limits not available yet" } && !fields.contains { $0.stringValue.hasSuffix("LIMIT UNAVAILABLE") },
+              "Codex without any window shows one quiet line instead of a row per window")
+        if let view = statusPopover.contentViewController?.view {
+            view.layoutSubtreeIfNeeded()
+            let cards = allViews(view).filter { $0.layer?.cornerRadius == 13 }
+            check(cards.count >= 2 && cards.allSatisfy { $0.frame.width == 324 }, "Provider cards keep the full width without usage bars")
+        }
+        isCodexUsageLoading = true
+        rebuildUsageViews()
+        check(popoverFields().contains { $0.stringValue == "Loading limits…" }, "Codex shows Loading limits… before the first answer")
+        isCodexUsageLoading = false
         prefersReducedMotion = defaultReducedMotion
         codexUsage = lastCodexUsage
         if requests.count == 4 {
@@ -1675,8 +1718,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         stack.edgeInsets = NSEdgeInsets(top: 18, left: 16, bottom: 16, right: 16)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        let heading = NSTextField(labelWithString: "LIVE AI LIMITS")
-        heading.font = .monospacedSystemFont(ofSize: 13, weight: .bold)
+        let heading = NSTextField(labelWithString: "Live AI limits")
+        heading.font = .systemFont(ofSize: 14, weight: .bold)
         heading.textColor = .white
         let subtitle = NSTextField(labelWithString: "Click the island or outside to close")
         subtitle.font = .systemFont(ofSize: 12, weight: .medium)
@@ -1709,7 +1752,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         stack.addArrangedSubview(actions)
 
         root.addSubview(stack)
-        root.setFrameSize(NSSize(width: 356, height: max(root.frame.height, stack.fittingSize.height)))
+        root.setFrameSize(NSSize(width: 356, height: stack.fittingSize.height))
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -1735,33 +1778,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let name = NSTextField(labelWithString: provider.rawValue)
         name.font = .systemFont(ofSize: 16, weight: .bold)
         name.textColor = accent
-        let state = NSTextField(labelWithString: snapshot.isInstalled ? snapshot.stateText : "Not detected")
-        state.font = .systemFont(ofSize: 13, weight: .semibold)
-        state.textColor = NSColor.white.withAlphaComponent(0.78)
-        let badge = NSTextField(labelWithString: snapshot.isInstalled ? "LOCAL" : "OFFLINE")
-        badge.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
-        badge.textColor = accent
-        let topRow = NSStackView(views: [dot, name, NSView(), badge])
+        let topRow = NSStackView(views: [dot, name])
         topRow.orientation = .horizontal
         topRow.alignment = .centerY
         topRow.spacing = 6
-        var content: [NSView] = [topRow, state]
+        var content: [NSView] = [topRow]
+        // File counts live in Settings; the card is about limits only.
+        if !snapshot.isInstalled {
+            let state = NSTextField(labelWithString: "Not detected")
+            state.font = .systemFont(ofSize: 13, weight: .semibold)
+            state.textColor = NSColor.white.withAlphaComponent(0.78)
+            content.append(state)
+        }
         if provider == .codex {
-            if let primary = codexUsage?.primary {
-                content += usageBarViews(title: "5H", window: primary, accent: accent)
-            } else {
-                content += unavailableUsageBarViews(title: "5H", accent: accent)
-            }
-            if let secondary = codexUsage?.secondary {
-                content += usageBarViews(title: "7D", window: secondary, accent: accent)
-            } else {
-                content += unavailableUsageBarViews(title: "7D", accent: accent)
-            }
+            content += usageWindowViews([("5H", codexUsage?.primary), ("7D", codexUsage?.secondary)], accent: accent,
+                                        loading: isCodexUsageLoading && codexUsage == nil)
         } else {
             let sources = claudeSources, current = currentClaudeSource
             for (index, source) in sources.enumerated() {
                 if index > 0 { content.append(spacer(6)) }
-                let title = NSTextField(labelWithString: source.name + (source.name == current?.name ? "  · NOW" : ""))
+                let title = NSTextField(labelWithString: source.name + (source.name == current?.name ? " · now" : ""))
                 title.font = .systemFont(ofSize: 13, weight: .bold); title.textColor = .white
                 let detail = NSTextField(labelWithString: source.detail)
                 detail.font = .systemFont(ofSize: 11, weight: .medium); detail.textColor = NSColor.white.withAlphaComponent(0.62)
@@ -1769,17 +1805,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 header.translatesAutoresizingMaskIntoConstraints = false
                 header.widthAnchor.constraint(equalToConstant: 296).isActive = true
                 content.append(header)
-                for (label, window) in [("5H", source.fiveHour), ("7D", source.sevenDay)] {
-                    if let window {
-                        content += usageBarViews(title: label, window: window, accent: accent, suffix: source.stale ? " · LAST KNOWN" : "")
-                    } else {
-                        content += unavailableUsageBarViews(title: label, accent: accent)
-                    }
-                }
+                content += usageWindowViews([("5H", source.fiveHour), ("7D", source.sevenDay)], accent: accent,
+                                            suffix: source.stale ? " · last known" : "")
             }
             if let summary = claudeAccounts?.islandSummary {
                 let caption = NSTextField(labelWithString: summary)
-                caption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+                caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
                 caption.textColor = accent.withAlphaComponent(0.9)
                 content.append(caption)
             }
@@ -1794,7 +1825,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             copy.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
             copy.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
             copy.centerYAnchor.constraint(equalTo: card.centerYAnchor),
-            card.heightAnchor.constraint(equalToConstant: max(124, copy.fittingSize.height + 26)),
+            card.widthAnchor.constraint(equalToConstant: 324),
+            card.heightAnchor.constraint(equalToConstant: copy.fittingSize.height + 26),
         ])
         let row = NSStackView(views: [card])
         row.orientation = .horizontal
@@ -1868,36 +1900,50 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return view
     }
 
+    private static func usageCaption(_ text: String, color: NSColor) -> NSTextField {
+        let caption = NSTextField(labelWithString: text)
+        caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        caption.textColor = color
+        caption.lineBreakMode = .byTruncatingTail
+        return caption
+    }
+
+    /// Caption and bar per limit window. Without any known window the source
+    /// gets one quiet line instead of a "not available" row per window.
+    private func usageWindowViews(_ windows: [(title: String, window: CodexUsageWindow?)], accent: NSColor,
+                                  suffix: String = "", loading: Bool = false) -> [NSView] {
+        guard windows.contains(where: { $0.window != nil }) else {
+            return [Self.usageCaption(loading ? "Loading limits…" : "Limits not available yet",
+                                      color: NSColor.white.withAlphaComponent(0.55))]
+        }
+        return windows.flatMap { title, window in
+            guard let window else {
+                return [Self.usageCaption("\(title) · not available", color: NSColor.white.withAlphaComponent(0.55)),
+                        makeStatusBar(accent: accent.withAlphaComponent(0.45), progress: 0.02)]
+            }
+            return usageBarViews(title: title, window: window, accent: accent, suffix: suffix)
+        }
+    }
+
     private func usageBarViews(title: String, window: CodexUsageWindow, accent: NSColor, suffix: String = "") -> [NSView] {
-        let reset = window.resetsAt.map { " · RESET \(Self.resetFormatter.string(from: Date(timeIntervalSince1970: $0)))" } ?? ""
-        let caption = NSTextField(labelWithString: "\(title) · \(window.usedPercent)% USED\(reset)\(suffix)")
-        caption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
-        caption.textColor = accent.withAlphaComponent(0.94)
+        var text = "\(title) · \(window.usedPercent)% used"
+        if let resetsAt = window.resetsAt {
+            let left = ResetCountdown.text(until: resetsAt, now: Date().timeIntervalSince1970)
+            text += left == "now" ? " · resets now" : " · resets in \(left)"
+        }
+        let caption = Self.usageCaption(text + suffix, color: accent.withAlphaComponent(0.94))
+        caption.toolTip = window.resetsAt.map(Self.resetTooltip)
         let barColor = usageColor(accent: accent, percent: Double(window.usedPercent))
         return [caption, makeStatusBar(accent: barColor, progress: CGFloat(window.usedPercent) / 100)]
     }
 
-    private func unavailableUsageBarViews(title: String, accent: NSColor) -> [NSView] {
-        let caption = NSTextField(labelWithString: "\(title) · LIMIT UNAVAILABLE")
-        caption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
-        caption.textColor = accent.withAlphaComponent(0.7)
-        return [caption, makeStatusBar(accent: accent.withAlphaComponent(0.45), progress: 0.02)]
-    }
-
-    private static let resetFormatter: DateFormatter = {
+    /// The absolute reset time, with the date when it is not within the next day.
+    static func resetTooltip(_ resetsAt: TimeInterval) -> String {
+        let date = Date(timeIntervalSince1970: resetsAt)
         let formatter = DateFormatter()
-        formatter.dateStyle = .none
         formatter.timeStyle = .short
-        return formatter
-    }()
-
-    private func resetCountdown(_ timestamp: TimeInterval?) -> String {
-        guard let timestamp else { return "—" }
-        let remaining = max(0, Int(timestamp - Date().timeIntervalSince1970))
-        let hours = remaining / 3_600
-        let minutes = (remaining % 3_600) / 60
-        if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }
-        return "\(hours)h \(minutes)m"
+        formatter.dateStyle = date.timeIntervalSinceNow > 86_400 ? .medium : .none
+        return "Resets at \(formatter.string(from: date))"
     }
 
     private func makeStatusBar(accent: NSColor, progress: CGFloat) -> NSView {
