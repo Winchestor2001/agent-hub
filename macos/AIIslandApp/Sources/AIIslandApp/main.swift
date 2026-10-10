@@ -21,11 +21,18 @@ private struct CodexRateLimitResponse: Decodable, Sendable {
 }
 
 private enum CodexUsageReader {
+    static var executable: String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return ["\(home)/.codex/packages/app-server-daemon/current/bin/codex", "/opt/homebrew/bin/codex"]
+            .first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
     static func read(completion: @escaping @Sendable (CodexUsageSnapshot?) -> Void) {
         DispatchQueue.global(qos: .utility).async {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            let managedBinary = "\(home)/.codex/packages/app-server-daemon/current/bin/codex"
-            let executable = FileManager.default.isExecutableFile(atPath: managedBinary) ? managedBinary : "/opt/homebrew/bin/codex"
+            guard let executable else {
+                completion(nil)
+                return
+            }
             let process = Process()
             let input = Pipe()
             let output = Pipe()
@@ -73,10 +80,13 @@ private struct ClaudeAuthStatus: Decodable, Sendable {
 }
 
 private enum ClaudeAuthReader {
+    static var executable: String? {
+        ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
     static func read(completion: @escaping @Sendable (Bool?) -> Void) {
         DispatchQueue.global(qos: .utility).async {
-            let candidates = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
-            guard let executable = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            guard let executable else {
                 completion(nil)
                 return
             }
@@ -102,6 +112,8 @@ private final class UsageRingView: NSView {
     var progress: CGFloat = 0 { didSet { needsDisplay = true } }
     var accent = NSColor.white { didSet { needsDisplay = true } }
     var isLoading = false { didSet { needsDisplay = true } }
+    /// Usage could not be read: a dashed track, so it never looks like 0%.
+    var isUnknown = false { didSet { needsDisplay = true } }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -113,6 +125,13 @@ private final class UsageRingView: NSView {
             height: diameter
         )
         let track = NSBezierPath(ovalIn: circle)
+        if isUnknown {
+            NSColor.white.withAlphaComponent(0.3).setStroke()
+            track.setLineDash([3, 4], count: 2, phase: 0)
+            track.lineWidth = 2
+            track.stroke()
+            return
+        }
         NSColor.white.withAlphaComponent(0.14).setStroke()
         track.lineWidth = 3.5
         track.stroke()
@@ -133,6 +152,40 @@ private final class UsageRingView: NSView {
         arc.lineCapStyle = .round
         arc.stroke()
     }
+}
+
+/// The thin bar under an island ring. `progress == nil` means usage is unknown:
+/// the bar stays empty and dim instead of pretending to show a value.
+private final class CompactUsageBar: NSView {
+    let progress: CGFloat?
+
+    init(accent: NSColor, progress: CGFloat?) {
+        self.progress = progress
+        super.init(frame: NSRect(x: 0, y: 0, width: 38, height: 3))
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 1.5
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(progress == nil ? 0.06 : 0.14).cgColor
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 38),
+            heightAnchor.constraint(equalToConstant: 3),
+        ])
+        guard let progress, progress > 0 else { return }
+        let fill = NSView()
+        fill.wantsLayer = true
+        fill.layer?.cornerRadius = 1.5
+        fill.layer?.backgroundColor = accent.cgColor
+        fill.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(fill)
+        NSLayoutConstraint.activate([
+            fill.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fill.topAnchor.constraint(equalTo: topAnchor),
+            fill.bottomAnchor.constraint(equalTo: bottomAnchor),
+            fill.widthAnchor.constraint(equalTo: widthAnchor, multiplier: min(progress, 1)),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
 private final class NotchContentView: NSView {
@@ -348,6 +401,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var snapshots: [ProviderSnapshot] = []
     private var codexUsage: CodexUsageSnapshot?
     private var isCodexUsageLoading = false
+    /// At least one Codex request has finished, so a missing snapshot means unknown, not loading.
+    private var didFinishCodexUsageRequest = false
     private var usageRefreshTimer: Timer?
     private var readCodexUsage: (@escaping @Sendable (CodexUsageSnapshot?) -> Void) -> Void = CodexUsageReader.read
     private var claudeUsage: ClaudeRateLimits?
@@ -532,10 +587,22 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         func check(_ condition: Bool, _ message: String) {
             checks.append("\(condition ? "PASS" : "FAIL"): \(message)")
         }
+        func islandCell(_ provider: Provider) -> (ring: UsageRingView, bar: CompactUsageBar)? {
+            let ring = allViews(compactContent).compactMap { $0 as? UsageRingView }
+                .first { $0.toolTip?.hasPrefix(provider.rawValue) == true }
+            let bar = ring?.superview?.subviews.compactMap { $0 as? CompactUsageBar }.first
+            return ring.flatMap { ring in bar.map { (ring, $0) } }
+        }
         startUsageAutoRefresh()
         refreshCodexUsage()
         refreshCodexUsage()
         check(requests.count == 1, "Concurrent manual refreshes share the in-flight request")
+        if let codex = islandCell(.codex) {
+            check(codex.ring.isLoading && !codex.ring.isUnknown && codex.bar.progress == nil,
+                  "Codex island shows loading, not 0%, before the first request finishes")
+        } else {
+            check(false, "Codex island cell is rendered")
+        }
         try? await Task.sleep(for: .milliseconds(300))
         check(codexUsage?.primary?.usedPercent == 10, "Initial snapshot is loaded")
         check(!statusPopover.isShown, "Card stays closed during background refresh")
@@ -571,6 +638,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         } ?? []
         check(claudeLabels.contains("5H · LIMIT UNAVAILABLE") && claudeLabels.contains("7D · LIMIT UNAVAILABLE"),
               "Claude card falls back to LIMIT UNAVAILABLE without waiting for Codex")
+        rebuildNotchContent()
+        if claudeAccounts?.islandUsage == nil, let claude = islandCell(.claude) {
+            // A configured Claude without any recorded usage once rendered a full bar.
+            check(claude.bar.progress == nil && claude.ring.isUnknown && !claude.ring.isLoading,
+                  "Unknown Claude usage is not drawn as a full or empty bar")
+            check(claude.ring.toolTip?.contains("limits unknown") == true,
+                  "Claude island tooltip explains why usage is unknown")
+        }
+        let lastCodexUsage = codexUsage
+        codexUsage = nil
+        rebuildNotchContent()
+        if let codex = islandCell(.codex) {
+            check(codex.ring.isUnknown && !codex.ring.isLoading && codex.bar.progress == nil
+                  && codex.ring.toolTip?.contains("limits unknown") == true,
+                  "Codex island shows unknown with a reason after a request returns no limits")
+        }
+        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 0, resetsAt: nil), secondary: nil)
+        rebuildNotchContent()
+        if let codex = islandCell(.codex) {
+            check(!codex.ring.isUnknown && codex.ring.progress == 0 && codex.bar.progress == 0,
+                  "Known 0% Codex usage stays distinct from unknown")
+        }
+        codexUsage = lastCodexUsage
         if requests.count == 4 {
             let intervals = [requests[1].timeIntervalSince(requests[0]), requests[3].timeIntervalSince(requests[1])]
             check(intervals.allSatisfy { (3...5).contains($0) }, "Automatic request intervals are between 3 and 5 seconds")
@@ -949,18 +1039,53 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         ])
     }
 
+    /// What an island cell can honestly show for one provider.
+    private enum IslandUsage: Equatable {
+        case known(Double)
+        case loading
+        case unknown(reason: String)
+    }
+
+    private func islandUsage(for provider: Provider) -> IslandUsage {
+        switch provider {
+        case .codex:
+            if let primary = codexUsage?.primary { return .known(Double(primary.usedPercent)) }
+            if CodexUsageReader.executable == nil { return .unknown(reason: "Codex CLI not found") }
+            if !didFinishCodexUsageRequest { return .loading }
+            return .unknown(reason: "Codex did not report limits")
+        case .claude:
+            if let percent = claudeIslandPercent { return .known(percent) }
+            if ClaudeAuthReader.executable == nil { return .unknown(reason: "Claude CLI not found") }
+            return .unknown(reason: "no usage recorded yet — limits appear after Claude's next response")
+        }
+    }
+
+    private func islandToolTip(for provider: Provider, usage: IslandUsage) -> String {
+        switch usage {
+        case .loading:
+            return "\(provider.rawValue) · loading limits…"
+        case .unknown(let reason):
+            return "\(provider.rawValue) · limits unknown: \(reason)"
+        case .known:
+            if provider == .claude {
+                return ([claudeAccounts?.islandSummary, claudeUsageSummary].compactMap { $0 }).joined(separator: "\n")
+            }
+            let windows = [("5H", codexUsage?.primary), ("7D", codexUsage?.secondary)]
+                .compactMap { title, window in window.map { "\(title) \($0.usedPercent)%" } }
+            return "Codex: " + windows.joined(separator: " · ")
+        }
+    }
+
     private func compactProviderCell(for provider: Provider) -> NSView {
         let accent = accentColor(for: provider)
-        let snapshot = snapshots.first(where: { $0.provider == provider })
+        let usage = islandUsage(for: provider)
+        let progress: CGFloat? = if case .known(let percent) = usage { CGFloat(percent) / 100 } else { nil }
         let ring = UsageRingView(frame: .zero)
         ring.translatesAutoresizingMaskIntoConstraints = false
         ring.accent = accent
-        if provider == .codex, let primary = codexUsage?.primary {
-            ring.progress = CGFloat(primary.usedPercent) / 100
-        } else {
-            if provider == .claude, let usage = claudeIslandPercent { ring.progress = CGFloat(usage) / 100 }
-            ring.isLoading = provider == .codex && isCodexUsageLoading
-        }
+        ring.progress = progress ?? 0
+        ring.isLoading = usage == .loading
+        if case .unknown = usage { ring.isUnknown = true }
         let mark = providerLogoView(for: provider, accent: accent)
         ring.addSubview(mark)
         NSLayoutConstraint.activate([
@@ -969,20 +1094,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             mark.widthAnchor.constraint(equalToConstant: 16),
             mark.heightAnchor.constraint(equalToConstant: 16),
         ])
-        let progress: CGFloat
-        if provider == .codex, let usage = codexUsage?.primary {
-            progress = CGFloat(usage.usedPercent) / 100
-        } else if provider == .claude, let usage = claudeIslandPercent {
-            progress = CGFloat(usage) / 100
-        } else if provider == .claude, snapshot?.isInstalled == true {
-            progress = 1
-        } else {
-            progress = 0.05
-        }
-        let bar = makeCompactStatusBar(accent: accent, progress: progress)
+        let bar = CompactUsageBar(accent: accent, progress: progress)
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
-        if provider == .claude { cell.toolTip = ([claudeAccounts?.islandSummary, claudeUsageSummary].compactMap { $0 }).joined(separator: "\n") }
+        // The logo and ring cover most of the cell, so they carry the same tooltip.
+        let tip = islandToolTip(for: provider, usage: usage)
+        for view in [cell, ring, mark] { view.toolTip = tip }
         cell.addSubview(ring)
         cell.addSubview(bar)
         NSLayoutConstraint.activate([
@@ -994,29 +1111,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             bar.topAnchor.constraint(equalTo: ring.bottomAnchor, constant: 5),
         ])
         return cell
-    }
-
-    private func makeCompactStatusBar(accent: NSColor, progress: CGFloat) -> NSView {
-        let track = NSView(frame: NSRect(x: 0, y: 0, width: 38, height: 3))
-        track.translatesAutoresizingMaskIntoConstraints = false
-        track.wantsLayer = true
-        track.layer?.cornerRadius = 1.5
-        track.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.14).cgColor
-        let fill = NSView()
-        fill.wantsLayer = true
-        fill.layer?.cornerRadius = 1.5
-        fill.layer?.backgroundColor = accent.cgColor
-        fill.translatesAutoresizingMaskIntoConstraints = false
-        track.addSubview(fill)
-        NSLayoutConstraint.activate([
-            track.widthAnchor.constraint(equalToConstant: 38),
-            track.heightAnchor.constraint(equalToConstant: 3),
-            fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
-            fill.topAnchor.constraint(equalTo: track.topAnchor),
-            fill.bottomAnchor.constraint(equalTo: track.bottomAnchor),
-            fill.widthAnchor.constraint(equalTo: track.widthAnchor, multiplier: max(0.02, min(progress, 1))),
-        ])
-        return track
     }
 
     private func providerLogoView(for provider: Provider, accent: NSColor) -> NSImageView {
@@ -1079,6 +1173,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 guard let self else { return }
                 if let usage { self.codexUsage = usage }
                 self.isCodexUsageLoading = false
+                self.didFinishCodexUsageRequest = true
                 self.rebuildUsageViews()
             }
         }
