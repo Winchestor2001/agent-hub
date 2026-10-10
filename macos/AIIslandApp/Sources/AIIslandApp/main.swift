@@ -114,6 +114,25 @@ private final class UsageRingView: NSView {
     var isLoading = false { didSet { needsDisplay = true } }
     /// Usage could not be read: a dashed track, so it never looks like 0%.
     var isUnknown = false { didSet { needsDisplay = true } }
+    /// At or above the critical threshold: an "!" badge, so the state does not rely on color alone.
+    var isCritical = false { didSet { needsDisplay = true } }
+    /// Soft opacity pulse for critical usage; callers leave it off under Reduce Motion.
+    var isPulsing = false {
+        didSet {
+            guard isPulsing != oldValue else { return }
+            wantsLayer = true
+            guard isPulsing else { layer?.removeAnimation(forKey: Self.pulseKey); return }
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 1
+            pulse.toValue = 0.55
+            pulse.duration = 0.9
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer?.add(pulse, forKey: Self.pulseKey)
+        }
+    }
+    static let pulseKey = "critical-pulse"
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -151,6 +170,20 @@ private final class UsageRingView: NSView {
         arc.lineWidth = 3.5
         arc.lineCapStyle = .round
         arc.stroke()
+        guard isCritical else { return }
+        let badge = NSRect(x: bounds.maxX - 12, y: bounds.maxY - 12, width: 12, height: 12)
+        let disc = NSBezierPath(ovalIn: badge)
+        accent.setFill()
+        disc.fill()
+        NSColor.black.setStroke()
+        disc.lineWidth = 1.5
+        disc.stroke()
+        let mark = NSAttributedString(string: "!", attributes: [
+            .font: NSFont.systemFont(ofSize: 9, weight: .black),
+            .foregroundColor: NSColor.white,
+        ])
+        let size = mark.size()
+        mark.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2))
     }
 }
 
@@ -158,9 +191,11 @@ private final class UsageRingView: NSView {
 /// the bar stays empty and dim instead of pretending to show a value.
 private final class CompactUsageBar: NSView {
     let progress: CGFloat?
+    let accent: NSColor
 
     init(accent: NSColor, progress: CGFloat?) {
         self.progress = progress
+        self.accent = accent
         super.init(frame: NSRect(x: 0, y: 0, width: 38, height: 3))
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -466,6 +501,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var readCodexUsage: (@escaping @Sendable (CodexUsageSnapshot?) -> Void) -> Void = CodexUsageReader.read
     private var claudeUsage: ClaudeRateLimits?
     private var readClaudeUsage: () -> ClaudeRateLimits? = { ClaudeRateLimitCache.read() }
+    private var prefersReducedMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private var claudeAccounts: ClaudeAccountsWindow?
     private var claudeLoggedIn: Bool?
     private let positionKey = "ai-island.position.v1"
@@ -580,7 +616,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                   && popoverLabels.contains { $0.hasPrefix("5H · 12% USED") },
                   "Claude card lists Default and every account, marking the one in use")
             let orange = NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
-            check(rings.contains { $0.accent == .white } && rings.contains { $0.accent == orange }, "Codex is white and Claude is orange")
+            // Provider identity lives in the logo; the ring itself is colored by limit level.
+            let logoTints = rings.flatMap { $0.subviews.compactMap { ($0 as? NSImageView)?.contentTintColor } }
+            check(logoTints.contains(.white) && logoTints.contains(orange), "Codex logo is white and Claude logo is orange")
+            let claudeRing = rings.first { $0.toolTip?.hasPrefix("Claude") == true || $0.toolTip?.contains("Claude A") == true }
+            check(claudeRing.map { $0.accent == usageColor(accent: orange, percent: Double($0.progress * 100)) } == true,
+                  "Claude ring follows the limit-level color rule (\(Int((claudeRing?.progress ?? 0) * 100))%)")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
             check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
@@ -720,6 +761,47 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(!codex.ring.isUnknown && codex.ring.progress == 0 && codex.bar.progress == 0,
                   "Known 0% Codex usage stays distinct from unknown")
         }
+        // Limit levels: one rule colors the island ring, its bar and the popover bar.
+        let defaultReducedMotion = prefersReducedMotion
+        let codexAccent = accentColor(for: .codex)
+        for (percent, expected, critical) in [(50, codexAccent, false), (80, NSColor.systemYellow, false), (95, NSColor.systemRed, true)] {
+            for reduceMotion in critical ? [false, true] : [false] {
+                prefersReducedMotion = { reduceMotion }
+                codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: percent, resetsAt: nil), secondary: nil)
+                rebuildUsageViews()
+                let popoverBar = statusPopover.contentViewController.flatMap { controller -> NSView? in
+                    let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · \(percent)% USED") == true }
+                    guard let stack = caption?.superview as? NSStackView,
+                          let index = stack.arrangedSubviews.firstIndex(where: { $0 === caption }),
+                          stack.arrangedSubviews.indices.contains(index + 1) else { return nil }
+                    return stack.arrangedSubviews[index + 1].subviews.first
+                }
+                if let codex = islandCell(.codex) {
+                    let pulsing = codex.ring.layer?.animation(forKey: UsageRingView.pulseKey) != nil
+                    check(codex.ring.accent == expected && codex.bar.accent == expected
+                          && popoverBar?.layer?.backgroundColor == expected.cgColor
+                          && codex.ring.isCritical == critical && pulsing == (critical && !reduceMotion),
+                          "\(percent)% uses \(critical ? "red with an ! badge" : percent >= 70 ? "yellow" : "the provider color")"
+                          + " on the ring, island bar and popover bar\(critical ? (reduceMotion ? ", no pulse under Reduce Motion" : ", pulsing") : "")")
+                    compactContent.layoutSubtreeIfNeeded()
+                    if let cell = codex.ring.superview, let bitmap = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) {
+                        // Visual record for review, next to the report: usage.<percent>.png.
+                        cell.cacheDisplay(in: cell.bounds, to: bitmap)
+                        let image = NSImage(size: NSSize(width: cell.bounds.width * 3, height: cell.bounds.height * 3), flipped: false) { rect in
+                            NSColor.black.setFill(); rect.fill()
+                            bitmap.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                            return true
+                        }
+                        if let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                            try? png.write(to: report.deletingPathExtension().appendingPathExtension("\(percent).png"))
+                        }
+                    }
+                } else {
+                    check(false, "Codex island cell is rendered for \(percent)%")
+                }
+            }
+        }
+        prefersReducedMotion = defaultReducedMotion
         codexUsage = lastCodexUsage
         if requests.count == 4 {
             let intervals = [requests[1].timeIntervalSince(requests[0]), requests[3].timeIntervalSince(requests[1])]
@@ -1156,6 +1238,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         provider == .codex ? .white : NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
     }
 
+    /// Usage color by limit level (thresholds live in `UsageLevel`): the provider
+    /// color while there is headroom, then yellow, then red. Island ring, island
+    /// bar and popover bars all use this.
+    private func usageColor(accent: NSColor, percent: Double) -> NSColor {
+        switch UsageLevel(percent: percent) {
+        case .normal: accent
+        case .warning: .systemYellow
+        case .critical: .systemRed
+        }
+    }
+
     private func rebuildNotchContent() {
         compactContent.subviews.forEach { $0.removeFromSuperview() }
         let codex = compactProviderCell(for: .codex)
@@ -1253,11 +1346,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func compactProviderCell(for provider: Provider) -> NSView {
         let accent = accentColor(for: provider)
         let usage = islandUsage(for: provider)
-        let progress: CGFloat? = if case .known(let percent) = usage { CGFloat(percent) / 100 } else { nil }
+        let percent: Double? = if case .known(let percent) = usage { percent } else { nil }
+        let progress = percent.map { CGFloat($0) / 100 }
+        let usageAccent = percent.map { usageColor(accent: accent, percent: $0) } ?? accent
         let ring = UsageRingView(frame: .zero)
         ring.translatesAutoresizingMaskIntoConstraints = false
-        ring.accent = accent
+        ring.accent = usageAccent
         ring.progress = progress ?? 0
+        if let percent, UsageLevel(percent: percent) == .critical {
+            ring.isCritical = true
+            ring.isPulsing = !prefersReducedMotion()
+        }
         ring.isLoading = usage == .loading
         if case .unknown = usage { ring.isUnknown = true }
         let mark = providerLogoView(for: provider, accent: accent)
@@ -1268,7 +1367,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             mark.widthAnchor.constraint(equalToConstant: 16),
             mark.heightAnchor.constraint(equalToConstant: 16),
         ])
-        let bar = CompactUsageBar(accent: accent, progress: progress)
+        let bar = CompactUsageBar(accent: usageAccent, progress: progress)
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
         // The logo and ring cover most of the cell, so they carry the same tooltip.
@@ -1586,7 +1685,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let caption = NSTextField(labelWithString: "\(title) · \(window.usedPercent)% USED\(reset)\(suffix)")
         caption.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
         caption.textColor = accent.withAlphaComponent(0.94)
-        return [caption, makeStatusBar(accent: accent, progress: CGFloat(window.usedPercent) / 100)]
+        let barColor = usageColor(accent: accent, percent: Double(window.usedPercent))
+        return [caption, makeStatusBar(accent: barColor, progress: CGFloat(window.usedPercent) / 100)]
     }
 
     private func unavailableUsageBarViews(title: String, accent: NSColor) -> [NSView] {
