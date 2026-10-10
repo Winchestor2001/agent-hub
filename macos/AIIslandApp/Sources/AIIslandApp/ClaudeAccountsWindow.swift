@@ -541,6 +541,11 @@ final class ClaudeAccountsWindow: NSWindowController {
         if let usage, !usage.stale, usage.percent >= 95, let ready { return account.name + value + " · \(ready.name) auth ready" }
         return account.name + value + (session.lastHook == "SessionStart" ? " · Session restored" : "")
     }
+    /// Name of the account the active session runs on, if any.
+    var activeAccountName: String? {
+        guard let id = sessions.first(where: { $0.status == "active" })?.accountID else { return nil }
+        return accounts.first { $0.id == id }?.name
+    }
     var islandUsage: Double? {
         guard let id = sessions.first(where: { $0.status == "active" })?.accountID else { return nil }
         return (try? store.usage(id))?.percent

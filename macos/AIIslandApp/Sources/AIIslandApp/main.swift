@@ -173,7 +173,7 @@ private final class UsageRingView: NSView {
         guard isCritical else { return }
         let badge = NSRect(x: bounds.maxX - 12, y: bounds.maxY - 12, width: 12, height: 12)
         let disc = NSBezierPath(ovalIn: badge)
-        accent.setFill()
+        NSColor.systemRed.setFill()
         disc.fill()
         NSColor.black.setStroke()
         disc.lineWidth = 1.5
@@ -688,18 +688,35 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         func check(_ condition: Bool, _ message: String) {
             checks.append("\(condition ? "PASS" : "FAIL"): \(message)")
         }
-        func islandCell(_ provider: Provider) -> (ring: UsageRingView, bar: CompactUsageBar)? {
+        func islandCell(_ provider: Provider) -> (ring: UsageRingView, bar: CompactUsageBar, number: NSTextField)? {
             let ring = allViews(compactContent).compactMap { $0 as? UsageRingView }
                 .first { $0.toolTip?.hasPrefix(provider.rawValue) == true }
             let bar = ring?.superview?.subviews.compactMap { $0 as? CompactUsageBar }.first
-            return ring.flatMap { ring in bar.map { (ring, $0) } }
+            let number = ring?.superview?.subviews.compactMap { $0 as? NSTextField }
+                .first { $0.identifier?.rawValue == "island-percent" }
+            guard let ring, let bar, let number else { return nil }
+            return (ring, bar, number)
+        }
+        /// Visual record for review, next to the report: usage.<name>.png, on black, 3×.
+        func snapshot(_ view: NSView, _ name: String) {
+            compactContent.layoutSubtreeIfNeeded()
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let image = NSImage(size: NSSize(width: view.bounds.width * 3, height: view.bounds.height * 3), flipped: false) { rect in
+                NSColor.black.setFill(); rect.fill()
+                bitmap.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                return true
+            }
+            if let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: report.deletingPathExtension().appendingPathExtension("\(name).png"))
+            }
         }
         startUsageAutoRefresh()
         refreshCodexUsage()
         refreshCodexUsage()
         check(requests.count == 1, "Concurrent manual refreshes share the in-flight request")
         if let codex = islandCell(.codex) {
-            check(codex.ring.isLoading && !codex.ring.isUnknown && codex.bar.progress == nil,
+            check(codex.ring.isLoading && !codex.ring.isUnknown && codex.bar.progress == nil && codex.number.stringValue == "…",
                   "Codex island shows loading, not 0%, before the first request finishes")
         } else {
             check(false, "Codex island cell is rendered")
@@ -728,7 +745,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
               "Claude card shows the cached 5H window marked as last known")
         check(labels.contains("7D · LIMIT UNAVAILABLE"), "Missing Claude 7D window shows LIMIT UNAVAILABLE")
         if claudeAccounts?.islandUsage == nil {
-            check(rings.contains { abs($0.progress - 0.55) < 0.001 }, "Claude ring uses the cached maximum percentage")
+            check(rings.contains { abs($0.progress - 0.55) < 0.001 }, "Claude ring shows the cached 5H window")
         }
         claudeCache = nil
         isCodexUsageLoading = true  // A hung Codex request must not block the Claude update.
@@ -751,14 +768,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         codexUsage = nil
         rebuildNotchContent()
         if let codex = islandCell(.codex) {
-            check(codex.ring.isUnknown && !codex.ring.isLoading && codex.bar.progress == nil
+            check(codex.ring.isUnknown && !codex.ring.isLoading && codex.bar.progress == nil && codex.number.stringValue == "—"
                   && codex.ring.toolTip?.contains("limits unknown") == true,
                   "Codex island shows unknown with a reason after a request returns no limits")
         }
-        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 0, resetsAt: nil), secondary: nil)
+        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 0, resetsAt: nil),
+                                        secondary: CodexUsageWindow(usedPercent: 0, resetsAt: nil))
         rebuildNotchContent()
         if let codex = islandCell(.codex) {
-            check(!codex.ring.isUnknown && codex.ring.progress == 0 && codex.bar.progress == 0,
+            check(!codex.ring.isUnknown && codex.ring.progress == 0 && codex.bar.progress == 0 && codex.number.stringValue == "0%",
                   "Known 0% Codex usage stays distinct from unknown")
         }
         // Limit levels: one rule colors the island ring, its bar and the popover bar.
@@ -767,7 +785,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         for (percent, expected, critical) in [(50, codexAccent, false), (80, NSColor.systemYellow, false), (95, NSColor.systemRed, true)] {
             for reduceMotion in critical ? [false, true] : [false] {
                 prefersReducedMotion = { reduceMotion }
-                codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: percent, resetsAt: nil), secondary: nil)
+                codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: percent, resetsAt: nil),
+                                                secondary: CodexUsageWindow(usedPercent: percent, resetsAt: nil))
                 rebuildUsageViews()
                 let popoverBar = statusPopover.contentViewController.flatMap { controller -> NSView? in
                     let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · \(percent)% USED") == true }
@@ -779,28 +798,43 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 if let codex = islandCell(.codex) {
                     let pulsing = codex.ring.layer?.animation(forKey: UsageRingView.pulseKey) != nil
                     check(codex.ring.accent == expected && codex.bar.accent == expected
+                          && codex.number.stringValue == "\(percent)%" && codex.number.textColor == expected
                           && popoverBar?.layer?.backgroundColor == expected.cgColor
                           && codex.ring.isCritical == critical && pulsing == (critical && !reduceMotion),
                           "\(percent)% uses \(critical ? "red with an ! badge" : percent >= 70 ? "yellow" : "the provider color")"
-                          + " on the ring, island bar and popover bar\(critical ? (reduceMotion ? ", no pulse under Reduce Motion" : ", pulsing") : "")")
-                    compactContent.layoutSubtreeIfNeeded()
-                    if let cell = codex.ring.superview, let bitmap = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) {
-                        // Visual record for review, next to the report: usage.<percent>.png.
-                        cell.cacheDisplay(in: cell.bounds, to: bitmap)
-                        let image = NSImage(size: NSSize(width: cell.bounds.width * 3, height: cell.bounds.height * 3), flipped: false) { rect in
-                            NSColor.black.setFill(); rect.fill()
-                            bitmap.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-                            return true
-                        }
-                        if let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                            try? png.write(to: report.deletingPathExtension().appendingPathExtension("\(percent).png"))
-                        }
-                    }
+                          + " on the ring, number, island bar and popover bar\(critical ? (reduceMotion ? ", no pulse under Reduce Motion" : ", pulsing") : "")")
+                    if let cell = codex.ring.superview { snapshot(cell, "\(percent)") }
                 } else {
                     check(false, "Codex island cell is rendered for \(percent)%")
                 }
             }
         }
+        // Ring and bar carry different windows: ring + number = 5H, bar = 7D.
+        prefersReducedMotion = { true }
+        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 10, resetsAt: nil),
+                                        secondary: CodexUsageWindow(usedPercent: 95, resetsAt: nil))
+        rebuildUsageViews()
+        if let codex = islandCell(.codex) {
+            check(abs(codex.ring.progress - 0.1) < 0.001 && codex.ring.accent == codexAccent && codex.number.stringValue == "10%"
+                  && codex.bar.progress.map { abs($0 - 0.95) < 0.001 } == true && codex.bar.accent == .systemRed
+                  && codex.ring.isCritical,
+                  "Ring and number show 5H (10%), the bar shows 7D (95%, red), and the critical 7D raises the ! badge")
+            check(codex.ring.toolTip == "Codex · Ring: 5H 10% used · Bar: 7D 95% used",
+                  "Island tooltip names which window the ring and the bar show")
+        } else {
+            check(false, "Codex island cell is rendered for mixed windows")
+        }
+        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 100, resetsAt: nil),
+                                        secondary: CodexUsageWindow(usedPercent: 72, resetsAt: nil))
+        rebuildUsageViews()
+        compactContent.layoutSubtreeIfNeeded()
+        let cells = [islandCell(.codex), islandCell(.claude)].compactMap { $0 }
+        check(island.frame.width == 58 && !cells.isEmpty && cells.allSatisfy { cell in
+                  cell.number.fittingSize.width <= 46 && cell.number.font?.pointSize ?? 0 >= 10
+                      && cell.bar.superview.map { compactContent.bounds.contains($0.convert($0.bounds, to: compactContent)) } == true
+              },
+              "Island stays 58pt wide and a 100% number fits readable inside each cell")
+        snapshot(compactContent, "island")
         prefersReducedMotion = defaultReducedMotion
         codexUsage = lastCodexUsage
         if requests.count == 4 {
@@ -1194,7 +1228,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func collapseIsland() {
         island.contentView = compactContent
-        resizeIsland(width: claudeAccounts?.islandSummary == nil ? 58 : 280, height: claudeLoggedIn == false && claudeAccounts?.hasAccounts != true ? 58 : 126, animate: false)
+        resizeIsland(width: claudeAccounts?.islandSummary == nil ? 58 : 280, height: claudeLoggedIn == false && claudeAccounts?.hasAccounts != true ? 66 : 126, animate: false)
     }
 
     private func resizeIsland(width: CGFloat, height: CGFloat, animate: Bool) {
@@ -1258,7 +1292,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 codex.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
                 codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
                 codex.widthAnchor.constraint(equalToConstant: 46),
-                codex.heightAnchor.constraint(equalToConstant: 48),
+                codex.heightAnchor.constraint(equalToConstant: 51),
             ])
             return
         }
@@ -1274,9 +1308,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             NSLayoutConstraint.activate([
                 codex.leadingAnchor.constraint(equalTo: compactContent.leadingAnchor, constant: 6),
                 codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
-                codex.widthAnchor.constraint(equalToConstant: 46), codex.heightAnchor.constraint(equalToConstant: 48),
+                codex.widthAnchor.constraint(equalToConstant: 46), codex.heightAnchor.constraint(equalToConstant: 51),
                 claude.leadingAnchor.constraint(equalTo: codex.leadingAnchor), claude.topAnchor.constraint(equalTo: codex.bottomAnchor, constant: 8),
-                claude.widthAnchor.constraint(equalToConstant: 46), claude.heightAnchor.constraint(equalToConstant: 48),
+                claude.widthAnchor.constraint(equalToConstant: 46), claude.heightAnchor.constraint(equalToConstant: 51),
                 text.leadingAnchor.constraint(equalTo: codex.trailingAnchor, constant: 8), text.trailingAnchor.constraint(equalTo: compactContent.trailingAnchor, constant: -10),
                 text.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 14),
                 accounts.leadingAnchor.constraint(equalTo: text.leadingAnchor), accounts.bottomAnchor.constraint(equalTo: compactContent.bottomAnchor, constant: -18),
@@ -1294,7 +1328,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             codex.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
             codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
             codex.widthAnchor.constraint(equalToConstant: 46),
-            codex.heightAnchor.constraint(equalToConstant: 48),
+            codex.heightAnchor.constraint(equalToConstant: 51),
             separator.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
             separator.topAnchor.constraint(equalTo: codex.bottomAnchor, constant: 4),
             separator.widthAnchor.constraint(equalToConstant: 32),
@@ -1302,13 +1336,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             claude.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
             claude.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 4),
             claude.widthAnchor.constraint(equalToConstant: 46),
-            claude.heightAnchor.constraint(equalToConstant: 48),
+            claude.heightAnchor.constraint(equalToConstant: 51),
         ])
+    }
+
+    /// The two limit windows an island cell shows: the ring is 5H, the bar is 7D.
+    private struct IslandWindows: Equatable {
+        let fiveHour: Double?
+        let sevenDay: Double?
+        var hasAny: Bool { fiveHour != nil || sevenDay != nil }
     }
 
     /// What an island cell can honestly show for one provider.
     private enum IslandUsage: Equatable {
-        case known(Double)
+        case known(IslandWindows)
         case loading
         case unknown(reason: String)
     }
@@ -1316,12 +1357,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func islandUsage(for provider: Provider) -> IslandUsage {
         switch provider {
         case .codex:
-            if let primary = codexUsage?.primary { return .known(Double(primary.usedPercent)) }
+            let windows = IslandWindows(fiveHour: codexUsage?.primary.map { Double($0.usedPercent) },
+                                        sevenDay: codexUsage?.secondary.map { Double($0.usedPercent) })
+            if windows.hasAny { return .known(windows) }
             if CodexUsageReader.executable == nil { return .unknown(reason: "Codex CLI not found") }
             if !didFinishCodexUsageRequest { return .loading }
             return .unknown(reason: "Codex did not report limits")
         case .claude:
-            if let percent = claudeIslandPercent { return .known(percent) }
+            if let windows = claudeIslandWindows { return .known(windows) }
             if ClaudeAuthReader.executable == nil { return .unknown(reason: "Claude CLI not found") }
             return .unknown(reason: "no usage recorded yet — limits appear after Claude's next response")
         }
@@ -1333,32 +1376,43 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return "\(provider.rawValue) · loading limits…"
         case .unknown(let reason):
             return "\(provider.rawValue) · limits unknown: \(reason)"
-        case .known:
-            if provider == .claude {
-                return ([claudeAccounts?.islandSummary, claudeUsageSummary].compactMap { $0 }).joined(separator: "\n")
-            }
-            let windows = [("5H", codexUsage?.primary), ("7D", codexUsage?.secondary)]
-                .compactMap { title, window in window.map { "\(title) \($0.usedPercent)%" } }
-            return "Codex: " + windows.joined(separator: " · ")
+        case .known(let windows):
+            func describe(_ percent: Double?) -> String { percent.map { "\(Int($0.rounded()))% used" } ?? "unknown" }
+            let legend = "\(provider.rawValue) · Ring: 5H \(describe(windows.fiveHour)) · Bar: 7D \(describe(windows.sevenDay))"
+            guard provider == .claude else { return legend }
+            return ([legend, claudeAccounts?.islandSummary, claudeUsageSummary].compactMap { $0 }).joined(separator: "\n")
         }
     }
 
     private func compactProviderCell(for provider: Provider) -> NSView {
         let accent = accentColor(for: provider)
         let usage = islandUsage(for: provider)
-        let percent: Double? = if case .known(let percent) = usage { percent } else { nil }
-        let progress = percent.map { CGFloat($0) / 100 }
-        let usageAccent = percent.map { usageColor(accent: accent, percent: $0) } ?? accent
+        let windows: IslandWindows? = if case .known(let windows) = usage { windows } else { nil }
+        let fiveHour = windows?.fiveHour, sevenDay = windows?.sevenDay
+        let ringAccent = fiveHour.map { usageColor(accent: accent, percent: $0) } ?? accent
         let ring = UsageRingView(frame: .zero)
         ring.translatesAutoresizingMaskIntoConstraints = false
-        ring.accent = usageAccent
-        ring.progress = progress ?? 0
-        if let percent, UsageLevel(percent: percent) == .critical {
+        ring.accent = ringAccent
+        ring.progress = fiveHour.map { CGFloat($0) / 100 } ?? 0
+        // Either window near its limit raises the badge, so a critical 7D is never hidden behind a calm 5H ring.
+        if [fiveHour, sevenDay].contains(where: { $0.map { UsageLevel(percent: $0) == .critical } ?? false }) {
             ring.isCritical = true
             ring.isPulsing = !prefersReducedMotion()
         }
         ring.isLoading = usage == .loading
         if case .unknown = usage { ring.isUnknown = true }
+        if windows != nil, fiveHour == nil { ring.isUnknown = true }
+        let numberText = switch usage {
+        case .loading: "…"
+        case .unknown: "—"
+        case .known: fiveHour.map { "\(Int($0.rounded()))%" } ?? "—"
+        }
+        let number = NSTextField(labelWithString: numberText)
+        number.identifier = NSUserInterfaceItemIdentifier("island-percent")
+        number.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        number.textColor = fiveHour == nil ? NSColor.white.withAlphaComponent(0.45) : ringAccent
+        number.alignment = .center
+        number.translatesAutoresizingMaskIntoConstraints = false
         let mark = providerLogoView(for: provider, accent: accent)
         ring.addSubview(mark)
         NSLayoutConstraint.activate([
@@ -1367,21 +1421,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             mark.widthAnchor.constraint(equalToConstant: 16),
             mark.heightAnchor.constraint(equalToConstant: 16),
         ])
-        let bar = CompactUsageBar(accent: usageAccent, progress: progress)
+        let bar = CompactUsageBar(accent: sevenDay.map { usageColor(accent: accent, percent: $0) } ?? accent,
+                                  progress: sevenDay.map { CGFloat($0) / 100 })
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
         // The logo and ring cover most of the cell, so they carry the same tooltip.
         let tip = islandToolTip(for: provider, usage: usage)
-        for view in [cell, ring, mark] { view.toolTip = tip }
+        for view in [cell, ring, mark, number] { view.toolTip = tip }
         cell.addSubview(ring)
+        cell.addSubview(number)
         cell.addSubview(bar)
         NSLayoutConstraint.activate([
             ring.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
             ring.topAnchor.constraint(equalTo: cell.topAnchor),
             ring.widthAnchor.constraint(equalToConstant: 34),
             ring.heightAnchor.constraint(equalToConstant: 34),
+            number.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
+            number.topAnchor.constraint(equalTo: ring.bottomAnchor),
+            number.heightAnchor.constraint(equalToConstant: 12),
             bar.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-            bar.topAnchor.constraint(equalTo: ring.bottomAnchor, constant: 5),
+            bar.topAnchor.constraint(equalTo: number.bottomAnchor, constant: 2),
         ])
         return cell
     }
@@ -1631,7 +1690,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let sevenDay: CodexUsageWindow?
         let updated: Double?
         let stale: Bool
-        var maxPercent: Double? { [fiveHour, sevenDay].compactMap { $0.map { Double($0.usedPercent) } }.max() }
     }
 
     private var claudeSources: [ClaudeSource] {
@@ -1662,8 +1720,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             .max { ($0.updated ?? 0) < ($1.updated ?? 0) }
     }
 
-    private var claudeIslandPercent: Double? {
-        currentClaudeSource?.maxPercent ?? claudeAccounts?.islandUsage ?? claudeUsage?.maxPercent
+    /// The Claude source the island shows: the one in use now, else the active
+    /// account, else plain `claude` (~/.claude).
+    private var claudeIslandWindows: IslandWindows? {
+        let sources = claudeSources
+        let candidates = [currentClaudeSource,
+                          claudeAccounts?.activeAccountName.flatMap { name in sources.first { $0.name == name } },
+                          sources.first { $0.name == "Default" }]
+        return candidates.lazy.compactMap { source in
+            source.map { IslandWindows(fiveHour: $0.fiveHour.map { Double($0.usedPercent) },
+                                       sevenDay: $0.sevenDay.map { Double($0.usedPercent) }) }
+        }.first { $0.hasAny }
     }
 
     private var claudeUsageSummary: String? {
