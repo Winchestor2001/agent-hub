@@ -414,6 +414,66 @@ private final class IslandPanel: NSPanel {
     }
 }
 
+/// The Settings sidebar: a native source list, one row per area.
+@MainActor
+private final class SettingsSidebarController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+    let table = NSTableView()
+    var onSelect: ((SettingsArea) -> Void)?
+
+    override init() {
+        super.init()
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("area"))
+        table.addTableColumn(column)
+        table.headerView = nil
+        table.style = .sourceList
+        table.rowSizeStyle = .medium
+        table.identifier = NSUserInterfaceItemIdentifier("settings-sidebar")
+        table.setAccessibilityLabel("Settings sections")
+        table.dataSource = self
+        table.delegate = self
+    }
+
+    func select(_ area: SettingsArea) {
+        guard table.selectedRow != area.rawValue else { return }
+        table.selectRowIndexes(IndexSet(integer: area.rawValue), byExtendingSelection: false)
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int { SettingsArea.allCases.count }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard let area = SettingsArea(rawValue: row) else { return nil }
+        let cell = NSTableCellView()
+        let image = NSImageView(image: NSImage(systemSymbolName: area.symbol, accessibilityDescription: nil) ?? NSImage())
+        let label = NSTextField(labelWithString: area.title)
+        label.lineBreakMode = .byTruncatingTail
+        for view in [image, label] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(view)
+        }
+        cell.imageView = image
+        cell.textField = label
+        NSLayoutConstraint.activate([
+            image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+            image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            image.widthAnchor.constraint(equalToConstant: 18),
+            label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 8),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -4),
+            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
+        return cell
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let area = SettingsArea(rawValue: table.selectedRow) else { return }
+        onSelect?(area)
+    }
+
+    /// An area is always selected; clicking empty space below the rows keeps it.
+    func tableView(_ tableView: NSTableView, selectionIndexesForProposedSelection proposed: IndexSet) -> IndexSet {
+        proposed.isEmpty ? tableView.selectedRowIndexes : proposed
+    }
+}
+
 private enum UnsavedConfigurationChoice { case save, discard, cancel }
 
 /// Scrollable, colored unified diff for the save review alert.
@@ -458,6 +518,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private let statusPopover = NSPopover()
     private var settingsWindow: NSWindow?
     private var settingsDetailView: NSView?
+    private let settingsSidebar = SettingsSidebarController()
     private var selectedSettingsArea: SettingsArea = .overview
     private var configurationWindow: NSWindow?
     private var configurationSplitView: NSSplitView?
@@ -1124,6 +1185,49 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 openSettings()
                 try require(settingsWindow?.isVisible == true, "Settings did not reopen")
                 try await Task.sleep(for: .milliseconds(50))
+                if cycle == 1 {
+                    let sidebar = settingsSidebar.table
+                    func pageHeading() -> String? {
+                        ((settingsDetailView?.subviews.first as? NSStackView)?.arrangedSubviews.first as? NSTextField)?.stringValue
+                    }
+                    try require(sidebar.style == .sourceList && sidebar.window === settingsWindow
+                                && sidebar.numberOfRows == SettingsArea.allCases.count,
+                                "Settings sidebar is not a source list with every area")
+                    for area in SettingsArea.allCases {
+                        sidebar.selectRowIndexes(IndexSet(integer: area.rawValue), byExtendingSelection: false)
+                        try require(selectedSettingsArea == area && pageHeading() == area.title,
+                                    "Selecting \(area.title) in the sidebar did not open its page")
+                    }
+                    checks.append("PASS settings sidebar: native source list; selecting a row opens its page")
+                    selectedSettingsArea = .codex
+                    refreshSettingsPage()
+                    try require(sidebar.selectedRow == SettingsArea.codex.rawValue, "Sidebar selection did not follow the page")
+                    checks.append("PASS settings sidebar: selection follows pages opened elsewhere")
+                    sidebar.selectRowIndexes(IndexSet(integer: SettingsArea.accounts.rawValue), byExtendingSelection: false)
+                    let accountsPage = (settingsDetailView?.subviews.first as? NSStackView)?.arrangedSubviews ?? []
+                    let accountRows = accountsPage.filter { $0.identifier?.rawValue == "account-row" }
+                    let usageLabels = accountRows.compactMap { row in
+                        row.subviews.first { $0.identifier?.rawValue == "account-usage" } as? NSTextField
+                    }
+                    try require(!accountRows.isEmpty && accountRows.count == claudeSources.count
+                                && usageLabels.count == accountRows.count && usageLabels.allSatisfy { !$0.stringValue.isEmpty }
+                                && accountsPage.contains { $0.identifier?.rawValue == "accounts-manage" },
+                                "Accounts page does not list each account with its usage and a manage button")
+                    checks.append("PASS settings accounts: \(accountRows.count) account row(s) with status and usage, plus Manage")
+                    for provider in Provider.allCases {
+                        let paths = configurationCategories(for: provider).flatMap(\.paths)
+                        try require(Set(paths).count == paths.count, "\(provider.rawValue) has two cards for one file")
+                    }
+                    checks.append("PASS settings cards: no two cards open the same file")
+                    func texts(in view: NSView) -> [String] {
+                        ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap { texts(in: $0) }
+                    }
+                    let sidebarTexts: [String] = ((settingsWindow?.contentView as? NSSplitView)?.subviews.first).map { texts(in: $0) } ?? []
+                    try require(sidebarTexts.contains(Self.backupNote) && Self.backupNote.contains("AI Island/Backups")
+                                && !sidebarTexts.contains { $0.contains("Every future edit") },
+                                "Sidebar backup note does not describe the actual backup")
+                    checks.append("PASS settings sidebar: backup note names when and where backups are written")
+                }
                 for provider in Provider.allCases {
                     selectedSettingsArea = .overview
                     refreshSettingsPage()
@@ -2494,6 +2598,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         sidebarStack.edgeInsets = NSEdgeInsets(top: 24, left: 16, bottom: 16, right: 16)
         sidebarStack.translatesAutoresizingMaskIntoConstraints = false
         let appName = NSTextField(labelWithString: "AI ISLAND")
+        appName.setContentCompressionResistancePriority(.required, for: .vertical)
         appName.font = .monospacedSystemFont(ofSize: 13, weight: .bold)
         appName.textColor = .secondaryLabelColor
         let appSubtitle = NSTextField(wrappingLabelWithString: "Global AI configuration")
@@ -2501,16 +2606,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         appSubtitle.maximumNumberOfLines = 2
         sidebarStack.addArrangedSubview(appName)
         sidebarStack.addArrangedSubview(appSubtitle)
-        sidebarStack.addArrangedSubview(NSView())
-        for area in SettingsArea.allCases {
-            let button = settingsSidebarButton(for: area)
-            sidebarStack.addArrangedSubview(button)
-            button.widthAnchor.constraint(equalTo: sidebarStack.widthAnchor, constant: -32).isActive = true
+        let sidebarScroll = NSScrollView()
+        sidebarScroll.documentView = settingsSidebar.table
+        sidebarScroll.drawsBackground = false
+        sidebarScroll.hasVerticalScroller = false
+        sidebarScroll.translatesAutoresizingMaskIntoConstraints = false
+        sidebarScroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+        sidebarStack.addArrangedSubview(sidebarScroll)
+        // The source list fills the sidebar width between the insets.
+        sidebarScroll.widthAnchor.constraint(equalTo: sidebarStack.widthAnchor, constant: -32).isActive = true
+        settingsSidebar.onSelect = { [weak self] area in
+            guard let self, area != self.selectedSettingsArea else { return }
+            self.selectedSettingsArea = area
+            self.refreshSettingsPage()
         }
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .vertical)
-        sidebarStack.addArrangedSubview(spacer)
-        let safety = NSTextField(wrappingLabelWithString: "Every future edit will be backed up before it is saved.")
+        settingsSidebar.table.reloadData()
+        settingsSidebar.select(selectedSettingsArea)
+        let safety = NSTextField(wrappingLabelWithString: Self.backupNote)
         safety.font = .systemFont(ofSize: 11, weight: .medium)
         safety.textColor = .secondaryLabelColor
         safety.maximumNumberOfLines = 0
@@ -2555,32 +2667,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
-    private func settingsSidebarButton(for area: SettingsArea) -> NSButton {
-        let button = NSButton(title: area.title, target: self, action: #selector(selectSettingsArea(_:)))
-        button.tag = area.rawValue
-        button.image = NSImage(systemSymbolName: area.symbol, accessibilityDescription: area.title)
-        button.imagePosition = .imageLeading
-        button.contentTintColor = area == selectedSettingsArea ? .controlAccentColor : .secondaryLabelColor
-        button.font = .systemFont(ofSize: 14, weight: area == selectedSettingsArea ? .semibold : .medium)
-        button.alignment = .left
-        button.bezelStyle = .texturedRounded
-        button.translatesAutoresizingMaskIntoConstraints = false
-        return button
-    }
-
-    @objc private func selectSettingsArea(_ sender: NSButton) {
-        guard let area = SettingsArea(rawValue: sender.tag) else { return }
-        selectedSettingsArea = area
-        for case let button as NSButton in sender.superview?.subviews ?? [] {
-            guard let buttonArea = SettingsArea(rawValue: button.tag) else { continue }
-            let selected = buttonArea == area
-            button.contentTintColor = selected ? .controlAccentColor : .secondaryLabelColor
-            button.font = .systemFont(ofSize: 14, weight: selected ? .semibold : .medium)
-        }
-        DispatchQueue.main.async { [weak self] in
-            self?.refreshSettingsPage()
-        }
-    }
+    /// What actually happens on save and delete, shown under the Settings sidebar.
+    static let backupNote = "Before AI Island saves or deletes a file, it copies the current version to ~/Library/Application Support/AI Island/Backups."
 
     private func configureClaudeAccounts() {
         guard claudeAccounts == nil else { return }
@@ -2608,6 +2696,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func refreshSettingsPage() {
         guard let detail = settingsDetailView else { return }
+        settingsSidebar.select(selectedSettingsArea)
         detail.subviews.forEach { $0.removeFromSuperview() }
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -2622,7 +2711,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let subtitle: String
         switch selectedSettingsArea {
         case .overview: subtitle = "A single control center for your local AI tooling."
-        case .accounts: subtitle = "Independent Claude accounts and continuous project sessions."
+        case .accounts: subtitle = "Claude accounts, their status and current usage."
         case .codex: subtitle = "Global configuration discovered in ~/.codex"
         case .claude: subtitle = claudeLoggedIn == false ? "Claude is signed out and hidden from the island." : "Global configuration discovered in ~/.claude"
         }
@@ -2632,7 +2721,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(subheading)
         if selectedSettingsArea == .accounts {
-            stack.addArrangedSubview(NSButton(title: "Open Claude Accounts & Sessions…", target: self, action: #selector(openClaudeAccounts)))
+            for source in claudeSources {
+                let row = accountSummaryRow(source)
+                stack.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -(stack.edgeInsets.left + stack.edgeInsets.right)).isActive = true
+            }
+            let manage = NSButton(title: "Manage Accounts & Sessions…", target: self, action: #selector(openClaudeAccounts))
+            manage.identifier = NSUserInterfaceItemIdentifier("accounts-manage")
+            stack.addArrangedSubview(manage)
         } else if let provider = selectedSettingsArea.provider {
             for category in configurationCategories(for: provider) {
                 let card = configurationCard(category, provider: provider)
@@ -2659,18 +2755,65 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         ])
     }
 
+    /// One Claude account on the Accounts page: name, status and both usage windows.
+    private func accountSummaryRow(_ source: ClaudeSource) -> NSView {
+        let accent = accentColor(for: .claude)
+        let row = NSView()
+        row.identifier = NSUserInterfaceItemIdentifier("account-row")
+        row.wantsLayer = true
+        row.layer?.cornerRadius = 12
+        row.layer?.backgroundColor = accent.withAlphaComponent(0.08).cgColor
+        row.layer?.borderWidth = 1
+        row.layer?.borderColor = accent.withAlphaComponent(0.28).cgColor
+        let name = NSTextField(labelWithString: source.name)
+        name.font = .systemFont(ofSize: 14, weight: .bold)
+        let detail = NSTextField(labelWithString: source.detail)
+        detail.font = .systemFont(ofSize: 12, weight: .medium)
+        detail.textColor = .secondaryLabelColor
+        detail.lineBreakMode = .byTruncatingTail
+        let windows = [("5H", source.fiveHour), ("7D", source.sevenDay)].compactMap { title, window in
+            window.map { "\(title) \($0.usedPercent)%" }
+        }
+        let usageText = windows.isEmpty ? "Usage unknown" : windows.joined(separator: " · ") + (source.stale ? " · last known" : "")
+        let usage = NSTextField(labelWithString: usageText)
+        usage.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        usage.textColor = windows.isEmpty || source.stale ? .secondaryLabelColor : .labelColor
+        usage.identifier = NSUserInterfaceItemIdentifier("account-usage")
+        let labels = NSStackView(views: [name, detail])
+        labels.orientation = .vertical
+        labels.alignment = .leading
+        labels.spacing = 2
+        for view in [labels, usage] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            row.addSubview(view)
+        }
+        row.setAccessibilityElement(true)
+        row.setAccessibilityRole(.group)
+        row.setAccessibilityLabel("\(source.name), \(source.detail), \(usageText)")
+        NSLayoutConstraint.activate([
+            row.heightAnchor.constraint(equalToConstant: 58),
+            labels.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 16),
+            labels.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            labels.trailingAnchor.constraint(lessThanOrEqualTo: usage.leadingAnchor, constant: -12),
+            usage.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -16),
+            usage.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+        ])
+        usage.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return row
+    }
+
     private func configurationCategories(for provider: Provider) -> [ConfigurationCategory] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         switch provider {
         case .codex:
             let root = home.appendingPathComponent(".codex")
             return [
-                .init(title: "Settings", detail: "config.toml · global behavior and MCP configuration", symbol: "gearshape", paths: [root.appendingPathComponent("config.toml")]),
+                // config.toml holds both settings and MCP servers, so it gets one card.
+                .init(title: "Settings & MCP", detail: "config.toml · global behavior and MCP servers", symbol: "gearshape", paths: [root.appendingPathComponent("config.toml")]),
                 .init(title: "Skills", detail: "Reusable task instructions", symbol: "wand.and.stars", paths: [root.appendingPathComponent("skills")]),
                 .init(title: "Agents", detail: "Specialized agent definitions", symbol: "person.2", paths: [root.appendingPathComponent("agents")]),
                 .init(title: "Rules", detail: "Always-on project rules", symbol: "checklist", paths: [root.appendingPathComponent("rules")]),
                 .init(title: "Commands", detail: "Custom slash commands", symbol: "terminal", paths: [root.appendingPathComponent("commands")]),
-                .init(title: "MCP", detail: "Servers configured in config.toml", symbol: "point.3.connected.trianglepath.dotted", paths: [root.appendingPathComponent("config.toml")]),
             ]
         case .claude:
             let root = home.appendingPathComponent(".claude")
