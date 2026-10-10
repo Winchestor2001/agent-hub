@@ -340,6 +340,41 @@ private final class IslandPanel: NSPanel {
 
 private enum UnsavedConfigurationChoice { case save, discard, cancel }
 
+/// Scrollable, colored unified diff for the save review alert.
+@MainActor
+private func makeDiffPreview(_ diff: LineDiff) -> NSScrollView {
+    let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    let text = NSMutableAttributedString()
+    for (index, line) in diff.unifiedText().components(separatedBy: "\n").enumerated() {
+        let color: NSColor = switch line.first {
+        case "+": .systemGreen
+        case "-": .systemRed
+        case "@", "…": .secondaryLabelColor
+        default: .labelColor
+        }
+        let lineText = (index == 0 ? "" : "\n") + line
+        text.append(NSAttributedString(string: lineText, attributes: [.font: font, .foregroundColor: color]))
+    }
+    let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 520, height: 260))
+    scroll.hasVerticalScroller = true
+    scroll.hasHorizontalScroller = true
+    scroll.autohidesScrollers = true
+    scroll.borderType = .bezelBorder
+    let view = NSTextView(frame: scroll.bounds)
+    view.isEditable = false
+    view.isRichText = false
+    view.textContainerInset = NSSize(width: 6, height: 6)
+    // Keep long configuration lines intact and scroll sideways instead of wrapping.
+    view.isHorizontallyResizable = true
+    view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    view.textContainer?.widthTracksTextView = false
+    view.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    view.textStorage?.setAttributedString(text)
+    view.identifier = NSUserInterfaceItemIdentifier("diff-preview")
+    scroll.documentView = view
+    return scroll
+}
+
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSplitViewDelegate, NSTextViewDelegate {
     private let island = IslandPanel()
@@ -393,10 +428,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         default: return .cancel
         }
     }
-    private var confirmConfigurationSave: (String) -> Bool = { summary in
+    private var confirmConfigurationSave: (LineDiff) -> Bool = { diff in
         let alert = NSAlert()
         alert.messageText = "Review changes"
-        alert.informativeText = summary + "\n\nA timestamped backup will be saved before this file is updated."
+        alert.informativeText = "\(diff.summary). A timestamped backup will be saved before this file is updated."
+        alert.accessoryView = makeDiffPreview(diff)
         alert.addButton(withTitle: "Save with backup")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
@@ -856,6 +892,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                                             windowNumber: window.windowNumber, context: nil, characters: "s",
                                                             charactersIgnoringModifiers: "s", isARepeat: false, keyCode: 1) {
                                 _ = window.performKeyEquivalent(with: event)
+                            }
+                            let draftDiff = LineDiff(old: original, new: draft)
+                            let preview = makeDiffPreview(draftDiff)
+                            let previewText = (preview.documentView as? NSTextView)?.string ?? ""
+                            try require(draftDiff.removed == 0 && (1...2).contains(draftDiff.added)
+                                        && previewText.contains("+ Regression draft (not saved)")
+                                        && preview.hasVerticalScroller && preview.frame.height <= 300,
+                                        "Review preview does not show the changed lines in a scroll view")
+                            if let bitmap = preview.bitmapImageRepForCachingDisplay(in: preview.bounds) {
+                                preview.cacheDisplay(in: preview.bounds, to: bitmap)
+                                try? bitmap.representation(using: .png, properties: [:])?
+                                    .write(to: report.deletingPathExtension().appendingPathExtension("diff.png"))
                             }
                             try require(reviewed && editor.string == draft && window.isDocumentEdited,
                                         "⌘S did not open the review step, or a declined review changed the draft")
@@ -2444,7 +2492,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             updateConfigurationEditedState()
             return true
         }
-        guard confirmConfigurationSave(changeSummary(from: oldContent, to: newContent)) else { return false }
+        guard confirmConfigurationSave(LineDiff(old: oldContent, new: newContent)) else { return false }
         do {
             try backupConfigurationFile(file)
             try newContent.write(to: file, atomically: true, encoding: .utf8)
@@ -2503,15 +2551,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let backup = categoryFolder.appendingPathComponent(relativePath)
         try FileManager.default.createDirectory(at: backup.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: file, to: backup)
-    }
-
-    private func changeSummary(from old: String, to new: String) -> String {
-        let oldLines = old.split(separator: "\n", omittingEmptySubsequences: false)
-        let newLines = new.split(separator: "\n", omittingEmptySubsequences: false)
-        let shared = zip(oldLines, newLines).filter { $0 == $1 }.count
-        let removed = max(0, oldLines.count - shared)
-        let added = max(0, newLines.count - shared)
-        return "Diff preview: +\(added) line\(added == 1 ? "" : "s"), −\(removed) line\(removed == 1 ? "" : "s")."
     }
 
     private func presentConfigurationError(_ message: String) {
