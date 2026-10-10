@@ -437,6 +437,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
     }
+    /// Shown when the draft fails the syntax check. Returns true only when the
+    /// user consciously chooses "Save Anyway" (offered when `canOverride`).
+    private var presentConfigurationSyntaxProblem: (ConfigurationSyntaxError, URL, Bool) -> Bool = { error, file, canOverride in
+        let format = file.pathExtension.uppercased()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = canOverride
+            ? "\(file.lastPathComponent) may not be valid \(format)"
+            : "\(file.lastPathComponent) is not valid \(format)"
+        alert.informativeText = "Line \(error.line), column \(error.column): \(error.message)."
+            + (canOverride ? " Saving it may break the tool that reads this file." : " The file was not saved.")
+        if canOverride {
+            alert.addButton(withTitle: "Keep Editing")
+            alert.addButton(withTitle: "Save Anyway")
+            return alert.runModal() == .alertSecondButtonReturn
+        }
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+        return false
+    }
     private var snapshots: [ProviderSnapshot] = []
     private var codexUsage: CodexUsageSnapshot?
     private var isCodexUsageLoading = false
@@ -868,7 +888,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                            let otherRow = configurationFiles.firstIndex(where: { $0.path != file.path }) {
                             // Exercise the unsaved-changes guard without ever writing the user's files.
                             let defaultAsk = askAboutUnsavedConfiguration, defaultConfirm = confirmConfigurationSave
-                            defer { askAboutUnsavedConfiguration = defaultAsk; confirmConfigurationSave = defaultConfirm }
+                            let defaultSyntax = presentConfigurationSyntaxProblem
+                            defer {
+                                askAboutUnsavedConfiguration = defaultAsk
+                                confirmConfigurationSave = defaultConfirm
+                                presentConfigurationSyntaxProblem = defaultSyntax
+                            }
                             let original = editor.string
                             let selectedRow = table.selectedRow
                             editor.setSelectedRange(NSRange(location: (original as NSString).length, length: 0))
@@ -886,12 +911,40 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             try require(editor.string == draft && activeConfigurationFile == file, "Cancel on category switch discarded the draft")
                             try require(!windowShouldClose(window) && editor.string == draft, "Cancel on close discarded the draft")
                             try require(asked == 3, "Unsaved-changes prompt was not shown for file, category, and close")
-                            var reviewed = false
+                            var reviewed = false, syntaxProblem: (error: ConfigurationSyntaxError, canOverride: Bool)?
                             confirmConfigurationSave = { _ in reviewed = true; return false }
-                            if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
-                                                            windowNumber: window.windowNumber, context: nil, characters: "s",
-                                                            charactersIgnoringModifiers: "s", isARepeat: false, keyCode: 1) {
-                                _ = window.performKeyEquivalent(with: event)
+                            // "Save Anyway" on a TOML warning must still lead to review, never straight to disk.
+                            presentConfigurationSyntaxProblem = { error, _, canOverride in syntaxProblem = (error, canOverride); return canOverride }
+                            func pressSave() {
+                                if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                                                windowNumber: window.windowNumber, context: nil, characters: "s",
+                                                                charactersIgnoringModifiers: "s", isARepeat: false, keyCode: 1) {
+                                    _ = window.performKeyEquivalent(with: event)
+                                }
+                            }
+                            pressSave()
+                            var syntaxNote = ""
+                            let format = file.pathExtension.lowercased()
+                            if format == "json" || format == "toml", ConfigurationSyntax.validate(original, pathExtension: format) == nil {
+                                // The appended plain-text line is invalid in both formats.
+                                guard let problem = syntaxProblem else { throw RegressionFailure(message: "⌘S saved invalid \(format) without a syntax check") }
+                                try require(editor.selectedRange().location == problem.error.offset
+                                            && configurationStatus?.stringValue.hasPrefix("Syntax error · line \(problem.error.line)") == true,
+                                            "Syntax error position is not selected or not shown in the status")
+                                try require((try? String(contentsOf: file, encoding: .utf8)) == original, "Invalid draft wrote the file")
+                                if format == "json" {
+                                    try require(!problem.canOverride && !reviewed && editor.string == draft,
+                                                "Invalid JSON reached review or offered Save Anyway")
+                                    // A whitespace-only change is still valid JSON and must reach review.
+                                    syntaxProblem = nil
+                                    editor.insertText(original + "\n", replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
+                                    pressSave()
+                                    try require(syntaxProblem == nil && reviewed, "Valid JSON did not reach the review step")
+                                    syntaxNote = ", invalid JSON blocked at line \(problem.error.line)"
+                                } else {
+                                    try require(problem.canOverride && reviewed, "TOML warning did not offer Save Anyway before review")
+                                    syntaxNote = ", TOML warns at line \(problem.error.line)"
+                                }
                             }
                             let draftDiff = LineDiff(old: original, new: draft)
                             let preview = makeDiffPreview(draftDiff)
@@ -905,13 +958,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                 try? bitmap.representation(using: .png, properties: [:])?
                                     .write(to: report.deletingPathExtension().appendingPathExtension("diff.png"))
                             }
-                            try require(reviewed && editor.string == draft && window.isDocumentEdited,
+                            try require(reviewed && editor.string != original && window.isDocumentEdited,
                                         "⌘S did not open the review step, or a declined review changed the draft")
                             try require((try? String(contentsOf: file, encoding: .utf8)) == original, "Declined save wrote the file")
                             askAboutUnsavedConfiguration = { _ in .discard }
                             try require(tableView(table, shouldSelectRow: otherRow) && editor.string == original && !window.isDocumentEdited,
                                         "Discard did not restore the saved text")
-                            checks.append("PASS unsaved edits: \(button.identifier?.rawValue ?? "unknown") — marked, Cancel keeps draft on file/category/close, ⌘S reviews, Discard restores")
+                            checks.append("PASS unsaved edits: \(button.identifier?.rawValue ?? "unknown") — marked, Cancel keeps draft on file/category/close, ⌘S reviews\(syntaxNote), Discard restores")
                         }
                         if cycle == 1, button.identifier?.rawValue == "Codex::Skills",
                            let index = configurationFiles.firstIndex(where: { $0.lastPathComponent == "SKILL.md" }),
@@ -2491,6 +2544,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             configurationSavedContent = newContent
             updateConfigurationEditedState()
             return true
+        }
+        if let error = ConfigurationSyntax.validate(newContent, pathExtension: file.pathExtension) {
+            let location = NSRange(location: min(error.offset, (newContent as NSString).length), length: 0)
+            editor.setSelectedRange(location)
+            editor.scrollRangeToVisible(location)
+            configurationStatus?.stringValue = "Syntax error · \(error)"
+            // JSON readers reject any error outright; the TOML check is structural, so it only warns.
+            let canOverride = file.pathExtension.lowercased() == "toml"
+            guard presentConfigurationSyntaxProblem(error, file, canOverride), canOverride else { return false }
         }
         guard confirmConfigurationSave(LineDiff(old: oldContent, new: newContent)) else { return false }
         do {
