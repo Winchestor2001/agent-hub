@@ -512,6 +512,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     /// At least one Codex request has finished, so a missing snapshot means unknown, not loading.
     private var didFinishCodexUsageRequest = false
     private var usageRefreshTimer: Timer?
+    /// The timer re-reads the local Claude cache on every tick; Codex runs a
+    /// process, so ticks only ask it again once `codexRefreshInterval` has passed.
+    private var usageTickInterval: TimeInterval = 4
+    private var codexRefreshInterval: TimeInterval = 45
+    private var lastCodexRequestStart: Date?
     private var readCodexUsage: (@escaping @Sendable (CodexUsageSnapshot?) -> Void) -> Void = CodexUsageReader.read
     private var claudeUsage: ClaudeRateLimits?
     private var readClaudeUsage: () -> ClaudeRateLimits? = { ClaudeRateLimitCache.read() }
@@ -747,7 +752,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         var claudeCache: ClaudeRateLimits? = ClaudeRateLimits(
             fiveHour: ClaudeRateLimitWindow(usedPercent: 55, resetsAt: Date().timeIntervalSince1970 + 3600),
             sevenDay: nil, capturedAt: Date().timeIntervalSince1970 - 3600, stale: true)
-        readClaudeUsage = { claudeCache }
+        var claudeReads = 0
+        readClaudeUsage = { claudeReads += 1; return claudeCache }
         func allViews(_ view: NSView) -> [NSView] {
             [view] + view.subviews.flatMap { allViews($0) }
         }
@@ -778,6 +784,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 try? png.write(to: report.deletingPathExtension().appendingPathExtension("\(name).png"))
             }
         }
+        // Short intervals keep the timer checks fast; the app uses a 4 s tick and 45 s Codex interval.
+        let defaultIntervals = (tick: usageTickInterval, codex: codexRefreshInterval)
+        check((30...60).contains(defaultIntervals.codex) && (4...5).contains(defaultIntervals.tick),
+              "Codex is polled every 30–60 s and the Claude cache every 4–5 s")
+        usageTickInterval = 0.5
+        codexRefreshInterval = 1.5
         startUsageAutoRefresh()
         refreshCodexUsage()
         refreshCodexUsage()
@@ -791,15 +803,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         try? await Task.sleep(for: .milliseconds(300))
         check(codexUsage?.primary?.usedPercent == 10, "Initial snapshot is loaded")
         check(!statusPopover.isShown, "Card stays closed during background refresh")
-        try? await Task.sleep(for: .milliseconds(4200))
-        check(requests.count == 2, "Timer polls with the card closed")
+        let readsBeforeTicks = claudeReads
+        try? await Task.sleep(for: .milliseconds(1000))
+        check(requests.count == 1 && claudeReads >= readsBeforeTicks + 2,
+              "Ticks re-read the Claude cache without starting a Codex request before its interval")
+        try? await Task.sleep(for: .milliseconds(1000))
+        check(requests.count == 2, "Timer polls Codex after its interval with the card closed")
         check(codexUsage?.primary?.usedPercent == 10 && !isCodexUsageLoading,
               "Failed refresh preserves the snapshot and releases the in-flight guard")
         showStatusPopover()
         try? await Task.sleep(for: .milliseconds(300))
-        check(statusPopover.isShown && codexUsage?.primary?.usedPercent == 30,
-              "Opening the card still refreshes immediately")
-        try? await Task.sleep(for: .milliseconds(4200))
+        check(statusPopover.isShown && requests.count == 3 && codexUsage?.primary?.usedPercent == 30,
+              "Opening the card asks Codex immediately, before the interval")
+        try? await Task.sleep(for: .milliseconds(2000))
         check(requests.count == 4 && codexUsage?.primary?.usedPercent == 40,
               "Timer updates usage while the card is open")
         let rings = allViews(compactContent).compactMap { $0 as? UsageRingView }
@@ -808,6 +824,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
         } ?? []
         check(labels.contains { $0.contains("40%") }, "Open card displays the updated percentage")
+        refreshCodexUsage()  // What the card's Refresh button does.
+        try? await Task.sleep(for: .milliseconds(300))
+        check(requests.count == 5, "Refresh asks Codex immediately, before the interval")
+        if requests.count == 5 {
+            let automatic = [requests[1].timeIntervalSince(requests[0]), requests[3].timeIntervalSince(requests[2])]
+            check(automatic.allSatisfy { (1.5...2.5).contains($0) },
+                  "Automatic Codex requests wait for the interval after the last request")
+        }
+        // Stop polling so the rendering checks below control the snapshot alone.
+        usageRefreshTimer?.invalidate()
+        (usageTickInterval, codexRefreshInterval) = defaultIntervals
         check(labels.contains { $0.hasPrefix("5H · 55% used") && $0.hasSuffix("· last known") },
               "Claude card shows the cached 5H window marked as last known")
         check(labels.contains("7D · not available"), "Missing Claude 7D window shows not available next to the known 5H")
@@ -975,10 +1002,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         isCodexUsageLoading = false
         prefersReducedMotion = defaultReducedMotion
         codexUsage = lastCodexUsage
-        if requests.count == 4 {
-            let intervals = [requests[1].timeIntervalSince(requests[0]), requests[3].timeIntervalSince(requests[1])]
-            check(intervals.allSatisfy { (3...5).contains($0) }, "Automatic request intervals are between 3 and 5 seconds")
-        }
         usageRefreshTimer?.invalidate()
         statusPopover.performClose(nil)
         try? await Task.sleep(for: .milliseconds(400))
@@ -1786,16 +1809,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func startUsageAutoRefresh() {
         usageRefreshTimer?.invalidate()
-        let timer = Timer(timeInterval: 4, target: self, selector: #selector(refreshCodexUsage),
+        let timer = Timer(timeInterval: usageTickInterval, target: self, selector: #selector(usageTick),
                           userInfo: nil, repeats: true)
-        timer.tolerance = 0.25
+        timer.tolerance = usageTickInterval / 10
         usageRefreshTimer = timer
         // Keep polling while menus or the popover are tracking mouse events.
         RunLoop.main.add(timer, forMode: .common)
         refreshCodexUsage()
     }
 
-    @objc private func refreshCodexUsage() {
+    @objc private func usageTick() {
+        refreshUsage(forceCodex: false)
+    }
+
+    /// Manual refresh (launch, opening the card, the Refresh button): asks Codex
+    /// right away instead of waiting for the next interval.
+    private func refreshCodexUsage() {
+        refreshUsage(forceCodex: true)
+    }
+
+    private func refreshUsage(forceCodex: Bool) {
         // The Claude cache is a small local file, so it is re-read on every tick
         // and redrawn on its own, even while a Codex request is still in flight.
         let claude = readClaudeUsage()
@@ -1803,8 +1836,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             claudeUsage = claude
             updateUsageViews()
         }
+        // Only one Codex process at a time; a manual refresh joins the one in flight.
         guard !isCodexUsageLoading else { return }
+        if !forceCodex, let last = lastCodexRequestStart,
+           Date().timeIntervalSince(last) < codexRefreshInterval {
+            return
+        }
         isCodexUsageLoading = true
+        lastCodexRequestStart = Date()
         if codexUsage == nil { updateUsageViews() }
         readCodexUsage { [weak self] usage in
             Task { @MainActor [weak self] in
