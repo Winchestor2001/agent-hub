@@ -30,7 +30,23 @@ final class ClaudeAccountsWindow: NSWindowController {
     private let sessionsList = NSStackView()
     private let newSessionButton = NSButton()
     private let detailsTitle = NSTextField(labelWithString: "")
-    private let message = NSTextField(wrappingLabelWithString: "Usage appears after an account's first Claude response. Switching accounts is always manual.")
+    private let detailsToggle = NSButton()
+    private let details = NSStackView()
+    private let detailsPreference: DetailsPreference
+    /// Whether History & diagnostics is expanded; kept across windows and launches.
+    /// Regressions keep it in memory so they never write user defaults.
+    struct DetailsPreference {
+        var load: () -> Bool
+        var save: (Bool) -> Void
+        static var standard: DetailsPreference {
+            let key = "ai-island.accounts-details-expanded.v1"
+            return DetailsPreference(load: { UserDefaults.standard.bool(forKey: key) }, save: { UserDefaults.standard.set($0, forKey: key) })
+        }
+    }
+    private static let hint = "Usage appears after an account's first Claude response. Switching accounts is always manual."
+    private let message = NSTextField(wrappingLabelWithString: hint)
+    /// Latest action result, shown on the card of the account or session it belongs to.
+    private var notice: (target: String, text: String, isError: Bool)?
     private let history = NSTextView()
     private let debug = NSTextView()
     private var accounts: [Account] = []
@@ -46,8 +62,8 @@ final class ClaudeAccountsWindow: NSWindowController {
         sessions.first(where: { $0.id == selectedSessionID }) ?? sessions.first
     }
 
-    init(root: URL = SessionStore.defaultRoot) throws {
-        self.root = root; self.store = try SessionStore(root: root)
+    init(root: URL = SessionStore.defaultRoot, detailsPreference: DetailsPreference = .standard) throws {
+        self.root = root; self.store = try SessionStore(root: root); self.detailsPreference = detailsPreference
         self.runner = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 780), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Claude Accounts & Sessions"
@@ -81,10 +97,19 @@ final class ClaudeAccountsWindow: NSWindowController {
         message.textColor = .secondaryLabelColor
         stack.addArrangedSubview(message)
         stack.setCustomSpacing(20, after: message)
+        // Internal details stay folded away until someone asks for them.
         detailsTitle.font = .systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(detailsTitle)
-        let details = NSStackView(views: [textPanel("Handoff history", history), textPanel("Developer diagnostics", debug)])
+        detailsTitle.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleDetails(_:))))
+        detailsToggle.bezelStyle = .disclosure; detailsToggle.setButtonType(.pushOnPushOff); detailsToggle.title = ""
+        detailsToggle.target = self; detailsToggle.action = #selector(toggleDetails(_:))
+        detailsToggle.identifier = NSUserInterfaceItemIdentifier("accounts-details-toggle")
+        detailsToggle.setAccessibilityLabel("History & diagnostics")
+        detailsToggle.state = detailsPreference.load() ? .on : .off
+        let detailsHeader = NSStackView(views: [detailsToggle, detailsTitle]); detailsHeader.spacing = 4; detailsHeader.alignment = .centerY
+        stack.addArrangedSubview(detailsHeader)
+        for panel in [textPanel("Handoff history", history), textPanel("Developer diagnostics", debug)] { details.addArrangedSubview(panel) }
         details.distribution = .fillEqually; details.spacing = 12
+        details.isHidden = detailsToggle.state == .off
         stack.addArrangedSubview(details)
 
         let document = FlippedView(); document.translatesAutoresizingMaskIntoConstraints = false
@@ -132,6 +157,23 @@ final class ClaudeAccountsWindow: NSWindowController {
         let label = NSTextField(labelWithString: title); label.textColor = .secondaryLabelColor
         let column = NSStackView(views: [label, scroll]); column.orientation = .vertical; column.alignment = .leading
         scroll.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
+        return column
+    }
+
+    /// Card content followed by the latest action result for `id`, if there is one.
+    private func withNotice(_ row: NSView, for id: String) -> NSView {
+        guard let notice, notice.target == id else { return row }
+        let label = NSTextField(wrappingLabelWithString: notice.text)
+        label.textColor = notice.isError ? .systemRed : .secondaryLabelColor
+        label.identifier = NSUserInterfaceItemIdentifier("card-notice")
+        var views: [NSView] = [label]
+        if notice.isError, let image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Error") {
+            let icon = NSImageView(image: image); icon.contentTintColor = .systemRed
+            views.insert(icon, at: 0)
+        }
+        let line = NSStackView(views: views); line.alignment = .top; line.spacing = 6
+        let column = NSStackView(views: [row, line]); column.orientation = .vertical; column.alignment = .leading; column.spacing = 8
+        for view in [row, line] { view.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true }
         return column
     }
 
@@ -183,7 +225,7 @@ final class ClaudeAccountsWindow: NSWindowController {
             parts += sessions.map { (s: ManagedSession) -> String in
                 "\(s.id)|\(s.name)|\(s.status)|\(s.accountID ?? "")|\(s.branch ?? "")|\(s.physicalID ?? "")"
             }
-            parts.append("\(selectedSession?.id ?? "")|\(busy)")
+            parts.append("\(selectedSession?.id ?? "")|\(busy)|\(notice?.target ?? "")|\(notice?.text ?? "")")
             let signature = parts.joined(separator: ";")
             if signature != renderedSignature {
                 renderedSignature = signature
@@ -191,7 +233,7 @@ final class ClaudeAccountsWindow: NSWindowController {
                 renderAccounts(usage: usage); renderSessions()
             }
             renderDetails(); onChange?()
-        } catch { showError(error) }
+        } catch { showProblem(error) }
     }
 
     private func statusText(_ account: Account) -> String {
@@ -246,7 +288,8 @@ final class ClaudeAccountsWindow: NSWindowController {
                                          ("Remove…", #selector(removeAccount(_:)), account.id)], tip: "More actions for \(account.name)")
             let spacer = NSView(); spacer.setContentHuggingPriority(.init(1), for: .horizontal)
             let row = NSStackView(views: [info, spacer, primary, more]); row.alignment = .centerY
-            let view = card(row)
+            let view = card(withNotice(row, for: account.id))
+            view.identifier = NSUserInterfaceItemIdentifier("account-card")
             accountsList.addArrangedSubview(view); fullWidth(view)
         }
     }
@@ -285,10 +328,10 @@ final class ClaudeAccountsWindow: NSWindowController {
             let spacer = NSView(); spacer.setContentHuggingPriority(.init(1), for: .horizontal)
             let row = NSStackView(views: [info, spacer, stop, continueMenu, more]); row.alignment = .centerY
             info.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            let view = card(row, selected: session.id == selectedSession?.id) { [weak self] in
+            let view = card(withNotice(row, for: session.id), selected: session.id == selectedSession?.id) { [weak self] in
                 self?.selectedSessionID = session.id; self?.renderedSignature = ""; self?.refresh()
             }
-            view.toolTip = "Click to show this session's history and diagnostics."
+            view.toolTip = "Click to choose this session for History & diagnostics."
             sessionsList.addArrangedSubview(view); fullWidth(view)
         }
     }
@@ -299,12 +342,23 @@ final class ClaudeAccountsWindow: NSWindowController {
 
     private func setText(_ view: NSTextView, _ text: String) { if view.string != text { view.string = text } }
 
+    @objc private func toggleDetails(_ sender: Any) {
+        if sender is NSGestureRecognizer { detailsToggle.state = detailsToggle.state == .on ? .off : .on }
+        let expanded = detailsToggle.state == .on
+        detailsPreference.save(expanded)
+        details.isHidden = !expanded
+        renderDetails()
+        if expanded { window?.contentView?.layoutSubtreeIfNeeded(); details.scrollToVisible(details.bounds) }
+    }
+
     private func renderDetails() {
-        guard let session = selectedSession else {
-            detailsTitle.stringValue = "Session details"
+        let session = selectedSession
+        detailsTitle.stringValue = "History & diagnostics" + (session.map { " — \(URL(fileURLWithPath: $0.project).lastPathComponent) · \($0.name)" } ?? "")
+        // Collapsed details are not read at all.
+        guard detailsToggle.state == .on else { return }
+        guard let session else {
             setText(history, "Start a session to see its handoff history."); setText(debug, ""); return
         }
-        detailsTitle.stringValue = "Details — \(URL(fileURLWithPath: session.project).lastPathComponent) · \(session.name)"
         do {
             let rows = try store.rows("SELECT e.*,a.name,f.claude_id FROM events e LEFT JOIN accounts a ON a.id=e.account_id LEFT JOIN physical_sessions f ON f.id=e.physical_id WHERE e.logical_id=? ORDER BY e.id", [session.id])
             setText(history, rows.map { "\(formatTime($0["created_at"].flatMap(Double.init)))  \($0["name"] ?? "")\n\($0["kind"] ?? "") · \($0["claude_id"] ?? "")" }.joined(separator: "\n\n"))
@@ -333,17 +387,18 @@ final class ClaudeAccountsWindow: NSWindowController {
             Readiness:
             \(readiness.map { "\($0["name"] ?? "") · \($0["item"] ?? ""): \($0["status"] ?? "unknown")" }.joined(separator: "\n"))
             """)
-        } catch { showError(error) }
+        } catch { showProblem(error) }
     }
 
     // MARK: Actions
 
     private var cliVersion = "Not checked"
 
-    private func work<T: Sendable>(_ operation: @escaping @Sendable (SessionManager) throws -> T, done: @escaping (T) -> Void) {
+    /// Runs `operation` off the main thread; progress and errors show on the card of `target`.
+    private func work<T: Sendable>(on target: String?, _ operation: @escaping @Sendable (SessionManager) throws -> T, done: @escaping (T) -> Void) {
         guard !busy else { return }
         busy = true; actionControls.forEach { $0.isEnabled = false }; addButton.isEnabled = false; newSessionButton.isEnabled = false
-        message.stringValue = "Working…"
+        say("Working…", on: target)
         let root = root, runner = runner
         Task {
             let result: Result<T, SessionError> = await Task.detached {
@@ -353,12 +408,32 @@ final class ClaudeAccountsWindow: NSWindowController {
             busy = false; renderedSignature = ""
             switch result {
             case .success(let value): done(value)
-            case .failure(let error): showError(error)
+            case .failure(let error): showError(error, on: target)
             }
             refresh()
         }
     }
-    private func showError(_ error: Error) { message.stringValue = (error as? SessionError)?.rawValue ?? SessionError.storage.rawValue }
+
+    /// Shows an action's result on the card of `target` (an account or session id),
+    /// or on the shared line under Sessions when it has no card.
+    private func say(_ text: String, on target: String?, error: Bool = false) {
+        if let target {
+            notice = (target, text, error)
+            message.stringValue = Self.hint; message.textColor = .secondaryLabelColor
+        } else {
+            notice = nil
+            message.stringValue = text; message.textColor = error ? .systemRed : .secondaryLabelColor
+        }
+        renderedSignature = ""; refresh()
+        if text != "Working…" {
+            NSAccessibility.post(element: window as Any, notification: .announcementRequested,
+                                 userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        }
+    }
+    private func errorText(_ error: Error) -> String { (error as? SessionError)?.rawValue ?? SessionError.storage.rawValue }
+    private func showError(_ error: Error, on target: String?) { say(errorText(error), on: target, error: true) }
+    /// Storage problems while refreshing; never re-renders, so a failing store cannot loop.
+    private func showProblem(_ error: Error) { message.stringValue = errorText(error); message.textColor = .systemRed }
 
     private func account(_ id: String?) -> Account? { accounts.first(where: { $0.id == id }) }
     private func ids(_ sender: Any) -> (String, String)? {
@@ -388,16 +463,16 @@ final class ClaudeAccountsWindow: NSWindowController {
             let account = try store.addAccount(name: name)
             renderedSignature = ""; refresh()
             openLogin(account)
-        } catch { showError(error) }
+        } catch { showError(error, on: nil) }
     }
 
     private func openLogin(_ account: Account) {
         do {
             let path = try SessionManager(store: store, runnerExecutable: runner).loginCommand(account)
             if openFile(path) {
-                message.stringValue = "Terminal opened — finish signing in to \(account.name) there. This window updates when sign-in completes."
-            } else { message.stringValue = "Terminal could not open. Try Sign in… again." }
-        } catch { showError(error) }
+                say("Terminal opened — finish signing in to \(account.name) there. This card updates when sign-in completes.", on: account.id)
+            } else { say("Terminal could not open. Try Sign in… again.", on: account.id, error: true) }
+        } catch { showError(error, on: account.id) }
     }
 
     @objc private func signIn(_ sender: NSButton) { if let a = account(sender.identifier?.rawValue) { openLogin(a) } }
@@ -405,20 +480,20 @@ final class ClaudeAccountsWindow: NSWindowController {
 
     @objc private func checkAccount(_ sender: NSButton) {
         guard let target = account(sender.identifier?.rawValue) else { return }
-        work { manager -> (String, Bool) in
+        work(on: target.id) { manager -> (String, Bool) in
             let version = try manager.adapter.getVersion()
             return (version, try manager.adapter.checkAuthentication(target, store: manager.store))
         } done: { [weak self] version, ok in
             self?.cliVersion = version
-            self?.message.stringValue = ok ? "\(target.name) is signed in and ready." : "\(target.name) is signed out. Use Sign in… to connect it again."
+            self?.say(ok ? "Signed in and ready." : "Signed out. Use Sign in… to connect it again.", on: target.id)
         }
     }
 
     @objc private func renameAccount(_ sender: NSMenuItem) {
         guard let target = account(sender.representedObject as? String),
               let name = askName(title: "Rename \(target.name)", info: "Only the name shown in AI Island changes.", value: target.name, confirm: "Rename") else { return }
-        do { try store.renameAccount(target.id, name: name); renderedSignature = ""; refresh(); message.stringValue = "Account renamed." }
-        catch { showError(error) }
+        do { try store.renameAccount(target.id, name: name); say("Account renamed.", on: target.id) }
+        catch { showError(error, on: target.id) }
     }
 
     @objc private func removeAccount(_ sender: NSMenuItem) {
@@ -429,8 +504,8 @@ final class ClaudeAccountsWindow: NSWindowController {
         alert.addButton(withTitle: "Remove"); alert.addButton(withTitle: "Cancel")
         alert.buttons[0].hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        work { manager in try manager.removeAccount(target.id) } done: { [weak self] in
-            self?.message.stringValue = "\(target.name) removed."
+        work(on: target.id) { manager in try manager.removeAccount(target.id) } done: { [weak self] in
+            self?.say("\(target.name) removed.", on: nil)
         }
     }
 
@@ -462,15 +537,15 @@ final class ClaudeAccountsWindow: NSWindowController {
         let path = project.stringValue.trimmingCharacters(in: .whitespaces)
         let title = name.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ? "New session" : name.stringValue
         lastProject = path
-        work { try $0.createSession(name: title, project: path, account: accountID) } done: { [weak self] in self?.openSession($0) }
+        work(on: nil) { try $0.createSession(name: title, project: path, account: accountID) } done: { [weak self] in self?.openSession($0, on: nil) }
     }
 
     private func session(_ id: String?) -> ManagedSession? { sessions.first(where: { $0.id == id }) }
 
     @objc private func stop(_ sender: NSButton) {
-        guard let id = session(sender.identifier?.rawValue)?.physicalID else { return }
-        work { manager in try manager.adapter.stopProcess(id, store: manager.store) } done: { [weak self] in
-            self?.message.stringValue = "Claude stopped. Session preserved."
+        guard let s = session(sender.identifier?.rawValue), let id = s.physicalID else { return }
+        work(on: s.id) { manager in try manager.adapter.stopProcess(id, store: manager.store) } done: { [weak self] in
+            self?.say("Claude stopped. Session preserved.", on: s.id)
         }
     }
 
@@ -485,30 +560,30 @@ final class ClaudeAccountsWindow: NSWindowController {
         alert.informativeText = "Claude will stop, save a transcript snapshot, and fork the conversation using this account. Git files remain in the current working tree."
         alert.addButton(withTitle: "Continue"); alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        work { try $0.continueSession(logical: session.id, account: account.id) } done: { [weak self] in self?.openSession($0) }
+        work(on: session.id) { try $0.continueSession(logical: session.id, account: account.id) } done: { [weak self] in self?.openSession($0, on: session.id) }
     }
 
     @objc private func readiness(_ sender: NSMenuItem) {
         guard let (sid, aid) = ids(sender), let s = session(sid), let a = account(aid) else { return }
         selectedSessionID = sid
-        work { manager in try manager.adapter.readiness(a, project: s.project, store: manager.store).map { "\($0.name): \($0.status)" }.joined(separator: " · ") } done: { [weak self] in
-            self?.message.stringValue = "\(a.name): " + $0
+        work(on: sid) { manager in try manager.adapter.readiness(a, project: s.project, store: manager.store).map { "\($0.name): \($0.status)" }.joined(separator: " · ") } done: { [weak self] in
+            self?.say("Readiness for \(a.name): " + ($0.isEmpty ? "nothing to check" : $0), on: sid)
         }
     }
 
     @objc private func cancelPending(_ sender: NSMenuItem) {
         guard let s = session(sender.representedObject as? String) else { return }
-        work { manager -> String in
+        work(on: s.id) { manager -> String in
             let locks = try manager.store.rows("SELECT physical_id FROM session_locks WHERE logical_id=?", [s.id])
             guard let id = locks.first?["physical_id"] else { return "No pending launch." }
             try manager.cancelLaunch(id); return "Pending launch cancelled. You can retry Continue."
-        } done: { [weak self] in self?.message.stringValue = $0 }
+        } done: { [weak self] in self?.say($0, on: s.id) }
     }
 
     @objc private func recoverStopped(_ sender: NSMenuItem) {
-        guard let id = session(sender.representedObject as? String)?.physicalID else { return }
-        work { manager in try manager.recoverStoppedSession(id) } done: { [weak self] in
-            self?.message.stringValue = "Stopped session recovered. You can continue."
+        guard let s = session(sender.representedObject as? String), let id = s.physicalID else { return }
+        work(on: s.id) { manager in try manager.recoverStoppedSession(id) } done: { [weak self] in
+            self?.say("Stopped session recovered. You can continue.", on: s.id)
         }
     }
 
@@ -518,11 +593,11 @@ final class ClaudeAccountsWindow: NSWindowController {
         handoff(session, to: target)
     }
 
-    private func openSession(_ path: String) {
-        if NSWorkspace.shared.open(URL(fileURLWithPath: path)) { message.stringValue = "Terminal opened. Waiting for Claude SessionStart…" }
+    private func openSession(_ path: String, on target: String?) {
+        if NSWorkspace.shared.open(URL(fileURLWithPath: path)) { say("Terminal opened. Waiting for Claude SessionStart…", on: target) }
         else {
             let id = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
-            try? SessionManager(store: store).cancelLaunch(id); message.stringValue = "Terminal could not open. Launch cancelled."
+            try? SessionManager(store: store).cancelLaunch(id); say("Terminal could not open. Launch cancelled.", on: target, error: true)
         }
     }
 

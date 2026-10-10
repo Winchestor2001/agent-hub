@@ -677,7 +677,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             try store.execute("INSERT INTO usage_snapshots(account_id,physical_id,percent,reset_at,checked_at,window) VALUES(?,?,'96',?,?,'five_hour')", [a.id, physical, String(Date().timeIntervalSince1970 + 3600), store.now])
             try store.event("session started", logical: logical, physical: physical, account: a.id)
             try store.event("handoff completed", logical: logical, physical: physical, account: b.id)
-            claudeAccounts = try ClaudeAccountsWindow(root: root)
+            var detailsExpanded = false
+            let detailsPreference = ClaudeAccountsWindow.DetailsPreference(load: { detailsExpanded }, save: { detailsExpanded = $0 })
+            claudeAccounts = try ClaudeAccountsWindow(root: root, detailsPreference: detailsPreference)
             claudeAccounts?.showWindow(nil); claudeAccounts?.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             try await Task.sleep(for: .milliseconds(300))
@@ -695,9 +697,56 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(buttons.contains { $0.title == "Add account" && !$0.isEnabled }, "Add account is disabled at the two-account limit")
             check(buttons.contains { $0.title == "Continue with…" } && menuItems.contains("Claude B — Ready"),
                   "Continue menu lists the other account and its state")
-            let texts = allViews(content).compactMap { ($0 as? NSTextView)?.string }
-            check(texts.contains { $0.contains("handoff completed") }, "History renders from SQLite events")
+            func detailViews(_ root: NSView) -> (toggle: NSButton?, texts: [NSTextView]) {
+                let views = allViews(root)
+                return (views.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "accounts-details-toggle" },
+                        views.compactMap { $0 as? NSTextView })
+            }
+            var detailParts = detailViews(content)
+            check(detailParts.toggle?.state == .off && detailParts.toggle?.bezelStyle == .disclosure
+                  && detailParts.texts.count == 2 && detailParts.texts.allSatisfy { $0.isHiddenOrHasHiddenAncestor && $0.string.isEmpty }
+                  && labels.contains("History & diagnostics — academy-backend · Auth refactoring"),
+                  "History and diagnostics start collapsed under a disclosure and are not loaded")
+            detailParts.toggle?.performClick(nil); content.layoutSubtreeIfNeeded()
+            let texts = detailParts.texts.filter { !$0.isHiddenOrHasHiddenAncestor }.map(\.string)
+            check(texts.contains { $0.contains("handoff completed") } && detailsExpanded,
+                  "Expanding shows history from SQLite events and remembers the choice")
             check(texts.contains { $0.contains("CLAUDE_CONFIG_DIR") && $0.contains(claude) }, "Diagnostics contain session identities")
+            let reopened = try ClaudeAccountsWindow(root: root, detailsPreference: detailsPreference)
+            if let reopenedContent = reopened.window?.contentView {
+                detailParts = detailViews(reopenedContent)
+                check(detailParts.toggle?.state == .on && detailParts.texts.allSatisfy { !$0.isHiddenOrHasHiddenAncestor },
+                      "A new Accounts window opens with details expanded as left")
+                detailParts.toggle?.performClick(nil)
+                check(!detailsExpanded && detailParts.texts.allSatisfy(\.isHiddenOrHasHiddenAncestor),
+                      "Collapsing hides the details and is remembered")
+            } else { check(false, "A new Accounts window opens with details expanded as left") }
+            reopened.window?.close()
+            // Action results appear on the card they belong to, not on a shared line.
+            func cardNotice(_ account: String) -> NSTextField? {
+                let card = allViews(content).first { $0.identifier?.rawValue == "account-card"
+                    && allViews($0).contains { ($0 as? NSTextField)?.stringValue == account } }
+                return card.flatMap { card in allViews(card).compactMap { $0 as? NSTextField }.first {
+                    $0.identifier?.rawValue == "card-notice" && card.bounds.contains($0.convert($0.bounds, to: card)) && $0.frame.height > 0 } }
+            }
+            func rename(_ account: String, to name: String) {
+                claudeAccounts?.promptName = { _ in name }
+                let item = buttons.compactMap { ($0 as? NSPopUpButton)?.menu?.items }.flatMap { $0 }
+                    .first { $0.title == "Rename…" && ($0.representedObject as? String) == (account == "Claude A" ? a.id : b.id) }
+                if let item, let action = item.action { NSApp.sendAction(action, to: item.target, from: item) }
+                content.layoutSubtreeIfNeeded()
+            }
+            rename("Claude A", to: "Claude A")
+            check(cardNotice("Claude A")?.stringValue == "Account renamed." && cardNotice("Claude B") == nil
+                  && !labels.contains { $0.contains("renamed") && $0 != "Account renamed." },
+                  "A successful action reports on its own account card")
+            rename("Claude B", to: "  ")
+            let errorNotice = cardNotice("Claude B")
+            check(errorNotice?.stringValue == SessionError.accountName.rawValue && errorNotice?.textColor == .systemRed
+                  && errorNotice?.superview?.subviews.contains { ($0 as? NSImageView)?.image?.accessibilityDescription == "Error" } == true
+                  && cardNotice("Claude A") == nil,
+                  "An error reports on its account card with a warning icon, replacing the earlier result")
+            claudeAccounts?.promptName = nil
             // A lower global cache value must not override the active session's account usage.
             claudeUsage = ClaudeRateLimits(fiveHour: ClaudeRateLimitWindow(usedPercent: 12, resetsAt: nil),
                                            sevenDay: nil, capturedAt: nil, stale: true)
