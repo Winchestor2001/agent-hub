@@ -848,8 +848,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 content.cacheDisplay(in: content.bounds, to: bitmap)
                 try bitmap.representation(using: .png, properties: [:])?.write(to: report.appendingPathExtension("png"))
             }
-            window.close(); claudeAccounts?.showWindow(nil)
-            check(window.isVisible, "Accounts window reopens safely")
+            Self.pressCommand("w", keyCode: 13, in: window)
+            let closedByShortcut = !window.isVisible
+            claudeAccounts?.showWindow(nil)
+            check(closedByShortcut && window.isVisible, "Command-W closes the Accounts window and it reopens safely")
             // No real Claude CLI here: the fixture account must never trigger a real logout.
             let remover = SessionManager(store: store, adapter: LocalClaudeCodeAdapter(executable: "/nonexistent/claude"))
             remover.discardDirectory = { try FileManager.default.removeItem(at: $0) }
@@ -1220,6 +1222,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     // Opt-in native regression: exercise the same NSButton actions and window
     // close callbacks as the UI, including reopening an editor after closing it.
+    /// Sends a ⌘-key press through the app's normal event path (menus first), as a person would.
+    private static func pressCommand(_ key: String, keyCode: UInt16, in window: NSWindow) {
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                           windowNumber: window.windowNumber, context: nil, characters: key,
+                                           charactersIgnoringModifiers: key, isARepeat: false, keyCode: keyCode) else { return }
+        NSApp.sendEvent(event)
+    }
+
     private func runSettingsRegression(report: URL) async {
         struct RegressionFailure: Error { let message: String }
         func require(_ condition: Bool, _ message: String) throws {
@@ -1415,6 +1425,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             try require(editor.string == draft && activeConfigurationFile == file, "Cancel on category switch discarded the draft")
                             try require(!windowShouldClose(window) && editor.string == draft, "Cancel on close discarded the draft")
                             try require(asked == 3, "Unsaved-changes prompt was not shown for file, category, and close")
+                            try require(applicationShouldTerminate(NSApp) == .terminateCancel && asked == 4
+                                        && editor.string == draft && window.isVisible,
+                                        "Quit did not ask about the unsaved edit, or cancelling it did not keep the draft")
+                            window.makeFirstResponder(editor)
+                            Self.pressCommand("a", keyCode: 0, in: window)
+                            try require(editor.selectedRange() == NSRange(location: 0, length: (draft as NSString).length),
+                                        "Command-A did not select all editor text")
+                            editor.setSelectedRange(NSRange(location: 0, length: 0))
                             var reviewed = false, syntaxProblem: (error: ConfigurationSyntaxError, canOverride: Bool)?
                             confirmConfigurationSave = { _ in reviewed = true; return false }
                             // "Save Anyway" on a TOML warning must still lead to review, never straight to disk.
@@ -1493,22 +1511,32 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                         }
                         checks.append("PASS layout/selection: \(button.identifier?.rawValue ?? "unknown") — resize, first/middle/last file")
                         checks.append("PASS cycle \(cycle): \(button.identifier?.rawValue ?? "unknown") — \(listed) files")
-                        configurationWindow?.performClose(nil)
+                        if let window = configurationWindow { Self.pressCommand("w", keyCode: 13, in: window) }
                         try await Task.sleep(for: .milliseconds(50))
-                        try require(configurationWindow?.isVisible == false, "Editor did not close")
+                        try require(configurationWindow?.isVisible == false, "Command-W did not close the editor")
                     }
                 }
-                settingsWindow?.performClose(nil)
+                if let window = settingsWindow { Self.pressCommand("w", keyCode: 13, in: window) }
                 try await Task.sleep(for: .milliseconds(50))
-                try require(settingsWindow?.isVisible == false, "Settings did not close")
-                checks.append("PASS cycle \(cycle): Settings close/reopen")
+                try require(settingsWindow?.isVisible == false, "Command-W did not close Settings")
+                checks.append("PASS cycle \(cycle): Command-W closes the editor and Settings, Settings reopens")
             }
+            let menuItems = NSApp.mainMenu?.items.flatMap { $0.submenu?.items ?? [] } ?? []
+            func shortcut(_ key: String, _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem? {
+                menuItems.first { $0.keyEquivalent == key && $0.keyEquivalentModifierMask == modifiers }
+            }
+            try require(shortcut("q")?.title == "Quit AI Island" && shortcut("q")?.action == #selector(NSApplication.terminate(_:))
+                        && shortcut("w")?.title == "Close Window" && shortcut("w")?.action == #selector(NSWindow.performClose(_:))
+                        && !menuItems.contains { $0.title.contains("Close Settings") },
+                        "Menu names do not match their actions (Quit AI Island ⌘Q, Close Window ⌘W)")
+            try require(["Undo": shortcut("z"), "Redo": shortcut("z", [.command, .shift]), "Cut": shortcut("x"),
+                         "Copy": shortcut("c"), "Paste": shortcut("v"), "Select All": shortcut("a")].allSatisfy { $0.value?.title == $0.key },
+                        "Edit menu shortcuts are missing")
+            checks.append("PASS: menu has Quit AI Island ⌘Q, Close Window ⌘W and standard Edit shortcuts")
             openSettings()
-            try require(applicationShouldTerminate(NSApp) == .terminateCancel, "Command-Q quit the app with Settings open")
-            try require(settingsWindow?.isVisible == false, "Command-Q did not hide Settings")
-            openSettings()
-            try require(settingsWindow?.isVisible == true, "Settings did not reopen after Command-Q")
-            checks.append("PASS: Command-Q hides Settings and Settings reopens")
+            try require(applicationShouldTerminate(NSApp) == .terminateNow && settingsWindow?.isVisible == true,
+                        "Command-Q with no unsaved edits must quit, not hide Settings")
+            checks.append("PASS: Command-Q quits AI Island when nothing is unsaved")
             checks.append("PASS: all native Settings regression checks")
         } catch {
             checks.append("FAIL: \(error)")
@@ -1526,15 +1554,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         NSApp.terminate(nil)
     }
 
+    /// ⌘Q and the status menu's Quit both quit AI Island, island included;
+    /// only an unsaved editor change can stop it. ⌘W closes a single window.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let hasOpenSettings = settingsWindow?.isVisible == true || configurationWindow?.isVisible == true
-        guard hasOpenSettings else {
-            return resolveUnsavedConfigurationChanges() ? .terminateNow : .terminateCancel
-        }
-
-        configurationWindow?.orderOut(nil)
-        settingsWindow?.orderOut(nil)
-        return .terminateCancel
+        resolveUnsavedConfigurationChanges() ? .terminateNow : .terminateCancel
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1557,16 +1580,37 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         UserDefaults.standard.set([origin.x, origin.y], forKey: positionKey)
     }
 
+    /// The menu bar stays hidden (accessory app), but its shortcuts work while an
+    /// AI Island window is in front: ⌘W closes that window, ⌘Q quits AI Island,
+    /// and the Edit items give text fields and the editor copy, paste and undo.
     private func buildMainMenu() {
         let menu = NSMenu()
-        let appItem = NSMenuItem()
-        menu.addItem(appItem)
-        let appMenu = NSMenu(title: "AI Island")
-        appMenu.addItem(NSMenuItem(title: "Open Settings…", action: #selector(openSettings), keyEquivalent: ","))
-        appMenu.addItem(NSMenuItem(title: "Refresh configuration", action: #selector(refreshInventory), keyEquivalent: "r"))
-        appMenu.addItem(.separator())
-        appMenu.addItem(NSMenuItem(title: "Close Settings", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        appItem.submenu = appMenu
+        func submenu(_ title: String, _ items: [NSMenuItem]) {
+            let holder = NSMenuItem(), submenu = NSMenu(title: title)
+            items.forEach(submenu.addItem); holder.submenu = submenu; menu.addItem(holder)
+        }
+        func item(_ title: String, _ action: Selector, _ key: String, _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.keyEquivalentModifierMask = modifiers
+            return item
+        }
+        submenu("AI Island", [
+            item("Open Settings…", #selector(openSettings), ","),
+            item("Claude Accounts & Sessions…", #selector(openClaudeAccounts), ""),
+            item("Refresh configuration", #selector(refreshInventory), "r"),
+            .separator(),
+            item("Quit AI Island", #selector(NSApplication.terminate(_:)), "q"),
+        ])
+        submenu("File", [item("Close Window", #selector(NSWindow.performClose(_:)), "w")])
+        submenu("Edit", [
+            item("Undo", Selector(("undo:")), "z"),
+            item("Redo", Selector(("redo:")), "z", [.command, .shift]),
+            .separator(),
+            item("Cut", #selector(NSText.cut(_:)), "x"),
+            item("Copy", #selector(NSText.copy(_:)), "c"),
+            item("Paste", #selector(NSText.paste(_:)), "v"),
+            item("Select All", #selector(NSText.selectAll(_:)), "a"),
+        ])
         NSApp.mainMenu = menu
     }
 
@@ -1580,7 +1624,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         menu.addItem(NSMenuItem(title: "Claude Accounts & Sessions…", action: #selector(openClaudeAccounts), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Refresh configuration", action: #selector(refreshInventory), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Quit AI Island", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
         item.menu = menu
     }
 

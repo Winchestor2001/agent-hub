@@ -107,6 +107,21 @@ References: [CLI reference](https://code.claude.com/docs/en/cli-reference),
 [statusline](https://code.claude.com/docs/en/statusline), and
 [settings](https://code.claude.com/docs/en/settings).
 
+## Keyboard shortcuts
+
+AI Island has no menu bar of its own, but these shortcuts work while one of its
+windows (Settings, the file editor, or Claude Accounts & Sessions) is in front:
+
+| Shortcut | Action |
+| --- | --- |
+| ⌘W | Close the front window. The island keeps running. |
+| ⌘Q | Quit AI Island, island included. Unsaved editor changes are offered for Save, Discard, or Cancel first; Cancel keeps the app running. |
+| ⌘, | Open Settings |
+| ⌘R | Refresh configuration |
+| ⌘Z / ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A | Undo, redo, cut, copy, paste, and select all in text fields and the editor |
+
+The menu bar item's **Quit AI Island** does the same as ⌘Q.
+
 ## Verification
 
 Run the isolated process/storage tests:
