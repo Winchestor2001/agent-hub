@@ -109,13 +109,14 @@ private enum ClaudeAuthReader {
 }
 
 private final class UsageRingView: NSView {
-    var progress: CGFloat = 0 { didSet { needsDisplay = true } }
-    var accent = NSColor.white { didSet { needsDisplay = true } }
-    var isLoading = false { didSet { needsDisplay = true } }
+    // Setting a value that did not change does not redraw.
+    var progress: CGFloat = 0 { didSet { if progress != oldValue { needsDisplay = true } } }
+    var accent = NSColor.white { didSet { if accent != oldValue { needsDisplay = true } } }
+    var isLoading = false { didSet { if isLoading != oldValue { needsDisplay = true } } }
     /// Usage could not be read: a dashed track, so it never looks like 0%.
-    var isUnknown = false { didSet { needsDisplay = true } }
+    var isUnknown = false { didSet { if isUnknown != oldValue { needsDisplay = true } } }
     /// At or above the critical threshold: an "!" badge, so the state does not rely on color alone.
-    var isCritical = false { didSet { needsDisplay = true } }
+    var isCritical = false { didSet { if isCritical != oldValue { needsDisplay = true } } }
     /// Soft opacity pulse for critical usage; callers leave it off under Reduce Motion.
     var isPulsing = false {
         didSet {
@@ -187,40 +188,53 @@ private final class UsageRingView: NSView {
     }
 }
 
-/// The thin bar under an island ring. `progress == nil` means usage is unknown:
-/// the bar stays empty and dim instead of pretending to show a value.
-private final class CompactUsageBar: NSView {
-    let progress: CGFloat?
-    let accent: NSColor
+/// A usage bar: the thin 7D bar under an island ring and the popover's window
+/// bars. `progress == nil` means usage is unknown: the bar stays empty and dim
+/// instead of pretending to show a value. Values change in place, and setting
+/// a value that did not change does not redraw.
+private final class UsageBarView: NSView {
+    var progress: CGFloat? { didSet { if progress != oldValue { needsDisplay = true } } }
+    var accent: NSColor { didSet { if accent != oldValue { needsDisplay = true } } }
+    private let trackAlpha: CGFloat
 
-    init(accent: NSColor, progress: CGFloat?) {
+    init(width: CGFloat, height: CGFloat, accent: NSColor = .white, progress: CGFloat? = nil, trackAlpha: CGFloat = 0.14) {
         self.progress = progress
         self.accent = accent
-        super.init(frame: NSRect(x: 0, y: 0, width: 38, height: 3))
+        self.trackAlpha = trackAlpha
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
-        layer?.cornerRadius = 1.5
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(progress == nil ? 0.06 : 0.14).cgColor
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 38),
-            heightAnchor.constraint(equalToConstant: 3),
-        ])
-        guard let progress, progress > 0 else { return }
-        let fill = NSView()
-        fill.wantsLayer = true
-        fill.layer?.cornerRadius = 1.5
-        fill.layer?.backgroundColor = accent.cgColor
-        fill.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(fill)
-        NSLayoutConstraint.activate([
-            fill.leadingAnchor.constraint(equalTo: leadingAnchor),
-            fill.topAnchor.constraint(equalTo: topAnchor),
-            fill.bottomAnchor.constraint(equalTo: bottomAnchor),
-            fill.widthAnchor.constraint(equalTo: widthAnchor, multiplier: min(progress, 1)),
+            widthAnchor.constraint(equalToConstant: width),
+            heightAnchor.constraint(equalToConstant: height),
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = bounds.height / 2
+        NSColor.white.withAlphaComponent(progress == nil ? 0.06 : trackAlpha).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        guard let progress, progress > 0 else { return }
+        var fill = bounds
+        fill.size.width = bounds.width * min(progress, 1)
+        accent.setFill()
+        NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
+    }
+}
+
+private extension NSTextField {
+    /// Assigns only what changed, so an unchanged refresh does not redraw.
+    func show(_ text: String, color: NSColor) {
+        if stringValue != text { stringValue = text }
+        if textColor != color { textColor = color }
+    }
+}
+
+private extension NSView {
+    func setToolTipIfChanged(_ tip: String?) {
+        if toolTip != tip { toolTip = tip }
+    }
 }
 
 private enum Provider: String, CaseIterable {
@@ -510,6 +524,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     /// Island origin at the latest mouse-down on it. A drag moves the window
     /// before the click recognizer fires, so a moved island is not a click.
     private var islandOriginAtMouseDown: NSPoint?
+    private var islandModel: IslandModel?
+    private var islandCellViews: [Provider: IslandCellViews] = [:]
+    private var islandSessionViews: IslandSessionViews?
+    private var shownPopover: (model: PopoverModel, itemViews: [[NSView]])?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -599,7 +617,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 let button = views.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "island-continue" }
                 return (text("island-account"), text("island-state"), button, labels)
             }
-            rebuildNotchContent(); collapseIsland()
+            updateNotchContent(); collapseIsland()
             compactContent.layoutSubtreeIfNeeded()
             check(island.frame.width == Self.expandedIslandWidth && claudeAccounts?.islandSummary?.contains("Claude B auth ready") == true,
                   "Island expands to \(Int(Self.expandedIslandWidth))pt and shows warning and standby account")
@@ -630,7 +648,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             prefersReducedMotion = { true }
             let rings = allViews(compactContent).compactMap { $0 as? UsageRingView }
             check(rings.contains { abs($0.progress - 0.96) < 0.001 }, "Claude island ring prefers account usage over the global cache")
-            let popoverView = makeStatusPopoverView()
+            let popoverView = makeStatusPopoverView(currentPopoverModel).view
             let popoverLabels = allViews(popoverView).compactMap { ($0 as? NSTextField)?.stringValue }
             let popoverButtons = allViews(popoverView).compactMap { $0 as? NSButton }
             check(popoverButtons.map(\.toolTip) == ["Refresh limits", "Manage AI Island", "Update Claude Code and Codex CLI"]
@@ -660,12 +678,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(claudeRing.map { $0.accent == usageColor(accent: orange, percent: Double($0.progress * 100)) } == true,
                   "Claude ring follows the limit-level color rule (\(Int((claudeRing?.progress ?? 0) * 100))%)")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
-            claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
+            claudeAccounts?.refresh(); updateNotchContent(); collapseIsland()
             check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
             details = islandDetails()
             check(details.state == "Limit reached" && details.button != nil, "Limit reached shows the state and the Continue pill")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'40',?,'five_hour')", [a.id, store.now])
-            claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
+            claudeAccounts?.refresh(); updateNotchContent(); collapseIsland()
             details = islandDetails()
             check(details.state == "40% used" && details.button == nil && island.frame.width == Self.expandedIslandWidth,
                   "With headroom, the expanded island has no Continue pill")
@@ -675,7 +693,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(labels.contains("Work") && labels.contains { $0.hasPrefix("Signed out") } && buttons.contains { $0.title == "Sign in…" },
                   "Renamed, signed-out account offers Sign in…")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'97',?,'five_hour')", [a.id, store.now])
-            claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
+            claudeAccounts?.refresh(); updateNotchContent(); collapseIsland()
             details = islandDetails()
             check(details.state == "97% used" && details.button == nil,
                   "Near the limit without a ready account, no Continue pill is offered")
@@ -737,10 +755,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         func check(_ condition: Bool, _ message: String) {
             checks.append("\(condition ? "PASS" : "FAIL"): \(message)")
         }
-        func islandCell(_ provider: Provider) -> (ring: UsageRingView, bar: CompactUsageBar, number: NSTextField)? {
+        func islandCell(_ provider: Provider) -> (ring: UsageRingView, bar: UsageBarView, number: NSTextField)? {
             let ring = allViews(compactContent).compactMap { $0 as? UsageRingView }
                 .first { $0.toolTip?.hasPrefix(provider.rawValue) == true }
-            let bar = ring?.superview?.subviews.compactMap { $0 as? CompactUsageBar }.first
+            let bar = ring?.superview?.subviews.compactMap { $0 as? UsageBarView }.first
             let number = ring?.superview?.subviews.compactMap { $0 as? NSTextField }
                 .first { $0.identifier?.rawValue == "island-percent" }
             guard let ring, let bar, let number else { return nil }
@@ -805,7 +823,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         } ?? []
         check(claudeLabels.contains("Limits not available yet") && !claudeLabels.contains { $0.hasSuffix("LIMIT UNAVAILABLE") },
               "Claude card without any window shows one quiet line, without waiting for Codex")
-        rebuildNotchContent()
+        updateNotchContent()
         if claudeAccounts?.islandUsage == nil, let claude = islandCell(.claude) {
             // A configured Claude without any recorded usage once rendered a full bar.
             check(claude.bar.progress == nil && claude.ring.isUnknown && !claude.ring.isLoading,
@@ -815,7 +833,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         let lastCodexUsage = codexUsage
         codexUsage = nil
-        rebuildNotchContent()
+        updateNotchContent()
         if let codex = islandCell(.codex) {
             check(codex.ring.isUnknown && !codex.ring.isLoading && codex.bar.progress == nil && codex.number.stringValue == "—"
                   && codex.ring.toolTip?.contains("limits unknown") == true,
@@ -823,7 +841,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 0, resetsAt: nil),
                                         secondary: CodexUsageWindow(usedPercent: 0, resetsAt: nil))
-        rebuildNotchContent()
+        updateNotchContent()
         if let codex = islandCell(.codex) {
             check(!codex.ring.isUnknown && codex.ring.progress == 0 && codex.bar.progress == 0 && codex.number.stringValue == "0%",
                   "Known 0% Codex usage stays distinct from unknown")
@@ -836,19 +854,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 prefersReducedMotion = { reduceMotion }
                 codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: percent, resetsAt: nil),
                                                 secondary: CodexUsageWindow(usedPercent: percent, resetsAt: nil))
-                rebuildUsageViews()
+                updateUsageViews()
                 let popoverBar = statusPopover.contentViewController.flatMap { controller -> NSView? in
                     let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · \(percent)% used") == true }
                     guard let stack = caption?.superview as? NSStackView,
                           let index = stack.arrangedSubviews.firstIndex(where: { $0 === caption }),
                           stack.arrangedSubviews.indices.contains(index + 1) else { return nil }
-                    return stack.arrangedSubviews[index + 1].subviews.first
+                    return stack.arrangedSubviews[index + 1]
                 }
                 if let codex = islandCell(.codex) {
                     let pulsing = codex.ring.layer?.animation(forKey: UsageRingView.pulseKey) != nil
                     check(codex.ring.accent == expected && codex.bar.accent == expected
                           && codex.number.stringValue == "\(percent)%" && codex.number.textColor == expected
-                          && popoverBar?.layer?.backgroundColor == expected.cgColor
+                          && (popoverBar as? UsageBarView)?.accent == expected
                           && codex.ring.isCritical == critical && pulsing == (critical && !reduceMotion),
                           "\(percent)% uses \(critical ? "red with an ! badge" : percent >= 70 ? "yellow" : "the provider color")"
                           + " on the ring, number, island bar and popover bar\(critical ? (reduceMotion ? ", no pulse under Reduce Motion" : ", pulsing") : "")")
@@ -862,7 +880,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         prefersReducedMotion = { true }
         codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 10, resetsAt: nil),
                                         secondary: CodexUsageWindow(usedPercent: 95, resetsAt: nil))
-        rebuildUsageViews()
+        updateUsageViews()
         if let codex = islandCell(.codex) {
             check(abs(codex.ring.progress - 0.1) < 0.001 && codex.ring.accent == codexAccent && codex.number.stringValue == "10%"
                   && codex.bar.progress.map { abs($0 - 0.95) < 0.001 } == true && codex.bar.accent == .systemRed
@@ -875,7 +893,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 100, resetsAt: nil),
                                         secondary: CodexUsageWindow(usedPercent: 72, resetsAt: nil))
-        rebuildUsageViews()
+        updateUsageViews()
         compactContent.layoutSubtreeIfNeeded()
         let cells = [islandCell(.codex), islandCell(.claude)].compactMap { $0 }
         check(island.frame.width == 58 && !cells.isEmpty && cells.allSatisfy { cell in
@@ -889,7 +907,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let fiveHourReset = now + 2 * 3_600 + 15 * 60 + 30, sevenDayReset = now + 3 * 86_400 + 4 * 3_600 + 30
         codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 40, resetsAt: fiveHourReset),
                                         secondary: CodexUsageWindow(usedPercent: 72, resetsAt: sevenDayReset))
-        rebuildUsageViews()
+        updateUsageViews()
         func popoverFields() -> [NSTextField] {
             statusPopover.contentViewController.map { allViews($0.view).compactMap { $0 as? NSTextField } } ?? []
         }
@@ -913,8 +931,36 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         check(!texts.contains { ["LOCAL", "OFFLINE"].contains($0) || $0.contains("managed file") },
               "Popover has no LOCAL/OFFLINE badge or managed file count")
         if let view = statusPopover.contentViewController?.view { snapshot(view, "popover") }
+        // Refreshes update the open popover and the island in place: same views, new values.
+        let shownController = statusPopover.contentViewController
+        /// Layer-backed views report a pending redraw on their layer.
+        func marked(_ view: NSView) -> Bool { view.needsDisplay || view.layer?.needsDisplay() == true }
+        let popoverButtons = shownController.map { allViews($0.view).compactMap { $0 as? NSButton } } ?? []
+        let codexCell = islandCell(.codex)
+        codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 41, resetsAt: fiveHourReset),
+                                        secondary: CodexUsageWindow(usedPercent: 72, resetsAt: sevenDayReset))
+        updateUsageViews()
+        let updatedButtons = statusPopover.contentViewController.map { allViews($0.view).compactMap { $0 as? NSButton } } ?? []
+        check(statusPopover.contentViewController === shownController && fiveHourCaption?.window != nil
+              && fiveHourCaption?.stringValue == "5H · 41% used · resets in 2h 15m"
+              && fiveHourCaption?.toolTip == Self.resetTooltip(fiveHourReset)
+              && !popoverButtons.isEmpty && updatedButtons.count == popoverButtons.count
+              && zip(updatedButtons, popoverButtons).allSatisfy { $0 === $1 && $0.toolTip == $1.toolTip },
+              "A refresh updates the open popover in place: same caption, buttons and tooltips, new value")
+        check(codexCell.map { cell in islandCell(.codex).map { $0.ring === cell.ring && $0.number.stringValue == "41%" } == true } == true
+              && codexCell.map { marked($0.ring) } == true,
+              "A refresh updates the island cell in place and redraws the changed ring")
+        try? await Task.sleep(for: .milliseconds(100))  // Let AppKit draw the pending changes.
+        let pendingBefore = (statusPopover.contentViewController.map { allViews($0.view) } ?? []).filter(marked).count
+            + allViews(compactContent).filter(marked).count
+        updateUsageViews()
+        let popoverRedraws = statusPopover.contentViewController.map { allViews($0.view).filter(marked) } ?? []
+        let islandRedraws = allViews(compactContent).filter(marked)
+        check(statusPopover.contentViewController === shownController && pendingBefore == 0 && popoverRedraws.isEmpty && islandRedraws.isEmpty,
+              "A refresh without changes redraws nothing (\(popoverRedraws.count) popover, \(islandRedraws.count) island views marked)")
         codexUsage = nil
-        rebuildUsageViews()
+        updateUsageViews()
+        check(statusPopover.contentViewController !== shownController, "A change in rows (Codex windows gone) rebuilds the popover")
         fields = popoverFields()
         check(fields.contains { $0.stringValue == "Limits not available yet" } && !fields.contains { $0.stringValue.hasSuffix("LIMIT UNAVAILABLE") },
               "Codex without any window shows one quiet line instead of a row per window")
@@ -924,7 +970,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             check(cards.count >= 2 && cards.allSatisfy { $0.frame.width == 324 }, "Provider cards keep the full width without usage bars")
         }
         isCodexUsageLoading = true
-        rebuildUsageViews()
+        updateUsageViews()
         check(popoverFields().contains { $0.stringValue == "Loading limits…" }, "Codex shows Loading limits… before the first answer")
         isCodexUsageLoading = false
         prefersReducedMotion = defaultReducedMotion
@@ -1305,7 +1351,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         collapseIsland(animated: false)
         let compactRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleExpanded))
         compactContent.addGestureRecognizer(compactRecognizer)
-        rebuildNotchContent()
+        updateNotchContent()
     }
 
     @objc private func toggleExpanded() {
@@ -1369,7 +1415,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     @objc private func refreshInventory() {
         snapshots = Provider.allCases.map(ConfigInventory.snapshot)
-        rebuildNotchContent()
+        updateUsageViews()
         refreshSettingsPage()
     }
 
@@ -1389,16 +1435,91 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
-    private func rebuildNotchContent() {
+    /// Everything one island cell shows, as values.
+    private struct IslandCellModel: Equatable {
+        let ringAccent: NSColor
+        let progress: CGFloat
+        let isCritical: Bool
+        let isPulsing: Bool
+        let isLoading: Bool
+        let isUnknown: Bool
+        let number: String
+        let numberColor: NSColor
+        let barAccent: NSColor
+        let barProgress: CGFloat?
+        let toolTip: String
+    }
+
+    /// Everything the island shows. Views are built once per `layout`; later
+    /// refreshes only write the values that changed, and an unchanged refresh
+    /// touches nothing.
+    private struct IslandModel: Equatable {
+        let codex: IslandCellModel
+        /// nil while Claude is logged out and has no accounts: the island shows Codex only.
+        let claude: IslandCellModel?
+        let session: ClaudeAccountsWindow.IslandStatus?
+        let sessionToolTip: String?
+        var layout: [Bool] { [claude != nil, session != nil, session?.canContinue == true] }
+    }
+
+    private struct IslandCellViews {
+        let cell: NSView
+        let ring: UsageRingView
+        let mark: NSImageView
+        let number: NSTextField
+        let bar: UsageBarView
+    }
+
+    private struct IslandSessionViews {
+        let stack: NSStackView
+        let account: NSTextField
+        let state: NSTextField
+        let button: NSButton?
+    }
+
+    private var currentIslandModel: IslandModel {
+        let showsClaude = claudeLoggedIn != false || claudeAccounts?.hasAccounts == true
+        let session = showsClaude ? claudeAccounts?.islandStatus : nil
+        return IslandModel(codex: islandCellModel(for: .codex),
+                           claude: showsClaude ? islandCellModel(for: .claude) : nil,
+                           session: session,
+                           sessionToolTip: session == nil ? nil : claudeAccounts?.islandSummary)
+    }
+
+    /// Brings the island up to date: rebuilt only when its layout changes,
+    /// otherwise the existing views take the new values in place.
+    private func updateNotchContent() {
+        let model = currentIslandModel
+        guard model != islandModel || islandCellViews.isEmpty else { return }
+        if model.layout != islandModel?.layout || islandCellViews.isEmpty { buildNotchContent(for: model) }
+        let previous = islandModel
+        islandModel = model
+        if let views = islandCellViews[.codex], model.codex != previous?.codex || previous?.layout != model.layout {
+            apply(model.codex, to: views)
+        }
+        if let claude = model.claude, let views = islandCellViews[.claude], claude != previous?.claude || previous?.layout != model.layout {
+            apply(claude, to: views)
+        }
+        if let session = model.session, let views = islandSessionViews {
+            apply(session, toolTip: model.sessionToolTip, to: views)
+        }
+    }
+
+    private func buildNotchContent(for model: IslandModel) {
         compactContent.subviews.forEach { $0.removeFromSuperview() }
-        let codex = compactProviderCell(for: .codex)
-        compactContent.addSubview(codex)
-        guard claudeLoggedIn != false || claudeAccounts?.hasAccounts == true else {
+        compactContent.layoutGuides.forEach { compactContent.removeLayoutGuide($0) }
+        islandCellViews = [:]
+        islandSessionViews = nil
+        islandModel = nil
+        let codex = makeIslandCell(for: .codex)
+        islandCellViews[.codex] = codex
+        compactContent.addSubview(codex.cell)
+        guard model.claude != nil else {
             NSLayoutConstraint.activate([
-                codex.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
-                codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
-                codex.widthAnchor.constraint(equalToConstant: 46),
-                codex.heightAnchor.constraint(equalToConstant: 51),
+                codex.cell.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
+                codex.cell.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
+                codex.cell.widthAnchor.constraint(equalToConstant: 46),
+                codex.cell.heightAnchor.constraint(equalToConstant: 51),
             ])
             return
         }
@@ -1410,38 +1531,40 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         separator.wantsLayer = true
         separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
         separator.translatesAutoresizingMaskIntoConstraints = false
-        let claude = compactProviderCell(for: .claude)
+        let claude = makeIslandCell(for: .claude)
+        islandCellViews[.claude] = claude
         compactContent.addSubview(separator)
-        compactContent.addSubview(claude)
+        compactContent.addSubview(claude.cell)
         NSLayoutConstraint.activate([
             column.leadingAnchor.constraint(equalTo: compactContent.leadingAnchor),
             column.topAnchor.constraint(equalTo: compactContent.topAnchor),
             column.bottomAnchor.constraint(equalTo: compactContent.bottomAnchor),
             column.widthAnchor.constraint(equalToConstant: Self.collapsedIslandWidth),
-            codex.centerXAnchor.constraint(equalTo: column.centerXAnchor),
-            codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
-            codex.widthAnchor.constraint(equalToConstant: 46),
-            codex.heightAnchor.constraint(equalToConstant: 51),
+            codex.cell.centerXAnchor.constraint(equalTo: column.centerXAnchor),
+            codex.cell.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
+            codex.cell.widthAnchor.constraint(equalToConstant: 46),
+            codex.cell.heightAnchor.constraint(equalToConstant: 51),
             separator.centerXAnchor.constraint(equalTo: column.centerXAnchor),
-            separator.topAnchor.constraint(equalTo: codex.bottomAnchor, constant: 4),
+            separator.topAnchor.constraint(equalTo: codex.cell.bottomAnchor, constant: 4),
             separator.widthAnchor.constraint(equalToConstant: 32),
             separator.heightAnchor.constraint(equalToConstant: 1),
-            claude.centerXAnchor.constraint(equalTo: column.centerXAnchor),
-            claude.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 4),
-            claude.widthAnchor.constraint(equalToConstant: 46),
-            claude.heightAnchor.constraint(equalToConstant: 51),
+            claude.cell.centerXAnchor.constraint(equalTo: column.centerXAnchor),
+            claude.cell.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 4),
+            claude.cell.widthAnchor.constraint(equalToConstant: 46),
+            claude.cell.heightAnchor.constraint(equalToConstant: 51),
         ])
-        guard let status = claudeAccounts?.islandStatus else { return }
-        let details = islandSessionDetails(status)
-        compactContent.addSubview(details)
+        guard let session = model.session else { return }
+        let details = makeIslandSessionViews(withContinue: session.canContinue)
+        islandSessionViews = details
+        compactContent.addSubview(details.stack)
         // Below windowSizeStayPut: the details must never resize the window
         // themselves, or a 58pt island would grow rightward and drift off center.
-        let trailing = details.trailingAnchor.constraint(equalTo: compactContent.trailingAnchor, constant: -12)
+        let trailing = details.stack.trailingAnchor.constraint(equalTo: compactContent.trailingAnchor, constant: -12)
         trailing.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 10)
         NSLayoutConstraint.activate([
-            details.leadingAnchor.constraint(equalTo: column.trailingAnchor, constant: 2),
+            details.stack.leadingAnchor.constraint(equalTo: column.trailingAnchor, constant: 2),
             trailing,
-            details.centerYAnchor.constraint(equalTo: compactContent.centerYAnchor),
+            details.stack.centerYAnchor.constraint(equalTo: compactContent.centerYAnchor),
         ])
     }
 
@@ -1450,17 +1573,48 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     /// Active-session details beside the provider column: account name, state,
     /// and a Continue pill only when switching accounts would actually help.
-    private func islandSessionDetails(_ status: ClaudeAccountsWindow.IslandStatus) -> NSView {
-        func line(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor, identifier: String) -> NSTextField {
-            let label = NSTextField(labelWithString: text)
+    private func makeIslandSessionViews(withContinue: Bool) -> IslandSessionViews {
+        func line(size: CGFloat, weight: NSFont.Weight, identifier: String) -> NSTextField {
+            let label = NSTextField(labelWithString: "")
             label.identifier = NSUserInterfaceItemIdentifier(identifier)
             label.font = .systemFont(ofSize: size, weight: weight)
-            label.textColor = color
             label.lineBreakMode = .byTruncatingTail
             label.maximumNumberOfLines = 1
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             return label
         }
+        let account = line(size: 12, weight: .semibold, identifier: "island-account")
+        let state = line(size: 11, weight: .medium, identifier: "island-state")
+        var views: [NSView] = [account, state]
+        var button: NSButton?
+        if withContinue {
+            let orange = accentColor(for: .claude)
+            let pill = NSButton(title: "", target: self, action: #selector(continueClaudeAccount))
+            pill.identifier = NSUserInterfaceItemIdentifier("island-continue")
+            pill.isBordered = false
+            pill.lineBreakMode = .byTruncatingMiddle
+            pill.wantsLayer = true
+            pill.layer?.cornerRadius = 10
+            pill.layer?.backgroundColor = orange.withAlphaComponent(0.16).cgColor
+            pill.layer?.borderWidth = 1
+            pill.layer?.borderColor = orange.withAlphaComponent(0.45).cgColor
+            pill.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            pill.heightAnchor.constraint(equalToConstant: 22).isActive = true
+            views.append(pill)
+            button = pill
+        }
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+        stack.setCustomSpacing(8, after: state)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        for view in views { view.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true }
+        button?.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        return IslandSessionViews(stack: stack, account: account, state: state, button: button)
+    }
+
+    private func apply(_ status: ClaudeAccountsWindow.IslandStatus, toolTip: String?, to views: IslandSessionViews) {
         let state: (text: String, color: NSColor) = if status.limitReached {
             ("Limit reached", .systemRed)
         } else if let percent = status.percent {
@@ -1470,38 +1624,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         } else {
             ("Usage unknown" + (status.restored ? " · restored" : ""), NSColor.white.withAlphaComponent(0.55))
         }
-        var views: [NSView] = [
-            line(status.account, size: 12, weight: .semibold, color: .white, identifier: "island-account"),
-            line(state.text, size: 11, weight: .medium, color: state.color, identifier: "island-state"),
-        ]
-        if status.canContinue, let standby = status.standby {
-            let orange = accentColor(for: .claude)
-            let button = NSButton(title: "", target: self, action: #selector(continueClaudeAccount))
-            button.identifier = NSUserInterfaceItemIdentifier("island-continue")
-            button.isBordered = false
-            button.attributedTitle = NSAttributedString(string: "Continue with \(standby) →", attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: orange,
-            ])
-            button.lineBreakMode = .byTruncatingMiddle
-            button.wantsLayer = true
-            button.layer?.cornerRadius = 10
-            button.layer?.backgroundColor = orange.withAlphaComponent(0.16).cgColor
-            button.layer?.borderWidth = 1
-            button.layer?.borderColor = orange.withAlphaComponent(0.45).cgColor
-            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            button.heightAnchor.constraint(equalToConstant: 22).isActive = true
-            views.append(button)
+        views.account.show(status.account, color: .white)
+        views.state.show(state.text, color: state.color)
+        if let button = views.button, let standby = status.standby {
+            let title = "Continue with \(standby) →"
+            if button.attributedTitle.string != title {
+                button.attributedTitle = NSAttributedString(string: title, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: accentColor(for: .claude),
+                ])
+            }
         }
-        let stack = NSStackView(views: views)
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 3
-        stack.setCustomSpacing(8, after: views[1])
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        for view in views { view.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true }
-        if let button = views.last as? NSButton { button.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
-        stack.toolTip = claudeAccounts?.islandSummary
-        return stack
+        views.stack.setToolTipIfChanged(toolTip)
     }
 
     /// The two limit windows an island cell shows: the ring is 5H, the bar is 7D.
@@ -1548,36 +1681,38 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
-    private func compactProviderCell(for provider: Provider) -> NSView {
+    private func islandCellModel(for provider: Provider) -> IslandCellModel {
         let accent = accentColor(for: provider)
         let usage = islandUsage(for: provider)
         let windows: IslandWindows? = if case .known(let windows) = usage { windows } else { nil }
         let fiveHour = windows?.fiveHour, sevenDay = windows?.sevenDay
         let ringAccent = fiveHour.map { usageColor(accent: accent, percent: $0) } ?? accent
-        let ring = UsageRingView(frame: .zero)
-        ring.translatesAutoresizingMaskIntoConstraints = false
-        ring.accent = ringAccent
-        ring.progress = fiveHour.map { CGFloat($0) / 100 } ?? 0
         // Either window near its limit raises the badge, so a critical 7D is never hidden behind a calm 5H ring.
-        if [fiveHour, sevenDay].contains(where: { $0.map { UsageLevel(percent: $0) == .critical } ?? false }) {
-            ring.isCritical = true
-            ring.isPulsing = !prefersReducedMotion()
-        }
-        ring.isLoading = usage == .loading
-        if case .unknown = usage { ring.isUnknown = true }
-        if windows != nil, fiveHour == nil { ring.isUnknown = true }
-        let numberText = switch usage {
+        let critical = [fiveHour, sevenDay].contains { $0.map { UsageLevel(percent: $0) == .critical } ?? false }
+        let isUnknown: Bool = if case .unknown = usage { true } else { windows != nil && fiveHour == nil }
+        let number = switch usage {
         case .loading: "…"
         case .unknown: "—"
         case .known: fiveHour.map { "\(Int($0.rounded()))%" } ?? "—"
         }
-        let number = NSTextField(labelWithString: numberText)
+        return IslandCellModel(ringAccent: ringAccent, progress: fiveHour.map { CGFloat($0) / 100 } ?? 0,
+                               isCritical: critical, isPulsing: critical && !prefersReducedMotion(),
+                               isLoading: usage == .loading, isUnknown: isUnknown, number: number,
+                               numberColor: fiveHour == nil ? NSColor.white.withAlphaComponent(0.45) : ringAccent,
+                               barAccent: sevenDay.map { usageColor(accent: accent, percent: $0) } ?? accent,
+                               barProgress: sevenDay.map { CGFloat($0) / 100 },
+                               toolTip: islandToolTip(for: provider, usage: usage))
+    }
+
+    private func makeIslandCell(for provider: Provider) -> IslandCellViews {
+        let ring = UsageRingView(frame: .zero)
+        ring.translatesAutoresizingMaskIntoConstraints = false
+        let number = NSTextField(labelWithString: "")
         number.identifier = NSUserInterfaceItemIdentifier("island-percent")
         number.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
-        number.textColor = fiveHour == nil ? NSColor.white.withAlphaComponent(0.45) : ringAccent
         number.alignment = .center
         number.translatesAutoresizingMaskIntoConstraints = false
-        let mark = providerLogoView(for: provider, accent: accent)
+        let mark = providerLogoView(for: provider, accent: accentColor(for: provider))
         ring.addSubview(mark)
         NSLayoutConstraint.activate([
             mark.centerXAnchor.constraint(equalTo: ring.centerXAnchor),
@@ -1585,13 +1720,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             mark.widthAnchor.constraint(equalToConstant: 16),
             mark.heightAnchor.constraint(equalToConstant: 16),
         ])
-        let bar = CompactUsageBar(accent: sevenDay.map { usageColor(accent: accent, percent: $0) } ?? accent,
-                                  progress: sevenDay.map { CGFloat($0) / 100 })
+        let bar = UsageBarView(width: 38, height: 3)
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
-        // The logo and ring cover most of the cell, so they carry the same tooltip.
-        let tip = islandToolTip(for: provider, usage: usage)
-        for view in [cell, ring, mark, number] { view.toolTip = tip }
         cell.addSubview(ring)
         cell.addSubview(number)
         cell.addSubview(bar)
@@ -1606,7 +1737,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             bar.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
             bar.topAnchor.constraint(equalTo: number.bottomAnchor, constant: 2),
         ])
-        return cell
+        return IslandCellViews(cell: cell, ring: ring, mark: mark, number: number, bar: bar)
+    }
+
+    private func apply(_ model: IslandCellModel, to views: IslandCellViews) {
+        views.ring.accent = model.ringAccent
+        views.ring.progress = model.progress
+        views.ring.isCritical = model.isCritical
+        views.ring.isPulsing = model.isPulsing
+        views.ring.isLoading = model.isLoading
+        views.ring.isUnknown = model.isUnknown
+        views.number.show(model.number, color: model.numberColor)
+        views.bar.accent = model.barAccent
+        views.bar.progress = model.barProgress
+        // The logo and ring cover most of the cell, so they carry the same tooltip.
+        for view in [views.cell, views.ring, views.mark, views.number] { view.setToolTipIfChanged(model.toolTip) }
     }
 
     private func providerLogoView(for provider: Provider, accent: NSColor) -> NSImageView {
@@ -1631,9 +1776,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func showStatusPopover() {
         guard !statusPopover.isShown else { return }
         refreshInventory()
-        let controller = NSViewController()
-        controller.view = makeStatusPopoverView()
-        statusPopover.contentViewController = controller
+        showPopoverContent(currentPopoverModel)
         statusPopover.delegate = self
         statusPopover.behavior = .applicationDefined
         statusPopover.animates = true
@@ -1658,28 +1801,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let claude = readClaudeUsage()
         if claude != claudeUsage {
             claudeUsage = claude
-            rebuildUsageViews()
+            updateUsageViews()
         }
         guard !isCodexUsageLoading else { return }
         isCodexUsageLoading = true
-        if codexUsage == nil { rebuildNotchContent() }
+        if codexUsage == nil { updateUsageViews() }
         readCodexUsage { [weak self] usage in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let usage { self.codexUsage = usage }
                 self.isCodexUsageLoading = false
                 self.didFinishCodexUsageRequest = true
-                self.rebuildUsageViews()
+                self.updateUsageViews()
             }
         }
-    }
-
-    private func rebuildUsageViews() {
-        rebuildNotchContent()
-        guard statusPopover.isShown else { return }
-        let controller = NSViewController()
-        controller.view = makeStatusPopoverView()
-        statusPopover.contentViewController = controller
     }
 
     private func refreshClaudeAuth() {
@@ -1687,20 +1822,108 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.claudeLoggedIn = loggedIn
-                self.rebuildNotchContent()
+                self.updateNotchContent()
                 self.collapseIsland()
                 self.refreshSettingsPage()
-                guard self.statusPopover.isShown else { return }
-                let controller = NSViewController()
-                controller.view = self.makeStatusPopoverView()
-                self.statusPopover.contentViewController = controller
+                self.updatePopoverContent()
             }
         }
     }
 
-    private func makeStatusPopoverView() -> NSView {
+    /// Everything the popover shows, as values. While its `shape` stays the
+    /// same, a refresh writes the changed values into the open popover instead
+    /// of replacing it, so tooltips, hover and VoiceOver focus survive.
+    private struct PopoverModel: Equatable {
+        struct Bar: Equatable {
+            let progress: CGFloat
+            let accent: NSColor
+        }
+        enum Item: Equatable {
+            /// A Claude source heading: name (with " · now") and its status.
+            case source(title: String, detail: String)
+            /// A limit window caption with its bar, or one quiet line without a bar.
+            case usage(caption: String, color: NSColor, toolTip: String?, bar: Bar?)
+            case note(String, color: NSColor)
+            case gap
+            var shape: String {
+                switch self {
+                case .source: "source"
+                case .usage(_, _, _, let bar): bar == nil ? "line" : "bar"
+                case .note: "note"
+                case .gap: "gap"
+                }
+            }
+        }
+        struct Card: Equatable {
+            let provider: Provider
+            let detected: Bool
+            let items: [Item]
+        }
+        let cards: [Card]
+        var items: [Item] { cards.flatMap(\.items) }
+        var shape: [String] { cards.flatMap { ["\($0.provider.rawValue) \($0.detected)"] + $0.items.map(\.shape) } }
+    }
+
+    private struct PopoverContent {
+        let view: NSView
+        /// The views each model item writes to, in `PopoverModel.items` order.
+        let itemViews: [[NSView]]
+    }
+
+    private var currentPopoverModel: PopoverModel {
+        func card(_ provider: Provider) -> PopoverModel.Card {
+            let snapshot = snapshots.first(where: { $0.provider == provider }) ?? ConfigInventory.snapshot(for: provider)
+            let accent = accentColor(for: provider)
+            var items: [PopoverModel.Item] = []
+            if provider == .codex {
+                items = usageWindowItems([("5H", codexUsage?.primary), ("7D", codexUsage?.secondary)], accent: accent,
+                                         loading: isCodexUsageLoading && codexUsage == nil)
+            } else {
+                let current = currentClaudeSource
+                for (index, source) in claudeSources.enumerated() {
+                    if index > 0 { items.append(.gap) }
+                    items.append(.source(title: source.name + (source.name == current?.name ? " · now" : ""), detail: source.detail))
+                    items += usageWindowItems([("5H", source.fiveHour), ("7D", source.sevenDay)], accent: accent,
+                                              suffix: source.stale ? " · last known" : "")
+                }
+                if let summary = claudeAccounts?.islandSummary {
+                    items.append(.note(summary, color: accent.withAlphaComponent(0.9)))
+                }
+            }
+            return PopoverModel.Card(provider: provider, detected: snapshot.isInstalled, items: items)
+        }
         let showsClaude = claudeLoggedIn != false || claudeAccounts?.hasAccounts == true
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 356, height: showsClaude ? 340 : 254))
+        return PopoverModel(cards: [card(.codex)] + (showsClaude ? [card(.claude)] : []))
+    }
+
+    private func showPopoverContent(_ model: PopoverModel) {
+        let content = makeStatusPopoverView(model)
+        let controller = NSViewController()
+        controller.view = content.view
+        statusPopover.contentViewController = controller
+        shownPopover = (model, content.itemViews)
+    }
+
+    /// Brings the open popover up to date: rebuilt only when its rows change
+    /// (an account added, a window appearing), otherwise updated in place.
+    private func updatePopoverContent() {
+        guard statusPopover.isShown else { return }
+        let model = currentPopoverModel
+        guard let shown = shownPopover, shown.model.shape == model.shape else { showPopoverContent(model); return }
+        guard model != shown.model else { return }
+        for (index, item) in model.items.enumerated() where item != shown.model.items[index] {
+            apply(item, to: shown.itemViews[index])
+        }
+        shownPopover = (model, shown.itemViews)
+    }
+
+    private func updateUsageViews() {
+        updateNotchContent()
+        updatePopoverContent()
+    }
+
+    private func makeStatusPopoverView(_ model: PopoverModel) -> PopoverContent {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 356, height: 254))
         root.wantsLayer = true
         root.layer?.backgroundColor = NSColor(
             calibratedRed: 0.025,
@@ -1726,9 +1949,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         subtitle.textColor = NSColor.white.withAlphaComponent(0.62)
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(subtitle)
-        stack.addArrangedSubview(providerRow(for: .codex))
-        if showsClaude {
-            stack.addArrangedSubview(providerRow(for: .claude))
+        var itemViews: [[NSView]] = []
+        for card in model.cards {
+            stack.addArrangedSubview(providerRow(for: card, itemViews: &itemViews))
         }
 
         let actions = NSStackView()
@@ -1759,11 +1982,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             stack.topAnchor.constraint(equalTo: root.topAnchor),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor),
         ])
-        return root
+        return PopoverContent(view: root, itemViews: itemViews)
     }
 
-    private func providerRow(for provider: Provider) -> NSStackView {
-        let snapshot = snapshots.first(where: { $0.provider == provider }) ?? ConfigInventory.snapshot(for: provider)
+    private func providerRow(for model: PopoverModel.Card, itemViews: inout [[NSView]]) -> NSStackView {
+        let provider = model.provider
         let accent = accentColor(for: provider)
         let card = NSView(frame: NSRect(x: 0, y: 0, width: 324, height: 124))
         card.wantsLayer = true
@@ -1772,7 +1995,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         card.layer?.borderWidth = 1
         card.layer?.borderColor = accent.withAlphaComponent(0.42).cgColor
 
-        let dot = NSTextField(labelWithString: snapshot.isInstalled ? "●" : "○")
+        let dot = NSTextField(labelWithString: model.detected ? "●" : "○")
         dot.textColor = accent
         dot.font = .systemFont(ofSize: 14, weight: .bold)
         let name = NSTextField(labelWithString: provider.rawValue)
@@ -1784,36 +2007,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         topRow.spacing = 6
         var content: [NSView] = [topRow]
         // File counts live in Settings; the card is about limits only.
-        if !snapshot.isInstalled {
+        if !model.detected {
             let state = NSTextField(labelWithString: "Not detected")
             state.font = .systemFont(ofSize: 13, weight: .semibold)
             state.textColor = NSColor.white.withAlphaComponent(0.78)
             content.append(state)
         }
-        if provider == .codex {
-            content += usageWindowViews([("5H", codexUsage?.primary), ("7D", codexUsage?.secondary)], accent: accent,
-                                        loading: isCodexUsageLoading && codexUsage == nil)
-        } else {
-            let sources = claudeSources, current = currentClaudeSource
-            for (index, source) in sources.enumerated() {
-                if index > 0 { content.append(spacer(6)) }
-                let title = NSTextField(labelWithString: source.name + (source.name == current?.name ? " · now" : ""))
-                title.font = .systemFont(ofSize: 13, weight: .bold); title.textColor = .white
-                let detail = NSTextField(labelWithString: source.detail)
-                detail.font = .systemFont(ofSize: 11, weight: .medium); detail.textColor = NSColor.white.withAlphaComponent(0.62)
-                let header = NSStackView(views: [title, NSView(), detail]); header.orientation = .horizontal
-                header.translatesAutoresizingMaskIntoConstraints = false
-                header.widthAnchor.constraint(equalToConstant: 296).isActive = true
-                content.append(header)
-                content += usageWindowViews([("5H", source.fiveHour), ("7D", source.sevenDay)], accent: accent,
-                                            suffix: source.stale ? " · last known" : "")
-            }
-            if let summary = claudeAccounts?.islandSummary {
-                let caption = NSTextField(labelWithString: summary)
-                caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-                caption.textColor = accent.withAlphaComponent(0.9)
-                content.append(caption)
-            }
+        for item in model.items {
+            let views = makePopoverItemViews(item)
+            apply(item, to: views.updated)
+            content += views.arranged
+            itemViews.append(views.updated)
         }
         let copy = NSStackView(views: content)
         copy.orientation = .vertical
@@ -1833,6 +2037,53 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         row.alignment = .centerY
         row.widthAnchor.constraint(equalToConstant: 324).isActive = true
         return row
+    }
+
+    /// `arranged` go into the card's stack; `updated` are the views `apply` writes to.
+    private func makePopoverItemViews(_ item: PopoverModel.Item) -> (arranged: [NSView], updated: [NSView]) {
+        switch item {
+        case .source:
+            let title = NSTextField(labelWithString: "")
+            title.font = .systemFont(ofSize: 13, weight: .bold)
+            let detail = NSTextField(labelWithString: "")
+            detail.font = .systemFont(ofSize: 11, weight: .medium)
+            let header = NSStackView(views: [title, NSView(), detail]); header.orientation = .horizontal
+            header.translatesAutoresizingMaskIntoConstraints = false
+            header.widthAnchor.constraint(equalToConstant: 296).isActive = true
+            return ([header], [title, detail])
+        case .usage(_, _, _, let bar):
+            let caption = NSTextField(labelWithString: "")
+            caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+            caption.lineBreakMode = .byTruncatingTail
+            guard bar != nil else { return ([caption], [caption]) }
+            let barView = UsageBarView(width: 296, height: 6, trackAlpha: 0.13)
+            return ([caption, barView], [caption, barView])
+        case .note:
+            let caption = NSTextField(labelWithString: "")
+            caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            return ([caption], [caption])
+        case .gap:
+            return ([spacer(6)], [])
+        }
+    }
+
+    private func apply(_ item: PopoverModel.Item, to views: [NSView]) {
+        switch item {
+        case .source(let title, let detail):
+            (views.first as? NSTextField)?.show(title, color: .white)
+            (views.last as? NSTextField)?.show(detail, color: NSColor.white.withAlphaComponent(0.62))
+        case .usage(let caption, let color, let toolTip, let bar):
+            (views.first as? NSTextField)?.show(caption, color: color)
+            views.first?.setToolTipIfChanged(toolTip)
+            if let bar, let barView = views.last as? UsageBarView {
+                barView.progress = bar.progress
+                barView.accent = bar.accent
+            }
+        case .note(let text, let color):
+            (views.first as? NSTextField)?.show(text, color: color)
+        case .gap:
+            break
+        }
     }
 
     /// One place Claude usage comes from: plain `claude` (~/.claude) or an AI Island account.
@@ -1900,41 +2151,28 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return view
     }
 
-    private static func usageCaption(_ text: String, color: NSColor) -> NSTextField {
-        let caption = NSTextField(labelWithString: text)
-        caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        caption.textColor = color
-        caption.lineBreakMode = .byTruncatingTail
-        return caption
-    }
-
     /// Caption and bar per limit window. Without any known window the source
     /// gets one quiet line instead of a "not available" row per window.
-    private func usageWindowViews(_ windows: [(title: String, window: CodexUsageWindow?)], accent: NSColor,
-                                  suffix: String = "", loading: Bool = false) -> [NSView] {
+    private func usageWindowItems(_ windows: [(title: String, window: CodexUsageWindow?)], accent: NSColor,
+                                  suffix: String = "", loading: Bool = false) -> [PopoverModel.Item] {
+        let quiet = NSColor.white.withAlphaComponent(0.55)
         guard windows.contains(where: { $0.window != nil }) else {
-            return [Self.usageCaption(loading ? "Loading limits…" : "Limits not available yet",
-                                      color: NSColor.white.withAlphaComponent(0.55))]
+            return [.usage(caption: loading ? "Loading limits…" : "Limits not available yet", color: quiet, toolTip: nil, bar: nil)]
         }
-        return windows.flatMap { title, window in
+        return windows.map { title, window in
             guard let window else {
-                return [Self.usageCaption("\(title) · not available", color: NSColor.white.withAlphaComponent(0.55)),
-                        makeStatusBar(accent: accent.withAlphaComponent(0.45), progress: 0.02)]
+                return .usage(caption: "\(title) · not available", color: quiet, toolTip: nil,
+                              bar: PopoverModel.Bar(progress: 0.02, accent: accent.withAlphaComponent(0.45)))
             }
-            return usageBarViews(title: title, window: window, accent: accent, suffix: suffix)
+            var text = "\(title) · \(window.usedPercent)% used"
+            if let resetsAt = window.resetsAt {
+                let left = ResetCountdown.text(until: resetsAt, now: Date().timeIntervalSince1970)
+                text += left == "now" ? " · resets now" : " · resets in \(left)"
+            }
+            return .usage(caption: text + suffix, color: accent.withAlphaComponent(0.94), toolTip: window.resetsAt.map(Self.resetTooltip),
+                          bar: PopoverModel.Bar(progress: CGFloat(window.usedPercent) / 100,
+                                                accent: usageColor(accent: accent, percent: Double(window.usedPercent))))
         }
-    }
-
-    private func usageBarViews(title: String, window: CodexUsageWindow, accent: NSColor, suffix: String = "") -> [NSView] {
-        var text = "\(title) · \(window.usedPercent)% used"
-        if let resetsAt = window.resetsAt {
-            let left = ResetCountdown.text(until: resetsAt, now: Date().timeIntervalSince1970)
-            text += left == "now" ? " · resets now" : " · resets in \(left)"
-        }
-        let caption = Self.usageCaption(text + suffix, color: accent.withAlphaComponent(0.94))
-        caption.toolTip = window.resetsAt.map(Self.resetTooltip)
-        let barColor = usageColor(accent: accent, percent: Double(window.usedPercent))
-        return [caption, makeStatusBar(accent: barColor, progress: CGFloat(window.usedPercent) / 100)]
     }
 
     /// The absolute reset time, with the date when it is not within the next day.
@@ -1944,28 +2182,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         formatter.timeStyle = .short
         formatter.dateStyle = date.timeIntervalSinceNow > 86_400 ? .medium : .none
         return "Resets at \(formatter.string(from: date))"
-    }
-
-    private func makeStatusBar(accent: NSColor, progress: CGFloat) -> NSView {
-        let track = NSView(frame: NSRect(x: 0, y: 0, width: 296, height: 6))
-        track.wantsLayer = true
-        track.layer?.cornerRadius = 3
-        track.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.13).cgColor
-        let fill = NSView()
-        fill.wantsLayer = true
-        fill.layer?.cornerRadius = 3
-        fill.layer?.backgroundColor = accent.cgColor
-        fill.translatesAutoresizingMaskIntoConstraints = false
-        track.addSubview(fill)
-        NSLayoutConstraint.activate([
-            track.widthAnchor.constraint(equalToConstant: 296),
-            track.heightAnchor.constraint(equalToConstant: 6),
-            fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
-            fill.topAnchor.constraint(equalTo: track.topAnchor),
-            fill.bottomAnchor.constraint(equalTo: track.bottomAnchor),
-            fill.widthAnchor.constraint(equalTo: track.widthAnchor, multiplier: progress),
-        ])
-        return track
     }
 
     /// Runs each CLI's own updater (it knows whether it came from Homebrew, npm or a native install).
@@ -2172,13 +2388,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         do {
             let controller = try ClaudeAccountsWindow()
             controller.onChange = { [weak self] in
-                self?.rebuildNotchContent()
+                self?.updateUsageViews()
                 self?.collapseIsland()
-                if let self, self.statusPopover.isShown {
-                    let view = NSViewController()
-                    view.view = self.makeStatusPopoverView()
-                    self.statusPopover.contentViewController = view
-                }
             }
             claudeAccounts = controller
         } catch { presentConfigurationError("Unable to open Claude session storage.") }
