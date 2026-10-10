@@ -608,6 +608,25 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     let page = settingsDetailView?.subviews.first as? NSStackView
                     let buttons = page?.arrangedSubviews.compactMap { $0 as? NSButton } ?? []
                     try require(buttons.count == configurationCategories(for: provider).count, "Missing category buttons")
+                    guard let settingsSplit = settingsWindow?.contentView as? NSSplitView else {
+                        throw RegressionFailure(message: "Missing Settings split view")
+                    }
+                    for target in [180.0, 300.0, 218.0] {
+                        settingsSplit.setPosition(target, ofDividerAt: 0)
+                        settingsSplit.layoutSubtreeIfNeeded()
+                        try require(abs(settingsSplit.subviews[0].frame.width - target) <= 1,
+                                    "\(provider.rawValue) Settings sidebar did not resize to \(target)px")
+                    }
+                    checks.append("PASS settings sidebar: \(provider.rawValue) page resizes 180/300/218px")
+                    if let page {
+                        page.layoutSubtreeIfNeeded()
+                        for card in buttons {
+                            try require(abs(card.frame.minX - page.edgeInsets.left) <= 1
+                                        && abs(page.bounds.width - card.frame.maxX - page.edgeInsets.right) <= 1,
+                                        "\(provider.rawValue) category cards touch the page edges")
+                        }
+                        checks.append("PASS settings cards: \(provider.rawValue) cards keep \(page.edgeInsets.left)px side margins")
+                    }
                     for button in buttons {
                         button.performClick(nil)
                         try require(configurationWindow?.isVisible == true, "Editor did not reopen")
@@ -1475,7 +1494,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         sidebarStack.addArrangedSubview(appSubtitle)
         sidebarStack.addArrangedSubview(NSView())
         for area in SettingsArea.allCases {
-            sidebarStack.addArrangedSubview(settingsSidebarButton(for: area))
+            let button = settingsSidebarButton(for: area)
+            sidebarStack.addArrangedSubview(button)
+            button.widthAnchor.constraint(equalTo: sidebarStack.widthAnchor, constant: -32).isActive = true
         }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -1498,6 +1519,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         detail.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         split.addArrangedSubview(sidebar)
         split.addArrangedSubview(detail)
+        // Window resizes go to the detail pane; the divider stays user-draggable.
+        split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 0)
+        NSLayoutConstraint.activate([
+            sidebar.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            sidebar.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
+        ])
         split.setPosition(218, ofDividerAt: 0)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
@@ -1529,7 +1556,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         button.alignment = .left
         button.bezelStyle = .texturedRounded
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.widthAnchor.constraint(equalToConstant: 184).isActive = true
         return button
     }
 
@@ -1585,6 +1611,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         stack.spacing = 14
         stack.edgeInsets = NSEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
         stack.translatesAutoresizingMaskIntoConstraints = false
+        // Without this the stack hugs its cards and pins the Settings divider.
+        stack.setHuggingPriority(.defaultLow, for: .horizontal)
         let heading = NSTextField(labelWithString: selectedSettingsArea.title)
         heading.font = .systemFont(ofSize: 28, weight: .bold)
         let subtitle: String
@@ -1605,7 +1633,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             for category in configurationCategories(for: provider) {
                 let card = configurationCard(category, provider: provider)
                 stack.addArrangedSubview(card)
-                card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+                card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -(stack.edgeInsets.left + stack.edgeInsets.right)).isActive = true
             }
         } else {
             for provider in Provider.allCases {
@@ -1616,7 +1644,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     : "Signed out · hidden from island"
                 let card = overviewCard(provider: provider, detail: detailText)
                 stack.addArrangedSubview(card)
-                card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+                card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -(stack.edgeInsets.left + stack.edgeInsets.right)).isActive = true
             }
         }
         detail.addSubview(stack)
