@@ -338,8 +338,10 @@ private final class IslandPanel: NSPanel {
     }
 }
 
+private enum UnsavedConfigurationChoice { case save, discard, cancel }
+
 @MainActor
-private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSplitViewDelegate {
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSplitViewDelegate, NSTextViewDelegate {
     private let island = IslandPanel()
     private let compactContent = NSView()
     private let statusPopover = NSPopover()
@@ -376,6 +378,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var configurationStatus: NSTextField?
     private var activeConfigurationCategory: ConfigurationCategory?
     private var activeConfigurationFile: URL?
+    /// Text of the active file as last loaded or saved; the editor is dirty when it differs.
+    private var configurationSavedContent: String?
+    private var askAboutUnsavedConfiguration: (URL) -> UnsavedConfigurationChoice = { file in
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \(file.lastPathComponent)?"
+        alert.informativeText = "Your edits will be lost if you don't save them."
+        alert.addButton(withTitle: "Save…")
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .save
+        case .alertSecondButtonReturn: return .discard
+        default: return .cancel
+        }
+    }
+    private var confirmConfigurationSave: (String) -> Bool = { summary in
+        let alert = NSAlert()
+        alert.messageText = "Review changes"
+        alert.informativeText = summary + "\n\nA timestamped backup will be saved before this file is updated."
+        alert.addButton(withTitle: "Save with backup")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
     private var snapshots: [ProviderSnapshot] = []
     private var codexUsage: CodexUsageSnapshot?
     private var isCodexUsageLoading = false
@@ -802,6 +827,44 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             configurationEditor?.string = original
                             checks.append("PASS search: \(button.identifier?.rawValue ?? "unknown") — filter, clear, preserve draft")
                         }
+                        if cycle == 1, let editor = configurationEditor, let window = configurationWindow,
+                           let file = activeConfigurationFile, configurationFiles.count >= 2,
+                           let otherRow = configurationFiles.firstIndex(where: { $0.path != file.path }) {
+                            // Exercise the unsaved-changes guard without ever writing the user's files.
+                            let defaultAsk = askAboutUnsavedConfiguration, defaultConfirm = confirmConfigurationSave
+                            defer { askAboutUnsavedConfiguration = defaultAsk; confirmConfigurationSave = defaultConfirm }
+                            let original = editor.string
+                            let selectedRow = table.selectedRow
+                            editor.setSelectedRange(NSRange(location: (original as NSString).length, length: 0))
+                            editor.insertText("\nRegression draft (not saved)", replacementRange: editor.selectedRange())
+                            let draft = editor.string
+                            try require(draft != original && window.isDocumentEdited
+                                        && configurationStatus?.stringValue.hasPrefix("Edited") == true,
+                                        "Unsaved edit is not marked in the window and status")
+                            var asked = 0
+                            askAboutUnsavedConfiguration = { _ in asked += 1; return .cancel }
+                            try require(!tableView(table, shouldSelectRow: otherRow), "Cancel did not keep the current file selected")
+                            try require(editor.string == draft && table.selectedRow == selectedRow && activeConfigurationFile == file,
+                                        "Cancel on file switch changed the draft or selection")
+                            openConfigurationCategory(button)
+                            try require(editor.string == draft && activeConfigurationFile == file, "Cancel on category switch discarded the draft")
+                            try require(!windowShouldClose(window) && editor.string == draft, "Cancel on close discarded the draft")
+                            try require(asked == 3, "Unsaved-changes prompt was not shown for file, category, and close")
+                            var reviewed = false
+                            confirmConfigurationSave = { _ in reviewed = true; return false }
+                            if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                                            windowNumber: window.windowNumber, context: nil, characters: "s",
+                                                            charactersIgnoringModifiers: "s", isARepeat: false, keyCode: 1) {
+                                _ = window.performKeyEquivalent(with: event)
+                            }
+                            try require(reviewed && editor.string == draft && window.isDocumentEdited,
+                                        "⌘S did not open the review step, or a declined review changed the draft")
+                            try require((try? String(contentsOf: file, encoding: .utf8)) == original, "Declined save wrote the file")
+                            askAboutUnsavedConfiguration = { _ in .discard }
+                            try require(tableView(table, shouldSelectRow: otherRow) && editor.string == original && !window.isDocumentEdited,
+                                        "Discard did not restore the saved text")
+                            checks.append("PASS unsaved edits: \(button.identifier?.rawValue ?? "unknown") — marked, Cancel keeps draft on file/category/close, ⌘S reviews, Discard restores")
+                        }
                         if cycle == 1, button.identifier?.rawValue == "Codex::Skills",
                            let index = configurationFiles.firstIndex(where: { $0.lastPathComponent == "SKILL.md" }),
                            let editor = configurationEditor, let view = configurationWindow?.contentView {
@@ -860,7 +923,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let hasOpenSettings = settingsWindow?.isVisible == true || configurationWindow?.isVisible == true
-        guard hasOpenSettings else { return .terminateNow }
+        guard hasOpenSettings else {
+            return resolveUnsavedConfigurationChanges() ? .terminateNow : .terminateCancel
+        }
 
         configurationWindow?.orderOut(nil)
         settingsWindow?.orderOut(nil)
@@ -872,6 +937,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         NotificationCenter.default.removeObserver(self)
         if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
         if let globalMouseMonitor { NSEvent.removeMonitor(globalMouseMonitor) }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender !== configurationWindow || resolveUnsavedConfigurationChanges()
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -1885,6 +1954,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         guard parts.count == 2,
               let provider = Provider(rawValue: parts[0]),
               let category = configurationCategories(for: provider).first(where: { $0.title == parts[1] }) else { return }
+        guard resolveUnsavedConfigurationChanges() else {
+            configurationWindow?.makeKeyAndOrderFront(nil)
+            return
+        }
         activeConfigurationCategory = category
         activeConfigurationFile = nil
         buildConfigurationWindowIfNeeded()
@@ -1990,6 +2063,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         editor.textContainer?.containerSize = NSSize(width: 620, height: CGFloat.greatestFiniteMagnitude)
         editor.textContainer?.widthTracksTextView = true
         editor.isEditable = false
+        editor.delegate = self
         editorScroll.documentView = editor
         configurationEditor = editor
 
@@ -2032,6 +2106,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         save.bezelStyle = .rounded
         save.contentTintColor = .controlAccentColor
         save.isEnabled = false
+        save.keyEquivalent = "s"
+        save.keyEquivalentModifierMask = .command
+        save.toolTip = "Review and save with a backup (⌘S)"
         save.heightAnchor.constraint(equalToConstant: 40).isActive = true
         configurationSaveButton = save
         deleteFile.setContentHuggingPriority(.required, for: .horizontal)
@@ -2068,6 +2145,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             defer: false
         )
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.minSize = NSSize(width: 760, height: 460)
         window.contentView = split
         configurationSplitView = split
@@ -2172,6 +2250,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             loadConfigurationFile(configurationFiles[index])
         } else if selectFirst {
             activeConfigurationFile = nil
+            configurationSavedContent = nil
+            configurationWindow?.isDocumentEdited = false
             configurationEditor?.string = ""
             configurationEditor?.isEditable = false
             configurationFileTitle?.stringValue = "No files yet"
@@ -2234,6 +2314,53 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return cell
     }
 
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        guard tableView === configurationTable, !isUpdatingConfigurationTable,
+              configurationFiles.indices.contains(row),
+              configurationFiles[row].path != activeConfigurationFile?.path else { return true }
+        return resolveUnsavedConfigurationChanges()
+    }
+
+    func textDidChange(_ notification: Notification) {
+        guard notification.object as? NSTextView === configurationEditor else { return }
+        updateConfigurationEditedState()
+    }
+
+    private var hasUnsavedConfigurationChanges: Bool {
+        activeConfigurationFile != nil && configurationEditor?.string != configurationSavedContent
+    }
+
+    private func configurationSummary(for file: URL, content: String) -> String {
+        "\(file.pathExtension.uppercased()) · \(content.components(separatedBy: "\n").count) lines · UTF-8"
+    }
+
+    private func updateConfigurationEditedState() {
+        let edited = hasUnsavedConfigurationChanges
+        configurationWindow?.isDocumentEdited = edited
+        if edited {
+            configurationStatus?.stringValue = "Edited · unsaved changes · ⌘S to review and save"
+        } else if configurationStatus?.stringValue.hasPrefix("Edited") == true,
+                  let file = activeConfigurationFile, let saved = configurationSavedContent {
+            configurationStatus?.stringValue = configurationSummary(for: file, content: saved)
+        }
+    }
+
+    /// Asks before an action would replace unsaved editor text. Returns false
+    /// when the user cancels, leaving the selection and the draft untouched.
+    private func resolveUnsavedConfigurationChanges() -> Bool {
+        guard hasUnsavedConfigurationChanges, let file = activeConfigurationFile else { return true }
+        switch askAboutUnsavedConfiguration(file) {
+        case .save:
+            return saveActiveConfigurationFile()
+        case .discard:
+            configurationEditor?.string = configurationSavedContent ?? ""
+            updateConfigurationEditedState()
+            return true
+        case .cancel:
+            return false
+        }
+    }
+
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard !isUpdatingConfigurationTable,
               let table = notification.object as? NSTableView, table === configurationTable,
@@ -2255,13 +2382,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             configurationSaveButton?.isEnabled = false
             configurationDeleteButton?.isEnabled = false
             activeConfigurationFile = nil
+            configurationSavedContent = nil
+            configurationWindow?.isDocumentEdited = false
             return
         }
         activeConfigurationFile = file
+        configurationSavedContent = content
+        configurationWindow?.isDocumentEdited = false
         configurationEditor?.string = content
         configurationEditor?.isEditable = true
-        let lines = content.components(separatedBy: "\n").count
-        configurationStatus?.stringValue = "\(file.pathExtension.uppercased()) · \(lines) lines · UTF-8"
+        configurationStatus?.stringValue = configurationSummary(for: file, content: content)
         configurationSaveButton?.isEnabled = true
         configurationDeleteButton?.isEnabled = true
     }
@@ -2272,6 +2402,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             presentConfigurationError("New files can only be created inside a managed Skills, Agents, Rules, Commands, or Hooks folder.")
             return
         }
+        guard resolveUnsavedConfigurationChanges() else { return }
         let alert = NSAlert()
         alert.messageText = "New \(category.title) file"
         alert.informativeText = "Use letters, numbers, dots, underscores, or dashes. The file remains inside this configuration category."
@@ -2297,25 +2428,34 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func saveConfigurationFile() {
+        saveActiveConfigurationFile()
+    }
+
+    /// Review + backup save flow. Returns true only when the editor text is on disk.
+    @discardableResult
+    private func saveActiveConfigurationFile() -> Bool {
         guard let file = activeConfigurationFile,
               let editor = configurationEditor,
-              isManagedConfigurationFile(file) else { return }
+              isManagedConfigurationFile(file) else { return false }
         let oldContent = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
         let newContent = editor.string
-        guard oldContent != newContent else { return }
-        let alert = NSAlert()
-        alert.messageText = "Review changes"
-        alert.informativeText = changeSummary(from: oldContent, to: newContent) + "\n\nA timestamped backup will be saved before this file is updated."
-        alert.addButton(withTitle: "Save with backup")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard oldContent != newContent else {
+            configurationSavedContent = newContent
+            updateConfigurationEditedState()
+            return true
+        }
+        guard confirmConfigurationSave(changeSummary(from: oldContent, to: newContent)) else { return false }
         do {
             try backupConfigurationFile(file)
             try newContent.write(to: file, atomically: true, encoding: .utf8)
+            configurationSavedContent = newContent
             configurationStatus?.stringValue = "Saved with backup · \(file.path)"
+            updateConfigurationEditedState()
             refreshInventory()
+            return true
         } catch {
             presentConfigurationError("Could not save this file. The original was not replaced.")
+            return false
         }
     }
 
