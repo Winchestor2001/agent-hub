@@ -528,18 +528,37 @@ final class ClaudeAccountsWindow: NSWindowController {
 
     // MARK: Island
 
-    var islandSummary: String? {
+    /// What the expanded island shows for the active session.
+    struct IslandStatus: Equatable {
+        let account: String
+        let percent: Double?
+        let stale: Bool
+        /// Another account that is signed in and ready to continue the session.
+        let standby: String?
+        let restored: Bool
+        var limitReached: Bool { !stale && (percent ?? 0) >= 100 }
+        var nearLimit: Bool { !stale && percent.map { UsageLevel(percent: $0) == .critical } == true }
+        /// Continue is offered only when it helps: the limit is near or reached and another account is ready.
+        var canContinue: Bool { nearLimit && standby != nil }
+    }
+
+    var islandStatus: IslandStatus? {
         guard let session = sessions.first(where: { $0.status == "active" }), let id = session.accountID,
               let account = accounts.first(where: { $0.id == id }) else { return nil }
         let usage = try? store.usage(id)
-        if let usage, !usage.stale, usage.percent >= 100 {
-            let other = accounts.first(where: { $0.id != id && $0.status == "ready" })
-            return "\(account.name) limit reached\(other.map { " · Continue with \($0.name) →" } ?? "")"
+        return IslandStatus(account: account.name, percent: usage?.percent, stale: usage?.stale ?? false,
+                            standby: accounts.first(where: { $0.id != id && $0.status == "ready" })?.name,
+                            restored: session.lastHook == "SessionStart")
+    }
+
+    var islandSummary: String? {
+        guard let status = islandStatus else { return nil }
+        if status.limitReached {
+            return "\(status.account) limit reached\(status.standby.map { " · Continue with \($0) →" } ?? "")"
         }
-        let value = usage.map { " · \(Int($0.percent))%\($0.stale ? " (last known)" : "")" } ?? " · usage unknown"
-        let ready = accounts.first(where: { $0.id != id && $0.status == "ready" })
-        if let usage, !usage.stale, usage.percent >= 95, let ready { return account.name + value + " · \(ready.name) auth ready" }
-        return account.name + value + (session.lastHook == "SessionStart" ? " · Session restored" : "")
+        let value = status.percent.map { " · \(Int($0))%\(status.stale ? " (last known)" : "")" } ?? " · usage unknown"
+        if !status.stale, (status.percent ?? 0) >= 95, let ready = status.standby { return status.account + value + " · \(ready) auth ready" }
+        return status.account + value + (status.restored ? " · Session restored" : "")
     }
     /// Name of the account the active session runs on, if any.
     var activeAccountName: String? {

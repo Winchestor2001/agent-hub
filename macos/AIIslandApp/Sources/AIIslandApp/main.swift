@@ -589,8 +589,45 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             // A lower global cache value must not override the active session's account usage.
             claudeUsage = ClaudeRateLimits(fiveHour: ClaudeRateLimitWindow(usedPercent: 12, resetsAt: nil),
                                            sevenDay: nil, capturedAt: nil, stale: true)
+            let defaultReducedMotion = prefersReducedMotion
+            prefersReducedMotion = { true }
+            defer { prefersReducedMotion = defaultReducedMotion }
+            func islandDetails() -> (account: String?, state: String?, button: NSButton?, labels: [NSTextField]) {
+                let views = allViews(compactContent)
+                let labels = views.compactMap { $0 as? NSTextField }.filter { $0.identifier?.rawValue.hasPrefix("island-") == true && $0.identifier?.rawValue != "island-percent" }
+                func text(_ id: String) -> String? { labels.first { $0.identifier?.rawValue == id }?.stringValue }
+                let button = views.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "island-continue" }
+                return (text("island-account"), text("island-state"), button, labels)
+            }
             rebuildNotchContent(); collapseIsland()
-            check(island.frame.width == 280 && claudeAccounts?.islandSummary?.contains("Claude B auth ready") == true, "Island shows warning and standby account")
+            compactContent.layoutSubtreeIfNeeded()
+            check(island.frame.width == Self.expandedIslandWidth && claudeAccounts?.islandSummary?.contains("Claude B auth ready") == true,
+                  "Island expands to \(Int(Self.expandedIslandWidth))pt and shows warning and standby account")
+            var details = islandDetails()
+            check(details.account == "Claude A" && details.state == "96% used"
+                  && details.labels.allSatisfy { $0.maximumNumberOfLines == 1 && $0.frame.height <= 16
+                      && compactContent.bounds.contains($0.convert($0.bounds, to: compactContent)) },
+                  "Expanded island shows account and state on single lines inside the island")
+            check(details.button.map { $0.attributedTitle.string == "Continue with Claude B →" && !$0.isBordered
+                      && $0.action == #selector(continueClaudeAccount)
+                      && compactContent.bounds.contains($0.convert($0.bounds, to: compactContent)) } == true,
+                  "Near the limit with a ready account, a borderless Continue pill is offered")
+            if let bitmap = compactContent.bitmapImageRepForCachingDisplay(in: compactContent.bounds) {
+                compactContent.cacheDisplay(in: compactContent.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])?.write(to: report.deletingPathExtension().appendingPathExtension("island.png"))
+            }
+            // Expanding animates around the top center; Reduce Motion (above) resizes at once.
+            let expandedFrame = island.frame
+            resizeIsland(width: Self.collapsedIslandWidth, height: 126, animate: false)
+            check(island.frame.width == Self.collapsedIslandWidth && island.frame.midX == expandedFrame.midX,
+                  "Expanded content never forces the window wider than the island width")
+            prefersReducedMotion = { false }
+            collapseIsland()
+            let startedCollapsed = island.frame.width < Self.expandedIslandWidth
+            try await Task.sleep(for: .milliseconds(450))
+            check(startedCollapsed && island.frame == expandedFrame,
+                  "With motion allowed, the island animates to the expanded size around the same top center")
+            prefersReducedMotion = { true }
             let rings = allViews(compactContent).compactMap { $0 as? UsageRingView }
             check(rings.contains { abs($0.progress - 0.96) < 0.001 }, "Claude island ring prefers account usage over the global cache")
             let popoverView = makeStatusPopoverView()
@@ -625,11 +662,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
             check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
+            details = islandDetails()
+            check(details.state == "Limit reached" && details.button != nil, "Limit reached shows the state and the Continue pill")
+            try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'40',?,'five_hour')", [a.id, store.now])
+            claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
+            details = islandDetails()
+            check(details.state == "40% used" && details.button == nil && island.frame.width == Self.expandedIslandWidth,
+                  "With headroom, the expanded island has no Continue pill")
             try store.execute("UPDATE accounts SET status='signed out' WHERE id=?", [b.id])
             try store.renameAccount(b.id, name: "Work")
             claudeAccounts?.refresh(); content.layoutSubtreeIfNeeded()
             check(labels.contains("Work") && labels.contains { $0.hasPrefix("Signed out") } && buttons.contains { $0.title == "Sign in…" },
                   "Renamed, signed-out account offers Sign in…")
+            try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'97',?,'five_hour')", [a.id, store.now])
+            claudeAccounts?.refresh(); rebuildNotchContent(); collapseIsland()
+            details = islandDetails()
+            check(details.state == "97% used" && details.button == nil,
+                  "Near the limit without a ready account, no Continue pill is offered")
             for size in [NSSize(width: 760, height: 780), NSSize(width: 1000, height: 850)] {
                 window.setContentSize(size); content.layoutSubtreeIfNeeded()
                 check(content.bounds.width >= 760 && content.bounds.height >= 780, "Accounts window lays out at \(Int(size.width))px")
@@ -1162,7 +1211,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     func windowDidMove(_ notification: Notification) {
         guard notification.object as? NSWindow === island else { return }
-        let origin = island.frame.origin
+        // Stored as the collapsed 58×126 origin around the same top center, which is
+        // what restoreIslandPosition expects even when the island is expanded.
+        let frame = island.frame
+        let origin = NSPoint(x: frame.midX - Self.collapsedIslandWidth / 2, y: frame.maxY - 126)
         UserDefaults.standard.set([origin.x, origin.y], forKey: positionKey)
     }
 
@@ -1207,7 +1259,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         compactContent.layer?.shadowRadius = 14
         compactContent.layer?.shadowOffset = CGSize(width: 0, height: -3)
         restoreIslandPosition()
-        collapseIsland()
+        collapseIsland(animated: false)
         let compactRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleExpanded))
         compactContent.addGestureRecognizer(compactRecognizer)
         rebuildNotchContent()
@@ -1226,9 +1278,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
-    private func collapseIsland() {
+    /// Sizes the island for its content: collapsed, or expanded with the active
+    /// Claude session. Size changes animate around the top center unless
+    /// `animated` is false or Reduce Motion is on.
+    private func collapseIsland(animated: Bool = true) {
         island.contentView = compactContent
-        resizeIsland(width: claudeAccounts?.islandSummary == nil ? 58 : 280, height: claudeLoggedIn == false && claudeAccounts?.hasAccounts != true ? 66 : 126, animate: false)
+        let width = claudeAccounts?.islandStatus == nil ? Self.collapsedIslandWidth : Self.expandedIslandWidth
+        let height: CGFloat = claudeLoggedIn == false && claudeAccounts?.hasAccounts != true ? 66 : 126
+        resizeIsland(width: width, height: height, animate: animated && !prefersReducedMotion())
     }
 
     private func resizeIsland(width: CGFloat, height: CGFloat, animate: Bool) {
@@ -1239,12 +1296,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         frame.origin.y = top - height
         frame.size.width = width
         frame.size.height = height
-        island.setFrame(frame, display: true, animate: animate)
+        guard frame != island.frame else { return }
+        guard animate else { island.setFrame(frame, display: true); return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            island.animator().setFrame(frame, display: true)
+        }
     }
 
     private func restoreIslandPosition() {
         if let stored = UserDefaults.standard.array(forKey: positionKey) as? [CGFloat], stored.count == 2 {
-            let restored = NSRect(x: stored[0], y: stored[1], width: 58, height: 126)
+            let restored = NSRect(x: stored[0], y: stored[1], width: Self.collapsedIslandWidth, height: 126)
             // A detached monitor may have held the previous position. Never
             // leave the island stranded beyond every currently visible screen.
             if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(restored) }) {
@@ -1296,27 +1359,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             ])
             return
         }
-        if let summary = claudeAccounts?.islandSummary {
-            let claude = compactProviderCell(for: .claude)
-            let text = NSTextField(wrappingLabelWithString: summary)
-            text.textColor = .white; text.font = .systemFont(ofSize: 12, weight: .semibold)
-            text.translatesAutoresizingMaskIntoConstraints = false
-            compactContent.addSubview(claude); compactContent.addSubview(text)
-            let accounts = NSButton(title: "Accounts / Continue →", target: self, action: #selector(continueClaudeAccount))
-            accounts.bezelStyle = .rounded; accounts.translatesAutoresizingMaskIntoConstraints = false
-            compactContent.addSubview(accounts)
-            NSLayoutConstraint.activate([
-                codex.leadingAnchor.constraint(equalTo: compactContent.leadingAnchor, constant: 6),
-                codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
-                codex.widthAnchor.constraint(equalToConstant: 46), codex.heightAnchor.constraint(equalToConstant: 51),
-                claude.leadingAnchor.constraint(equalTo: codex.leadingAnchor), claude.topAnchor.constraint(equalTo: codex.bottomAnchor, constant: 8),
-                claude.widthAnchor.constraint(equalToConstant: 46), claude.heightAnchor.constraint(equalToConstant: 51),
-                text.leadingAnchor.constraint(equalTo: codex.trailingAnchor, constant: 8), text.trailingAnchor.constraint(equalTo: compactContent.trailingAnchor, constant: -10),
-                text.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 14),
-                accounts.leadingAnchor.constraint(equalTo: text.leadingAnchor), accounts.bottomAnchor.constraint(equalTo: compactContent.bottomAnchor, constant: -18),
-            ])
-            return
-        }
+        // The provider column looks the same collapsed and expanded; expanded adds
+        // the active session's details to its right.
+        let column = NSLayoutGuide()
+        compactContent.addLayoutGuide(column)
         let separator = NSView()
         separator.wantsLayer = true
         separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
@@ -1325,19 +1371,94 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         compactContent.addSubview(separator)
         compactContent.addSubview(claude)
         NSLayoutConstraint.activate([
-            codex.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
+            column.leadingAnchor.constraint(equalTo: compactContent.leadingAnchor),
+            column.topAnchor.constraint(equalTo: compactContent.topAnchor),
+            column.bottomAnchor.constraint(equalTo: compactContent.bottomAnchor),
+            column.widthAnchor.constraint(equalToConstant: Self.collapsedIslandWidth),
+            codex.centerXAnchor.constraint(equalTo: column.centerXAnchor),
             codex.topAnchor.constraint(equalTo: compactContent.topAnchor, constant: 8),
             codex.widthAnchor.constraint(equalToConstant: 46),
             codex.heightAnchor.constraint(equalToConstant: 51),
-            separator.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
+            separator.centerXAnchor.constraint(equalTo: column.centerXAnchor),
             separator.topAnchor.constraint(equalTo: codex.bottomAnchor, constant: 4),
             separator.widthAnchor.constraint(equalToConstant: 32),
             separator.heightAnchor.constraint(equalToConstant: 1),
-            claude.centerXAnchor.constraint(equalTo: compactContent.centerXAnchor),
+            claude.centerXAnchor.constraint(equalTo: column.centerXAnchor),
             claude.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 4),
             claude.widthAnchor.constraint(equalToConstant: 46),
             claude.heightAnchor.constraint(equalToConstant: 51),
         ])
+        guard let status = claudeAccounts?.islandStatus else { return }
+        let details = islandSessionDetails(status)
+        compactContent.addSubview(details)
+        // Below windowSizeStayPut: the details must never resize the window
+        // themselves, or a 58pt island would grow rightward and drift off center.
+        let trailing = details.trailingAnchor.constraint(equalTo: compactContent.trailingAnchor, constant: -12)
+        trailing.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 10)
+        NSLayoutConstraint.activate([
+            details.leadingAnchor.constraint(equalTo: column.trailingAnchor, constant: 2),
+            trailing,
+            details.centerYAnchor.constraint(equalTo: compactContent.centerYAnchor),
+        ])
+    }
+
+    static let collapsedIslandWidth: CGFloat = 58
+    static let expandedIslandWidth: CGFloat = 232
+
+    /// Active-session details beside the provider column: account name, state,
+    /// and a Continue pill only when switching accounts would actually help.
+    private func islandSessionDetails(_ status: ClaudeAccountsWindow.IslandStatus) -> NSView {
+        func line(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor, identifier: String) -> NSTextField {
+            let label = NSTextField(labelWithString: text)
+            label.identifier = NSUserInterfaceItemIdentifier(identifier)
+            label.font = .systemFont(ofSize: size, weight: weight)
+            label.textColor = color
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            return label
+        }
+        let state: (text: String, color: NSColor) = if status.limitReached {
+            ("Limit reached", .systemRed)
+        } else if let percent = status.percent {
+            ("\(Int(percent))% used" + (status.stale ? " · last known" : status.restored ? " · restored" : ""),
+             status.stale ? NSColor.white.withAlphaComponent(0.55)
+                 : usageColor(accent: NSColor.white.withAlphaComponent(0.7), percent: percent))
+        } else {
+            ("Usage unknown" + (status.restored ? " · restored" : ""), NSColor.white.withAlphaComponent(0.55))
+        }
+        var views: [NSView] = [
+            line(status.account, size: 12, weight: .semibold, color: .white, identifier: "island-account"),
+            line(state.text, size: 11, weight: .medium, color: state.color, identifier: "island-state"),
+        ]
+        if status.canContinue, let standby = status.standby {
+            let orange = accentColor(for: .claude)
+            let button = NSButton(title: "", target: self, action: #selector(continueClaudeAccount))
+            button.identifier = NSUserInterfaceItemIdentifier("island-continue")
+            button.isBordered = false
+            button.attributedTitle = NSAttributedString(string: "Continue with \(standby) →", attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: orange,
+            ])
+            button.lineBreakMode = .byTruncatingMiddle
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 10
+            button.layer?.backgroundColor = orange.withAlphaComponent(0.16).cgColor
+            button.layer?.borderWidth = 1
+            button.layer?.borderColor = orange.withAlphaComponent(0.45).cgColor
+            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            button.heightAnchor.constraint(equalToConstant: 22).isActive = true
+            views.append(button)
+        }
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+        stack.setCustomSpacing(8, after: views[1])
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        for view in views { view.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true }
+        if let button = views.last as? NSButton { button.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        stack.toolTip = claudeAccounts?.islandSummary
+        return stack
     }
 
     /// The two limit windows an island cell shows: the ring is 5H, the bar is 7D.
