@@ -117,6 +117,10 @@ private final class UsageRingView: NSView {
     var isUnknown = false { didSet { if isUnknown != oldValue { needsDisplay = true } } }
     /// At or above the critical threshold: an "!" badge, so the state does not rely on color alone.
     var isCritical = false { didSet { if isCritical != oldValue { needsDisplay = true } } }
+    /// At or above the warning threshold: a triangle badge (the critical "!" disc wins).
+    var isWarning = false { didSet { if isWarning != oldValue { needsDisplay = true } } }
+    /// Increase Contrast: stronger track and unknown dashes.
+    var highContrast = false { didSet { if highContrast != oldValue { needsDisplay = true } } }
     /// Soft opacity pulse for critical usage; callers leave it off under Reduce Motion.
     var isPulsing = false {
         didSet {
@@ -146,13 +150,13 @@ private final class UsageRingView: NSView {
         )
         let track = NSBezierPath(ovalIn: circle)
         if isUnknown {
-            NSColor.white.withAlphaComponent(0.3).setStroke()
+            NSColor.white.withAlphaComponent(highContrast ? 0.75 : 0.3).setStroke()
             track.setLineDash([3, 4], count: 2, phase: 0)
             track.lineWidth = 2
             track.stroke()
             return
         }
-        NSColor.white.withAlphaComponent(0.14).setStroke()
+        NSColor.white.withAlphaComponent(highContrast ? 0.4 : 0.14).setStroke()
         track.lineWidth = 3.5
         track.stroke()
 
@@ -171,8 +175,28 @@ private final class UsageRingView: NSView {
         arc.lineWidth = 3.5
         arc.lineCapStyle = .round
         arc.stroke()
-        guard isCritical else { return }
         let badge = NSRect(x: bounds.maxX - 12, y: bounds.maxY - 12, width: 12, height: 12)
+        guard isCritical else {
+            guard isWarning else { return }
+            let triangle = NSBezierPath()
+            triangle.move(to: NSPoint(x: badge.midX, y: badge.maxY))
+            triangle.line(to: NSPoint(x: badge.maxX, y: badge.minY + 1))
+            triangle.line(to: NSPoint(x: badge.minX, y: badge.minY + 1))
+            triangle.close()
+            triangle.lineJoinStyle = .round
+            NSColor.systemYellow.setFill()
+            triangle.fill()
+            NSColor.black.setStroke()
+            triangle.lineWidth = 1.5
+            triangle.stroke()
+            let mark = NSAttributedString(string: "!", attributes: [
+                .font: NSFont.systemFont(ofSize: 8, weight: .black),
+                .foregroundColor: NSColor.black,
+            ])
+            let size = mark.size()
+            mark.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.minY + 1))
+            return
+        }
         let disc = NSBezierPath(ovalIn: badge)
         NSColor.systemRed.setFill()
         disc.fill()
@@ -195,6 +219,8 @@ private final class UsageRingView: NSView {
 private final class UsageBarView: NSView {
     var progress: CGFloat? { didSet { if progress != oldValue { needsDisplay = true } } }
     var accent: NSColor { didSet { if accent != oldValue { needsDisplay = true } } }
+    /// Increase Contrast: a stronger track, so the empty part stays visible.
+    var highContrast = false { didSet { if highContrast != oldValue { needsDisplay = true } } }
     private let trackAlpha: CGFloat
 
     init(width: CGFloat, height: CGFloat, accent: NSColor = .white, progress: CGFloat? = nil, trackAlpha: CGFloat = 0.14) {
@@ -213,7 +239,8 @@ private final class UsageBarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
-        NSColor.white.withAlphaComponent(progress == nil ? 0.06 : trackAlpha).setFill()
+        let alpha = progress == nil ? 0.06 : trackAlpha
+        NSColor.white.withAlphaComponent(highContrast ? min(alpha * 3, 0.45) : alpha).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
         guard let progress, progress > 0 else { return }
         var fill = bounds
@@ -521,6 +548,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var claudeUsage: ClaudeRateLimits?
     private var readClaudeUsage: () -> ClaudeRateLimits? = { ClaudeRateLimitCache.read() }
     private var prefersReducedMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    private var prefersIncreasedContrast: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
     private var claudeAccounts: ClaudeAccountsWindow?
     private var claudeLoggedIn: Bool?
     private let positionKey = "ai-island.position.v1"
@@ -761,6 +789,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         func check(_ condition: Bool, _ message: String) {
             checks.append("\(condition ? "PASS" : "FAIL"): \(message)")
         }
+        func popoverFields() -> [NSTextField] {
+            statusPopover.contentViewController.map { allViews($0.view).compactMap { $0 as? NSTextField } } ?? []
+        }
         func islandCell(_ provider: Provider) -> (ring: UsageRingView, bar: UsageBarView, number: NSTextField)? {
             let ring = allViews(compactContent).compactMap { $0 as? UsageRingView }
                 .first { $0.toolTip?.hasPrefix(provider.rawValue) == true }
@@ -894,8 +925,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     check(codex.ring.accent == expected && codex.bar.accent == expected
                           && codex.number.stringValue == "\(percent)%" && codex.number.textColor == expected
                           && (popoverBar as? UsageBarView)?.accent == expected
-                          && codex.ring.isCritical == critical && pulsing == (critical && !reduceMotion),
-                          "\(percent)% uses \(critical ? "red with an ! badge" : percent >= 70 ? "yellow" : "the provider color")"
+                          && codex.ring.isCritical == critical && codex.ring.isWarning == (percent == 80)
+                          && pulsing == (critical && !reduceMotion),
+                          "\(percent)% uses \(critical ? "red with an ! badge" : percent >= 70 ? "yellow with a triangle badge" : "the provider color")"
                           + " on the ring, number, island bar and popover bar\(critical ? (reduceMotion ? ", no pulse under Reduce Motion" : ", pulsing") : "")")
                     if let cell = codex.ring.superview { snapshot(cell, "\(percent)") }
                 } else {
@@ -929,20 +961,62 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
               },
               "Island stays 58pt wide and a 100% number fits readable inside each cell")
         snapshot(compactContent, "island")
+        // VoiceOver reads each cell as one sentence, with the level in words.
+        if let codex = islandCell(.codex), let cell = codex.ring.superview {
+            check(cell.isAccessibilityElement() && cell.accessibilityRole() == .staticText
+                  && cell.accessibilityLabel() == "Codex, 5-hour limit 100% used, near limit, 7-day limit 72% used, high"
+                  && cell.accessibilityChildren()?.isEmpty != false
+                  && codex.ring.isCritical && !codex.ring.isWarning,
+                  "VoiceOver reads the Codex cell as one sentence with both windows and their levels")
+        }
+        if let claude = islandCell(.claude), let label = claude.ring.superview?.accessibilityLabel() {
+            check(label.hasPrefix("Claude, "), "VoiceOver reads the Claude cell with its name")
+        }
+        check(compactContent.isAccessibilityElement() && compactContent.accessibilityRole() == .group
+              && compactContent.accessibilityLabel() == "AI Island"
+              && compactContent.accessibilityCustomActions()?.first?.name == "Show or hide limits card",
+              "The island is a named group with an action that shows the limits card")
+        let popoverViews = statusPopover.contentViewController.map { allViews($0.view) } ?? []
+        let cardLabels = popoverViews.filter { $0.accessibilityRole() == .group && $0.isAccessibilityElement() }
+            .compactMap { $0.accessibilityLabel() }
+        let buttonLabels = popoverViews.compactMap { $0 as? NSButton }.compactMap { $0.accessibilityLabel() }
+        check(cardLabels.contains("Codex limits") && cardLabels.contains("Claude limits")
+              && ["Refresh limits", "Manage AI Island", "Update Claude Code and Codex CLI"].allSatisfy(buttonLabels.contains),
+              "Popover cards and buttons are named for VoiceOver")
+        check(popoverViews.contains { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · 100% used · near limit") == true }
+              && popoverViews.contains { ($0 as? NSTextField)?.stringValue.hasPrefix("7D · 72% used · high") == true },
+              "Popover names the high and near-limit levels in words, not only in color")
+        // Increase Contrast: dim text near-opaque, stronger tracks and borders; fills unchanged.
+        let normalBorder = compactContent.layer?.borderColor.flatMap { NSColor(cgColor: $0) }?.alphaComponent ?? 0
+        prefersIncreasedContrast = { true }
+        accessibilityDisplayOptionsChanged()
+        codexUsage = nil
+        updateUsageViews()
+        if let codex = islandCell(.codex) {
+            let contrastBorder = compactContent.layer?.borderColor.flatMap { NSColor(cgColor: $0) }?.alphaComponent ?? 0
+            let subtitle = popoverFields().first { $0.stringValue == "Click the island or outside to close" }
+            check(codex.ring.highContrast && codex.bar.highContrast && (codex.number.textColor?.alphaComponent ?? 0) >= 0.9
+                  && (subtitle?.textColor?.alphaComponent ?? 0) >= 0.9 && contrastBorder > normalBorder,
+                  "Increase Contrast strengthens dim text, tracks and borders")
+            snapshot(compactContent, "contrast")
+        }
+        prefersIncreasedContrast = { false }
+        accessibilityDisplayOptionsChanged()
+        if let codex = islandCell(.codex) {
+            check(!codex.ring.highContrast && (codex.number.textColor?.alphaComponent ?? 1) < 0.9,
+                  "Turning Increase Contrast off restores the normal look")
+        }
         // Popover captions: plain case, proportional font, time left until reset with the absolute time in a tooltip.
         let now = Date().timeIntervalSince1970
         let fiveHourReset = now + 2 * 3_600 + 15 * 60 + 30, sevenDayReset = now + 3 * 86_400 + 4 * 3_600 + 30
         codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 40, resetsAt: fiveHourReset),
                                         secondary: CodexUsageWindow(usedPercent: 72, resetsAt: sevenDayReset))
         updateUsageViews()
-        func popoverFields() -> [NSTextField] {
-            statusPopover.contentViewController.map { allViews($0.view).compactMap { $0 as? NSTextField } } ?? []
-        }
         var fields = popoverFields()
         let fiveHourCaption = fields.first { $0.stringValue.hasPrefix("5H · 40% used") }
         let sevenDayCaption = fields.first { $0.stringValue.hasPrefix("7D · 72% used") }
         check(fiveHourCaption?.stringValue == "5H · 40% used · resets in 2h 15m"
-              && sevenDayCaption?.stringValue == "7D · 72% used · resets in 3d 4h",
+              && sevenDayCaption?.stringValue == "7D · 72% used · high · resets in 3d 4h",
               "Popover shows the time left until each window resets")
         let year = String(Calendar.current.component(.year, from: Date(timeIntervalSince1970: sevenDayReset)))
         check(fiveHourCaption?.toolTip == Self.resetTooltip(fiveHourReset) && fiveHourCaption?.toolTip?.hasPrefix("Resets at ") == true
@@ -1365,7 +1439,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         // wallpapers, and black terminals.
         compactContent.layer?.backgroundColor = NSColor(calibratedWhite: 0.035, alpha: 0.985).cgColor
         compactContent.layer?.borderWidth = 1
-        compactContent.layer?.borderColor = NSColor.white.withAlphaComponent(0.17).cgColor
+        compactContent.layer?.borderColor = hairline(0.17).cgColor
         compactContent.layer?.shadowColor = NSColor.black.cgColor
         compactContent.layer?.shadowOpacity = 0.56
         compactContent.layer?.shadowRadius = 14
@@ -1374,7 +1448,33 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         collapseIsland(animated: false)
         let compactRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleExpanded))
         compactContent.addGestureRecognizer(compactRecognizer)
+        // VoiceOver: a named group with the provider cells inside, and an action
+        // that does what a click does.
+        compactContent.setAccessibilityElement(true)
+        compactContent.setAccessibilityRole(.group)
+        compactContent.setAccessibilityLabel("AI Island")
+        compactContent.setAccessibilityHelp("Live AI limits. Click to show or hide the limits card.")
+        compactContent.setAccessibilityCustomActions([
+            NSAccessibilityCustomAction(name: "Show or hide limits card", target: self, selector: #selector(toggleLimitsCardForAccessibility)),
+        ])
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(accessibilityDisplayOptionsChanged),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         updateNotchContent()
+    }
+
+    @objc private func toggleLimitsCardForAccessibility() -> Bool {
+        toggleExpanded()
+        return true
+    }
+
+    /// Increase Contrast or Reduce Motion changed: rebuild the island and the
+    /// open card, since borders and backgrounds are set only when built.
+    @objc private func accessibilityDisplayOptionsChanged() {
+        compactContent.layer?.borderColor = hairline(0.17).cgColor
+        islandCellViews = [:]
+        updateNotchContent()
+        if statusPopover.isShown { showPopoverContent(currentPopoverModel) }
     }
 
     @objc private func toggleExpanded() {
@@ -1450,6 +1550,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     /// Usage color by limit level (thresholds live in `UsageLevel`): the provider
     /// color while there is headroom, then yellow, then red. Island ring, island
     /// bar and popover bars all use this.
+    /// The non-color word for a usage level, shown in text next to the color.
+    static func levelWord(percent: Double) -> String? {
+        switch UsageLevel(percent: percent) {
+        case .normal: nil
+        case .warning: "high"
+        case .critical: "near limit"
+        }
+    }
+
+    /// Secondary text: dimmed normally, near-opaque under Increase Contrast.
+    private func quietText(_ alpha: CGFloat, _ color: NSColor = .white) -> NSColor {
+        color.withAlphaComponent(prefersIncreasedContrast() ? max(alpha, 0.9) : alpha)
+    }
+
+    /// Borders and separators: stronger under Increase Contrast. Fills stay as
+    /// they are, so text on them keeps its contrast.
+    private func hairline(_ alpha: CGFloat, _ color: NSColor = .white) -> NSColor {
+        color.withAlphaComponent(prefersIncreasedContrast() ? max(alpha, min(alpha * 2.5, 0.7)) : alpha)
+    }
+
     private func usageColor(accent: NSColor, percent: Double) -> NSColor {
         switch UsageLevel(percent: percent) {
         case .normal: accent
@@ -1463,7 +1583,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let ringAccent: NSColor
         let progress: CGFloat
         let isCritical: Bool
+        let isWarning: Bool
         let isPulsing: Bool
+        let highContrast: Bool
         let isLoading: Bool
         let isUnknown: Bool
         let number: String
@@ -1471,6 +1593,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let barAccent: NSColor
         let barProgress: CGFloat?
         let toolTip: String
+        /// What VoiceOver reads for the whole cell.
+        let accessibilityLabel: String
     }
 
     /// Everything the island shows. Views are built once per `layout`; later
@@ -1552,7 +1676,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         compactContent.addLayoutGuide(column)
         let separator = NSView()
         separator.wantsLayer = true
-        separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        separator.layer?.backgroundColor = hairline(0.12).cgColor
         separator.translatesAutoresizingMaskIntoConstraints = false
         let claude = makeIslandCell(for: .claude)
         islandCellViews[.claude] = claude
@@ -1620,7 +1744,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             pill.layer?.cornerRadius = 10
             pill.layer?.backgroundColor = orange.withAlphaComponent(0.16).cgColor
             pill.layer?.borderWidth = 1
-            pill.layer?.borderColor = orange.withAlphaComponent(0.45).cgColor
+            pill.layer?.borderColor = hairline(0.45, orange).cgColor
             pill.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             pill.heightAnchor.constraint(equalToConstant: 22).isActive = true
             views.append(pill)
@@ -1642,10 +1766,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             ("Limit reached", .systemRed)
         } else if let percent = status.percent {
             ("\(Int(percent))% used" + (status.stale ? " · last known" : status.restored ? " · restored" : ""),
-             status.stale ? NSColor.white.withAlphaComponent(0.55)
-                 : usageColor(accent: NSColor.white.withAlphaComponent(0.7), percent: percent))
+             status.stale ? quietText(0.55) : usageColor(accent: quietText(0.7), percent: percent))
         } else {
-            ("Usage unknown" + (status.restored ? " · restored" : ""), NSColor.white.withAlphaComponent(0.55))
+            ("Usage unknown" + (status.restored ? " · restored" : ""), quietText(0.55))
         }
         views.account.show(status.account, color: .white)
         views.state.show(state.text, color: state.color)
@@ -1704,6 +1827,24 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
+    /// The cell as one sentence, e.g. "Claude, 5-hour limit 74% used, high, 7-day limit unknown".
+    private func islandAccessibilityLabel(for provider: Provider, usage: IslandUsage) -> String {
+        switch usage {
+        case .loading:
+            return "\(provider.rawValue), loading limits"
+        case .unknown(let reason):
+            return "\(provider.rawValue), limits unknown: \(reason)"
+        case .known(let windows):
+            func describe(_ title: String, _ percent: Double?) -> String {
+                guard let percent else { return "\(title) limit unknown" }
+                return (["\(title) limit \(Int(percent.rounded()))% used", Self.levelWord(percent: percent)]
+                    .compactMap { $0 }).joined(separator: ", ")
+            }
+            return [provider.rawValue, describe("5-hour", windows.fiveHour), describe("7-day", windows.sevenDay)]
+                .joined(separator: ", ")
+        }
+    }
+
     private func islandCellModel(for provider: Provider) -> IslandCellModel {
         let accent = accentColor(for: provider)
         let usage = islandUsage(for: provider)
@@ -1711,7 +1852,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let fiveHour = windows?.fiveHour, sevenDay = windows?.sevenDay
         let ringAccent = fiveHour.map { usageColor(accent: accent, percent: $0) } ?? accent
         // Either window near its limit raises the badge, so a critical 7D is never hidden behind a calm 5H ring.
-        let critical = [fiveHour, sevenDay].contains { $0.map { UsageLevel(percent: $0) == .critical } ?? false }
+        let levels = [fiveHour, sevenDay].compactMap { $0.map { UsageLevel(percent: $0) } }
+        let critical = levels.contains(.critical)
         let isUnknown: Bool = if case .unknown = usage { true } else { windows != nil && fiveHour == nil }
         let number = switch usage {
         case .loading: "…"
@@ -1719,12 +1861,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         case .known: fiveHour.map { "\(Int($0.rounded()))%" } ?? "—"
         }
         return IslandCellModel(ringAccent: ringAccent, progress: fiveHour.map { CGFloat($0) / 100 } ?? 0,
-                               isCritical: critical, isPulsing: critical && !prefersReducedMotion(),
+                               isCritical: critical, isWarning: !critical && levels.contains(.warning),
+                               isPulsing: critical && !prefersReducedMotion(), highContrast: prefersIncreasedContrast(),
                                isLoading: usage == .loading, isUnknown: isUnknown, number: number,
-                               numberColor: fiveHour == nil ? NSColor.white.withAlphaComponent(0.45) : ringAccent,
+                               numberColor: fiveHour == nil ? quietText(0.45) : ringAccent,
                                barAccent: sevenDay.map { usageColor(accent: accent, percent: $0) } ?? accent,
                                barProgress: sevenDay.map { CGFloat($0) / 100 },
-                               toolTip: islandToolTip(for: provider, usage: usage))
+                               toolTip: islandToolTip(for: provider, usage: usage),
+                               accessibilityLabel: islandAccessibilityLabel(for: provider, usage: usage))
     }
 
     private func makeIslandCell(for provider: Provider) -> IslandCellViews {
@@ -1746,6 +1890,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let bar = UsageBarView(width: 38, height: 3)
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
+        // VoiceOver reads the cell as one sentence instead of a logo and a bare number.
+        cell.setAccessibilityElement(true)
+        cell.setAccessibilityRole(.staticText)
+        cell.identifier = NSUserInterfaceItemIdentifier("island-cell-\(provider.rawValue.lowercased())")
+        for view in [ring, mark, number] as [NSView] { view.setAccessibilityElement(false) }
+        cell.setAccessibilityChildren([])  // The text field and image report through their cells otherwise.
         cell.addSubview(ring)
         cell.addSubview(number)
         cell.addSubview(bar)
@@ -1767,12 +1917,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         views.ring.accent = model.ringAccent
         views.ring.progress = model.progress
         views.ring.isCritical = model.isCritical
+        views.ring.isWarning = model.isWarning
+        views.ring.highContrast = model.highContrast
         views.ring.isPulsing = model.isPulsing
         views.ring.isLoading = model.isLoading
         views.ring.isUnknown = model.isUnknown
         views.number.show(model.number, color: model.numberColor)
         views.bar.accent = model.barAccent
         views.bar.progress = model.barProgress
+        views.bar.highContrast = model.highContrast
+        if views.cell.accessibilityLabel() != model.accessibilityLabel { views.cell.setAccessibilityLabel(model.accessibilityLabel) }
         // The logo and ring cover most of the cell, so they carry the same tooltip.
         for view in [views.cell, views.ring, views.mark, views.number] { view.setToolTipIfChanged(model.toolTip) }
     }
@@ -1972,7 +2126,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         ).cgColor
         root.layer?.cornerRadius = 20
         root.layer?.borderWidth = 1
-        root.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        root.layer?.borderColor = hairline(0.12).cgColor
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1985,7 +2139,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         heading.textColor = .white
         let subtitle = NSTextField(labelWithString: "Click the island or outside to close")
         subtitle.font = .systemFont(ofSize: 12, weight: .medium)
-        subtitle.textColor = NSColor.white.withAlphaComponent(0.62)
+        subtitle.textColor = quietText(0.62)
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(subtitle)
         var itemViews: [[NSView]] = []
@@ -2032,11 +2186,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         card.layer?.cornerRadius = 13
         card.layer?.backgroundColor = accent.withAlphaComponent(0.13).cgColor
         card.layer?.borderWidth = 1
-        card.layer?.borderColor = accent.withAlphaComponent(0.42).cgColor
+        card.layer?.borderColor = hairline(0.42, accent).cgColor
+        card.setAccessibilityElement(true)
+        card.setAccessibilityRole(.group)
+        card.setAccessibilityLabel("\(provider.rawValue) limits")
 
         let dot = NSTextField(labelWithString: model.detected ? "●" : "○")
         dot.textColor = accent
         dot.font = .systemFont(ofSize: 14, weight: .bold)
+        dot.cell?.setAccessibilityElement(false)  // "Not detected" says the same in words.
         let name = NSTextField(labelWithString: provider.rawValue)
         name.font = .systemFont(ofSize: 16, weight: .bold)
         name.textColor = accent
@@ -2049,7 +2207,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if !model.detected {
             let state = NSTextField(labelWithString: "Not detected")
             state.font = .systemFont(ofSize: 13, weight: .semibold)
-            state.textColor = NSColor.white.withAlphaComponent(0.78)
+            state.textColor = quietText(0.78)
             content.append(state)
         }
         for item in model.items {
@@ -2110,13 +2268,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         switch item {
         case .source(let title, let detail):
             (views.first as? NSTextField)?.show(title, color: .white)
-            (views.last as? NSTextField)?.show(detail, color: NSColor.white.withAlphaComponent(0.62))
+            (views.last as? NSTextField)?.show(detail, color: quietText(0.62))
         case .usage(let caption, let color, let toolTip, let bar):
             (views.first as? NSTextField)?.show(caption, color: color)
             views.first?.setToolTipIfChanged(toolTip)
             if let bar, let barView = views.last as? UsageBarView {
                 barView.progress = bar.progress
                 barView.accent = bar.accent
+                barView.highContrast = prefersIncreasedContrast()
             }
         case .note(let text, let color):
             (views.first as? NSTextField)?.show(text, color: color)
@@ -2194,7 +2353,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     /// gets one quiet line instead of a "not available" row per window.
     private func usageWindowItems(_ windows: [(title: String, window: CodexUsageWindow?)], accent: NSColor,
                                   suffix: String = "", loading: Bool = false) -> [PopoverModel.Item] {
-        let quiet = NSColor.white.withAlphaComponent(0.55)
+        let quiet = quietText(0.55)
         guard windows.contains(where: { $0.window != nil }) else {
             return [.usage(caption: loading ? "Loading limits…" : "Limits not available yet", color: quiet, toolTip: nil, bar: nil)]
         }
@@ -2204,6 +2363,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                               bar: PopoverModel.Bar(progress: 0.02, accent: accent.withAlphaComponent(0.45)))
             }
             var text = "\(title) · \(window.usedPercent)% used"
+            if let word = Self.levelWord(percent: Double(window.usedPercent)) { text += " · \(word)" }
             if let resetsAt = window.resetsAt {
                 let left = ResetCountdown.text(until: resetsAt, now: Date().timeIntervalSince1970)
                 text += left == "now" ? " · resets now" : " · resets in \(left)"
