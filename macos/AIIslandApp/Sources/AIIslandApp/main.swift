@@ -188,28 +188,6 @@ private final class CompactUsageBar: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
-private final class NotchContentView: NSView {
-    var onPointerEnter: (() -> Void)?
-    var onPointerExit: (() -> Void)?
-    private var trackingAreaReference: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
-        let tracking = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(tracking)
-        trackingAreaReference = tracking
-    }
-
-    override func mouseEntered(with event: NSEvent) { onPointerEnter?() }
-    override func mouseExited(with event: NSEvent) { onPointerExit?() }
-}
-
 private enum Provider: String, CaseIterable {
     case codex = "Codex"
     case claude = "Claude"
@@ -363,7 +341,7 @@ private final class IslandPanel: NSPanel {
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSplitViewDelegate {
     private let island = IslandPanel()
-    private let compactContent = NotchContentView()
+    private let compactContent = NSView()
     private let statusPopover = NSPopover()
     private var settingsWindow: NSWindow?
     private var settingsDetailView: NSView?
@@ -412,8 +390,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private let positionKey = "ai-island.position.v1"
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
-    private var closeWorkItem: DispatchWorkItem?
-    private var popoverPinned = false
+    /// Island origin at the latest mouse-down on it. A drag moves the window
+    /// before the click recognizer fires, so a moved island is not a click.
+    private var islandOriginAtMouseDown: NSPoint?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -667,6 +646,32 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         usageRefreshTimer?.invalidate()
         statusPopover.performClose(nil)
+        try? await Task.sleep(for: .milliseconds(400))
+        // The card is click-only: the island click toggles it, and a drag that
+        // moved the island between mouse-down and the click must not open it.
+        func pressIsland() {
+            if let event = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                              windowNumber: island.windowNumber, context: nil, eventNumber: 0,
+                                              clickCount: 1, pressure: 1) {
+                handleLocalMouseDown(event)
+            }
+        }
+        pressIsland(); toggleExpanded()
+        let subtitles = statusPopover.contentViewController.map {
+            allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
+        } ?? []
+        check(statusPopover.isShown && subtitles.contains("Click the island or outside to close")
+              && !subtitles.contains { $0.contains("Hover") },
+              "Island click opens the card and the subtitle describes click-only behavior")
+        pressIsland(); toggleExpanded()
+        try? await Task.sleep(for: .milliseconds(400))
+        check(!statusPopover.isShown, "A second island click closes the card")
+        let restingFrame = island.frame
+        pressIsland()
+        island.setFrameOrigin(NSPoint(x: restingFrame.minX - 40, y: restingFrame.minY))
+        toggleExpanded()
+        island.setFrame(restingFrame, display: true)
+        check(!statusPopover.isShown, "Dragging the island does not open the card")
         try? checks.joined(separator: "\n").write(to: report, atomically: true, encoding: .utf8)
         NSApp.terminate(nil)
     }
@@ -923,15 +928,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func toggleExpanded() {
+        if let origin = islandOriginAtMouseDown {
+            islandOriginAtMouseDown = nil
+            let current = island.frame.origin
+            guard hypot(current.x - origin.x, current.y - origin.y) <= 2 else { return }
+        }
         if statusPopover.isShown {
-            if popoverPinned {
-                statusPopover.performClose(nil)
-            } else {
-                popoverPinned = true
-                closeWorkItem?.cancel()
-            }
+            statusPopover.performClose(nil)
         } else {
-            popoverPinned = true
             showStatusPopover()
         }
     }
@@ -1133,7 +1137,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     private func showStatusPopover() {
-        closeWorkItem?.cancel()
         guard !statusPopover.isShown else { return }
         refreshInventory()
         let controller = NSViewController()
@@ -1226,7 +1229,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let heading = NSTextField(labelWithString: "LIVE AI LIMITS")
         heading.font = .monospacedSystemFont(ofSize: 13, weight: .bold)
         heading.textColor = .white
-        let subtitle = NSTextField(labelWithString: popoverPinned ? "Pinned · click island to close" : "Hover to peek · click to keep open")
+        let subtitle = NSTextField(labelWithString: "Click the island or outside to close")
         subtitle.font = .systemFont(ofSize: 12, weight: .medium)
         subtitle.textColor = NSColor.white.withAlphaComponent(0.62)
         stack.addArrangedSubview(heading)
@@ -1497,8 +1500,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func openSettingsFromPopover() {
-        closeWorkItem?.cancel()
-        popoverPinned = false
         statusPopover.performClose(nil)
         // Let AppKit finish dismissing the application-defined popover before
         // activating a separate key window. Otherwise the popover can retain
@@ -1509,25 +1510,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func closePopoverForFocusLoss() {
-        popoverPinned = false
         statusPopover.performClose(nil)
-    }
-
-    private func schedulePopoverClose() {
-        guard !popoverPinned else { return }
-        closeWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.popoverPinned else { return }
-            self.statusPopover.performClose(nil)
-        }
-        closeWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
     }
 
     private func installPopoverDismissMonitors() {
         let events: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
-            self?.closePopoverForMouseEvent(event)
+            self?.handleLocalMouseDown(event)
             return event
         }
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
@@ -1535,6 +1524,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 self?.closePopoverAfterCurrentEvent()
             }
         }
+    }
+
+    private func handleLocalMouseDown(_ event: NSEvent) {
+        if event.type == .leftMouseDown, event.window === island {
+            islandOriginAtMouseDown = island.frame.origin
+        }
+        closePopoverForMouseEvent(event)
     }
 
     private func closePopoverForMouseEvent(_ event: NSEvent) {
@@ -1551,7 +1547,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         // Closing synchronously lets the originating click fall through to the
         // orb, which caused Refresh to close and immediately re-open the card.
         DispatchQueue.main.async { [weak self] in
-            self?.popoverPinned = false
             self?.statusPopover.performClose(nil)
         }
     }
