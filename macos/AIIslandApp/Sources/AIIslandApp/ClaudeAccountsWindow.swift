@@ -43,7 +43,7 @@ final class ClaudeAccountsWindow: NSWindowController {
             return DetailsPreference(load: { UserDefaults.standard.bool(forKey: key) }, save: { UserDefaults.standard.set($0, forKey: key) })
         }
     }
-    private static let hint = "Usage appears after an account's first Claude response. Switching accounts is always manual."
+    private static let hint = tr("Usage appears after an account's first Claude response. Switching accounts is always manual.")
     private let message = NSTextField(wrappingLabelWithString: hint)
     /// Latest action result, shown on the card of the account or session it belongs to.
     private var notice: (target: String, text: String, isError: Bool)?
@@ -66,7 +66,7 @@ final class ClaudeAccountsWindow: NSWindowController {
         self.root = root; self.store = try SessionStore(root: root); self.detailsPreference = detailsPreference
         self.runner = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 780), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "Claude Accounts & Sessions"
+        window.title = tr("Claude Accounts & Sessions")
         window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 760, height: 680)
         super.init(window: window)
         build(window)
@@ -83,16 +83,16 @@ final class ClaudeAccountsWindow: NSWindowController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         for list in [accountsList, sessionsList] { list.orientation = .vertical; list.alignment = .leading; list.spacing = 8 }
 
-        addButton.title = "Add account"; addButton.bezelStyle = .rounded
+        addButton.title = tr("Add account"); addButton.bezelStyle = .rounded
         addButton.target = self; addButton.action = #selector(addAccount)
-        newSessionButton.title = "New session…"; newSessionButton.bezelStyle = .rounded
+        newSessionButton.title = tr("New session…"); newSessionButton.bezelStyle = .rounded
         newSessionButton.target = self; newSessionButton.action = #selector(newSession)
 
-        stack.addArrangedSubview(headerRow("Claude Accounts", size: 24, trailing: addButton))
-        stack.addArrangedSubview(secondary("Each account uses its own Claude subscription and sign-in. Sign-in opens in Terminal."))
+        stack.addArrangedSubview(headerRow(tr("Claude Accounts"), size: 24, trailing: addButton))
+        stack.addArrangedSubview(secondary(tr("Each account uses its own Claude subscription and sign-in. Sign-in opens in Terminal.")))
         stack.addArrangedSubview(accountsList)
         stack.setCustomSpacing(24, after: accountsList)
-        stack.addArrangedSubview(headerRow("Sessions", size: 18, trailing: newSessionButton))
+        stack.addArrangedSubview(headerRow(tr("Sessions"), size: 18, trailing: newSessionButton))
         stack.addArrangedSubview(sessionsList)
         message.textColor = .secondaryLabelColor
         stack.addArrangedSubview(message)
@@ -103,11 +103,11 @@ final class ClaudeAccountsWindow: NSWindowController {
         detailsToggle.bezelStyle = .disclosure; detailsToggle.setButtonType(.pushOnPushOff); detailsToggle.title = ""
         detailsToggle.target = self; detailsToggle.action = #selector(toggleDetails(_:))
         detailsToggle.identifier = NSUserInterfaceItemIdentifier("accounts-details-toggle")
-        detailsToggle.setAccessibilityLabel("History & diagnostics")
+        detailsToggle.setAccessibilityLabel(tr("History & diagnostics"))
         detailsToggle.state = detailsPreference.load() ? .on : .off
         let detailsHeader = NSStackView(views: [detailsToggle, detailsTitle]); detailsHeader.spacing = 4; detailsHeader.alignment = .centerY
         stack.addArrangedSubview(detailsHeader)
-        for panel in [textPanel("Handoff history", history), textPanel("Developer diagnostics", debug)] { details.addArrangedSubview(panel) }
+        for panel in [textPanel(tr("Handoff history"), history), textPanel(tr("Developer diagnostics"), debug)] { details.addArrangedSubview(panel) }
         details.distribution = .fillEqually; details.spacing = 12
         details.isHidden = detailsToggle.state == .off
         stack.addArrangedSubview(details)
@@ -167,7 +167,7 @@ final class ClaudeAccountsWindow: NSWindowController {
         label.textColor = notice.isError ? .systemRed : .secondaryLabelColor
         label.identifier = NSUserInterfaceItemIdentifier("card-notice")
         var views: [NSView] = [label]
-        if notice.isError, let image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Error") {
+        if notice.isError, let image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: tr("Error")) {
             let icon = NSImageView(image: image); icon.contentTintColor = .systemRed
             views.insert(icon, at: 0)
         }
@@ -237,27 +237,38 @@ final class ClaudeAccountsWindow: NSWindowController {
     }
 
     private func statusText(_ account: Account) -> String {
-        if sessions.contains(where: { $0.accountID == account.id && $0.status == "active" }) { return "Active" }
+        if sessions.contains(where: { $0.accountID == account.id && $0.status == "active" }) { return tr("Active") }
         switch account.status {
-        case "ready": return "Ready"
-        case "signed out": return "Signed out"
-        default: return "Not checked"
+        case "ready": return tr("Ready")
+        case "signed out": return tr("Signed out")
+        default: return tr("Not checked")
+        }
+    }
+
+    private func sessionStatusText(_ status: String) -> String {
+        switch status {
+        case "active": tr("Active")
+        case "attention": tr("Needs attention")
+        case "failed": tr("Failed")
+        case "stopped": tr("Stopped")
+        case "starting", "launching", "pending": tr("Starting")
+        default: status.capitalized
         }
     }
 
     private func renderAccounts(usage: [UsageSnapshot?]) {
         accountsList.arrangedSubviews.forEach { $0.removeFromSuperview() }
         addButton.isEnabled = !busy && accounts.count < 2
-        addButton.toolTip = accounts.count < 2 ? nil : "AI Island supports two accounts. Remove one to add another."
+        addButton.toolTip = accounts.count < 2 ? nil : tr("AI Island supports two accounts. Remove one to add another.")
         if accounts.isEmpty {
-            let empty = secondary("No accounts yet. Click Add account, then finish signing in in Terminal.")
+            let empty = secondary(tr("No accounts yet. Click Add account, then finish signing in in Terminal."))
             accountsList.addArrangedSubview(card(empty)); fullWidth(accountsList.arrangedSubviews[0])
             return
         }
         for (account, usage) in zip(accounts, usage) {
             let status = statusText(account)
             let dot = NSTextField(labelWithString: "●")
-            dot.textColor = status == "Ready" || status == "Active" ? .systemGreen : status == "Signed out" ? .secondaryLabelColor : .systemOrange
+            dot.textColor = status == tr("Ready") || status == tr("Active") ? .systemGreen : status == tr("Signed out") ? .secondaryLabelColor : .systemOrange
             let name = NSTextField(labelWithString: account.name); name.font = .systemFont(ofSize: 14, weight: .semibold)
             let plan = account.subscription == "unknown" ? "" : " · \(account.subscription.capitalized)"
             let state = NSTextField(labelWithString: status + plan); state.textColor = .secondaryLabelColor
@@ -267,11 +278,11 @@ final class ClaudeAccountsWindow: NSWindowController {
             let bar = NSProgressIndicator(); bar.style = .bar; bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 100
             bar.widthAnchor.constraint(equalToConstant: 180).isActive = true
             if let usage {
-                let window = usage.window == "seven_day" ? "weekly limit" : "5-hour limit"
-                usageText = "\(Int(usage.percent))% of \(window) used\(usage.resetAt.map { " · resets \(formatTime($0))" } ?? "")\(usage.stale ? " · last known" : "")"
+                usageText = (usage.window == "seven_day" ? tr("%@% of weekly limit used", Int(usage.percent)) : tr("%@% of 5-hour limit used", Int(usage.percent)))
+                    + (usage.resetAt.map { tr(" · resets %@", formatTime($0)) } ?? "") + (usage.stale ? tr(" · last known") : "")
                 bar.doubleValue = usage.percent
             } else {
-                usageText = account.status == "ready" ? "Usage appears after this account's first Claude response." : "Sign in to use this account."
+                usageText = account.status == "ready" ? tr("Usage appears after this account's first Claude response.") : tr("Sign in to use this account.")
                 bar.isHidden = true
             }
             let usageLabel = NSTextField(labelWithString: usageText); usageLabel.textColor = .secondaryLabelColor
@@ -279,13 +290,13 @@ final class ClaudeAccountsWindow: NSWindowController {
             let info = NSStackView(views: [title, usageRow]); info.orientation = .vertical; info.alignment = .leading; info.spacing = 6
 
             let primary = account.status == "ready"
-                ? button("Check", #selector(checkAccount(_:)), id: account.id)
-                : button("Sign in…", #selector(signIn(_:)), id: account.id)
+                ? button(tr("Check"), #selector(checkAccount(_:)), id: account.id)
+                : button(tr("Sign in…"), #selector(signIn(_:)), id: account.id)
             if account.status != "ready" { primary.keyEquivalent = accounts.count == 1 ? "\r" : "" }
-            let more = menuButton("⋯", [("Rename…", #selector(renameAccount(_:)), account.id),
-                                         ("Sign in again…", #selector(signInMenu(_:)), account.id),
+            let more = menuButton("⋯", [(tr("Rename…"), #selector(renameAccount(_:)), account.id),
+                                         (tr("Sign in again…"), #selector(signInMenu(_:)), account.id),
                                          nil,
-                                         ("Remove…", #selector(removeAccount(_:)), account.id)], tip: "More actions for \(account.name)")
+                                         (tr("Remove…"), #selector(removeAccount(_:)), account.id)], tip: tr("More actions for %@", account.name))
             let spacer = NSView(); spacer.setContentHuggingPriority(.init(1), for: .horizontal)
             let row = NSStackView(views: [info, spacer, primary, more]); row.alignment = .centerY
             let view = card(withNotice(row, for: account.id))
@@ -297,10 +308,10 @@ final class ClaudeAccountsWindow: NSWindowController {
     private func renderSessions() {
         sessionsList.arrangedSubviews.forEach { $0.removeFromSuperview() }
         newSessionButton.isEnabled = !busy && !accounts.isEmpty
-        newSessionButton.toolTip = accounts.isEmpty ? "Add and sign in to an account first." : nil
+        newSessionButton.toolTip = accounts.isEmpty ? tr("Add and sign in to an account first.") : nil
         if sessions.isEmpty {
-            let empty = secondary(accounts.isEmpty ? "Add an account first, then start a session in a git project."
-                                                   : "No sessions yet. Click New session… to start Claude in a git project.")
+            let empty = secondary(accounts.isEmpty ? tr("Add an account first, then start a session in a git project.")
+                                                   : tr("No sessions yet. Click New session… to start Claude in a git project."))
             sessionsList.addArrangedSubview(card(empty)); fullWidth(sessionsList.arrangedSubviews[0])
             return
         }
@@ -308,36 +319,36 @@ final class ClaudeAccountsWindow: NSWindowController {
             let owner = accounts.first(where: { $0.id == session.accountID })
             let title = NSTextField(labelWithString: "\(URL(fileURLWithPath: session.project).lastPathComponent) · \(session.name)")
             title.font = .systemFont(ofSize: 14, weight: .semibold); title.lineBreakMode = .byTruncatingMiddle
-            let state = NSTextField(labelWithString: session.status.capitalized)
+            let state = NSTextField(labelWithString: sessionStatusText(session.status))
             state.textColor = session.status == "active" ? .systemGreen : .secondaryLabelColor
             let heading = NSStackView(views: [title, state]); heading.spacing = 8
-            let branch = session.branch?.isEmpty == false ? session.branch! : "detached / unknown"
-            let detail = NSTextField(labelWithString: "Account: \(owner?.name ?? "not started") · Branch: \(branch)")
+            let branch = session.branch?.isEmpty == false ? session.branch! : tr("detached / unknown")
+            let detail = NSTextField(labelWithString: tr("Account: %@ · Branch: %@", owner?.name ?? tr("not started"), branch))
             detail.textColor = .secondaryLabelColor; detail.lineBreakMode = .byTruncatingTail
             let info = NSStackView(views: [heading, detail]); info.orientation = .vertical; info.alignment = .leading; info.spacing = 4
 
-            let stop = button("Stop", #selector(stop(_:)), id: session.id)
+            let stop = button(tr("Stop"), #selector(stop(_:)), id: session.id)
             stop.isEnabled = !busy && session.physicalID != nil && session.status == "active"
             let targets = accounts.filter { $0.id != session.accountID }
-            let continueMenu = menuButton("Continue with…", targets.map { ("\($0.name) — \(statusText($0))", #selector(continueWith(_:)), "\(session.id)|\($0.id)") },
-                                          tip: targets.isEmpty ? "Add a second account to continue this session with it." : "Stop Claude here and continue the conversation with another account.")
-            let more = menuButton("⋯", accounts.map { ("Check readiness: \($0.name)", #selector(readiness(_:)), "\(session.id)|\($0.id)") }
-                                       + [nil, ("Cancel pending launch", #selector(cancelPending(_:)), session.id),
-                                          ("Recover stopped session", #selector(recoverStopped(_:)), session.id)],
-                                  tip: "More actions for \(session.name)")
+            let continueMenu = menuButton(tr("Continue with…"), targets.map { ("\($0.name) — \(statusText($0))", #selector(continueWith(_:)), "\(session.id)|\($0.id)") },
+                                          tip: targets.isEmpty ? tr("Add a second account to continue this session with it.") : tr("Stop Claude here and continue the conversation with another account."))
+            let more = menuButton("⋯", accounts.map { (tr("Check readiness: %@", $0.name), #selector(readiness(_:)), "\(session.id)|\($0.id)") }
+                                       + [nil, (tr("Cancel pending launch"), #selector(cancelPending(_:)), session.id),
+                                          (tr("Recover stopped session"), #selector(recoverStopped(_:)), session.id)],
+                                  tip: tr("More actions for %@", session.name))
             let spacer = NSView(); spacer.setContentHuggingPriority(.init(1), for: .horizontal)
             let row = NSStackView(views: [info, spacer, stop, continueMenu, more]); row.alignment = .centerY
             info.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             let view = card(withNotice(row, for: session.id), selected: session.id == selectedSession?.id) { [weak self] in
                 self?.selectedSessionID = session.id; self?.renderedSignature = ""; self?.refresh()
             }
-            view.toolTip = "Click to choose this session for History & diagnostics."
+            view.toolTip = tr("Click to choose this session for History & diagnostics.")
             sessionsList.addArrangedSubview(view); fullWidth(view)
         }
     }
 
     private func formatTime(_ value: Double?) -> String {
-        guard let value else { return "unknown" }; return Date(timeIntervalSince1970: value).formatted(date: .abbreviated, time: .shortened)
+        guard let value else { return tr("unknown") }; return Date(timeIntervalSince1970: value).formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Language.current.locale))
     }
 
     private func setText(_ view: NSTextView, _ text: String) { if view.string != text { view.string = text } }
@@ -353,15 +364,15 @@ final class ClaudeAccountsWindow: NSWindowController {
 
     private func renderDetails() {
         let session = selectedSession
-        detailsTitle.stringValue = "History & diagnostics" + (session.map { " — \(URL(fileURLWithPath: $0.project).lastPathComponent) · \($0.name)" } ?? "")
+        detailsTitle.stringValue = tr("History & diagnostics") + (session.map { " — \(URL(fileURLWithPath: $0.project).lastPathComponent) · \($0.name)" } ?? "")
         // Collapsed details are not read at all.
         guard detailsToggle.state == .on else { return }
         guard let session else {
-            setText(history, "Start a session to see its handoff history."); setText(debug, ""); return
+            setText(history, tr("Start a session to see its handoff history.")); setText(debug, ""); return
         }
         do {
             let rows = try store.rows("SELECT e.*,a.name,f.claude_id FROM events e LEFT JOIN accounts a ON a.id=e.account_id LEFT JOIN physical_sessions f ON f.id=e.physical_id WHERE e.logical_id=? ORDER BY e.id", [session.id])
-            setText(history, rows.map { "\(formatTime($0["created_at"].flatMap(Double.init)))  \($0["name"] ?? "")\n\($0["kind"] ?? "") · \($0["claude_id"] ?? "")" }.joined(separator: "\n\n"))
+            setText(history, rows.map { "\(formatTime($0["created_at"].flatMap(Double.init)))  \($0["name"] ?? "")\n\(tr($0["kind"] ?? "")) · \($0["claude_id"] ?? "")" }.joined(separator: "\n\n"))
             let f = try session.physicalID.map { try store.physical($0) } ?? [:]
             let locks = try store.rows("SELECT owner_account,pid,locked_at FROM session_locks WHERE logical_id=?", [session.id])
             let h = try store.rows("SELECT status,error FROM handoffs WHERE logical_id=? ORDER BY created_at DESC LIMIT 1", [session.id]).first
@@ -369,36 +380,36 @@ final class ClaudeAccountsWindow: NSWindowController {
             let owner = accounts.first(where: { $0.id == session.accountID })
             setText(debug, """
             Claude CLI: \(LocalClaudeCodeAdapter().executable)
-            Version: \(cliVersion)
-            Active account: \(owner?.name ?? "unknown")
-            CLAUDE_CONFIG_DIR: \(owner?.configDir ?? "unknown")
-            Logical session ID: \(session.id)
-            Physical session ID: \(session.physicalID ?? "none")
-            Claude session ID: \(session.claudeID ?? "unconfirmed")
-            PID: \(f["pid"] ?? "none") · runner: \(f["runner_pid"] ?? "none")
-            Project: \(session.project)
-            Branch: \(f["branch"] ?? "unknown")
-            HEAD: \(f["head"] ?? "unknown")
-            Lock: \(locks.isEmpty ? "released" : "reserved / held")
-            Last hook: \(session.lastHook ?? "none")
-            Last handoff: \(h?["status"] ?? "none")
-            Error: \(h?["error"] ?? "none")
+            \(tr("Version: %@", cliVersion))
+            \(tr("Active account: %@", owner?.name ?? tr("unknown")))
+            CLAUDE_CONFIG_DIR: \(owner?.configDir ?? tr("unknown"))
+            \(tr("Logical session ID: %@", session.id))
+            \(tr("Physical session ID: %@", session.physicalID ?? tr("none")))
+            \(tr("Claude session ID: %@", session.claudeID ?? tr("unconfirmed")))
+            \(tr("PID: %@ · runner: %@", f["pid"] ?? tr("none"), f["runner_pid"] ?? tr("none")))
+            \(tr("Project: %@", session.project))
+            \(tr("Branch: %@", f["branch"] ?? tr("unknown")))
+            HEAD: \(f["head"] ?? tr("unknown"))
+            \(tr("Lock: %@", locks.isEmpty ? tr("released") : tr("reserved / held")))
+            \(tr("Last hook: %@", session.lastHook ?? tr("none")))
+            \(tr("Last handoff: %@", h?["status"] ?? tr("none")))
+            \(tr("Error: %@", h?["error"].map { tr($0) } ?? tr("none")))
 
-            Readiness:
-            \(readiness.map { "\($0["name"] ?? "") · \($0["item"] ?? ""): \($0["status"] ?? "unknown")" }.joined(separator: "\n"))
+            \(tr("Readiness:"))
+            \(readiness.map { "\($0["name"] ?? "") · \(Readiness.display(name: $0["item"] ?? "")): \(tr($0["status"] ?? "unknown"))" }.joined(separator: "\n"))
             """)
         } catch { showProblem(error) }
     }
 
     // MARK: Actions
 
-    private var cliVersion = "Not checked"
+    private var cliVersion = tr("Not checked")
 
     /// Runs `operation` off the main thread; progress and errors show on the card of `target`.
     private func work<T: Sendable>(on target: String?, _ operation: @escaping @Sendable (SessionManager) throws -> T, done: @escaping (T) -> Void) {
         guard !busy else { return }
         busy = true; actionControls.forEach { $0.isEnabled = false }; addButton.isEnabled = false; newSessionButton.isEnabled = false
-        say("Working…", on: target)
+        say(tr("Working…"), on: target)
         let root = root, runner = runner
         Task {
             let result: Result<T, SessionError> = await Task.detached {
@@ -425,12 +436,12 @@ final class ClaudeAccountsWindow: NSWindowController {
             message.stringValue = text; message.textColor = error ? .systemRed : .secondaryLabelColor
         }
         renderedSignature = ""; refresh()
-        if text != "Working…" {
+        if text != tr("Working…") {
             NSAccessibility.post(element: window as Any, notification: .announcementRequested,
                                  userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
         }
     }
-    private func errorText(_ error: Error) -> String { (error as? SessionError)?.rawValue ?? SessionError.storage.rawValue }
+    private func errorText(_ error: Error) -> String { ((error as? SessionError) ?? .storage).message }
     private func showError(_ error: Error, on target: String?) { say(errorText(error), on: target, error: true) }
     /// Storage problems while refreshing; never re-renders, so a failing store cannot loop.
     private func showProblem(_ error: Error) { message.stringValue = errorText(error); message.textColor = .systemRed }
@@ -449,16 +460,16 @@ final class ClaudeAccountsWindow: NSWindowController {
         if let promptName { return promptName(title) }
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = info
         let field = NSTextField(string: value); field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
-        alert.accessoryView = field; alert.addButton(withTitle: confirm); alert.addButton(withTitle: "Cancel")
+        alert.accessoryView = field; alert.addButton(withTitle: confirm); alert.addButton(withTitle: tr("Cancel"))
         alert.window.initialFirstResponder = field
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         return field.stringValue
     }
 
     @objc private func addAccount() {
-        guard let name = askName(title: "Add Claude account",
-                                 info: "Give it a name you'll recognize, e.g. Personal or Work. Use a different Claude subscription for each account. Terminal opens next so you can sign in.",
-                                 value: accounts.isEmpty ? "Personal" : "Work", confirm: "Add & sign in") else { return }
+        guard let name = askName(title: tr("Add Claude account"),
+                                 info: tr("Give it a name you'll recognize, e.g. Personal or Work. Use a different Claude subscription for each account. Terminal opens next so you can sign in."),
+                                 value: accounts.isEmpty ? tr("Personal") : tr("Work"), confirm: tr("Add & sign in")) else { return }
         do {
             let account = try store.addAccount(name: name)
             renderedSignature = ""; refresh()
@@ -470,8 +481,8 @@ final class ClaudeAccountsWindow: NSWindowController {
         do {
             let path = try SessionManager(store: store, runnerExecutable: runner).loginCommand(account)
             if openFile(path) {
-                say("Terminal opened — finish signing in to \(account.name) there. This card updates when sign-in completes.", on: account.id)
-            } else { say("Terminal could not open. Try Sign in… again.", on: account.id, error: true) }
+                say(tr("Terminal opened — finish signing in to %@ there. This card updates when sign-in completes.", account.name), on: account.id)
+            } else { say(tr("Terminal could not open. Try Sign in… again."), on: account.id, error: true) }
         } catch { showError(error, on: account.id) }
     }
 
@@ -485,37 +496,37 @@ final class ClaudeAccountsWindow: NSWindowController {
             return (version, try manager.adapter.checkAuthentication(target, store: manager.store))
         } done: { [weak self] version, ok in
             self?.cliVersion = version
-            self?.say(ok ? "Signed in and ready." : "Signed out. Use Sign in… to connect it again.", on: target.id)
+            self?.say(ok ? tr("Signed in and ready.") : tr("Signed out. Use Sign in… to connect it again."), on: target.id)
         }
     }
 
     @objc private func renameAccount(_ sender: NSMenuItem) {
         guard let target = account(sender.representedObject as? String),
-              let name = askName(title: "Rename \(target.name)", info: "Only the name shown in AI Island changes.", value: target.name, confirm: "Rename") else { return }
-        do { try store.renameAccount(target.id, name: name); say("Account renamed.", on: target.id) }
+              let name = askName(title: tr("Rename %@", target.name), info: tr("Only the name shown in AI Island changes."), value: target.name, confirm: tr("Rename")) else { return }
+        do { try store.renameAccount(target.id, name: name); say(tr("Account renamed."), on: target.id) }
         catch { showError(error, on: target.id) }
     }
 
     @objc private func removeAccount(_ sender: NSMenuItem) {
         guard let target = account(sender.representedObject as? String) else { return }
         let alert = NSAlert(); alert.alertStyle = .warning
-        alert.messageText = "Remove \(target.name)?"
-        alert.informativeText = "AI Island signs this account out of Claude Code and moves its private configuration folder to the Trash. Accounts that sessions have used can't be removed."
-        alert.addButton(withTitle: "Remove"); alert.addButton(withTitle: "Cancel")
+        alert.messageText = tr("Remove %@?", target.name)
+        alert.informativeText = tr("AI Island signs this account out of Claude Code and moves its private configuration folder to the Trash. Accounts that sessions have used can't be removed.")
+        alert.addButton(withTitle: tr("Remove")); alert.addButton(withTitle: tr("Cancel"))
         alert.buttons[0].hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         work(on: target.id) { manager in try manager.removeAccount(target.id) } done: { [weak self] in
-            self?.say("\(target.name) removed.", on: nil)
+            self?.say(tr("%@ removed.", target.name), on: nil)
         }
     }
 
     @objc private func newSession() {
-        let alert = NSAlert(); alert.messageText = "New session"
-        alert.informativeText = "Starts Claude in Terminal for a local git project, using the account you choose."
-        let project = NSTextField(string: lastProject); project.placeholderString = "Local git project folder"
-        let choose = NSButton(title: "Choose…", target: nil, action: nil); choose.bezelStyle = .rounded
+        let alert = NSAlert(); alert.messageText = tr("New session")
+        alert.informativeText = tr("Starts Claude in Terminal for a local git project, using the account you choose.")
+        let project = NSTextField(string: lastProject); project.placeholderString = tr("Local git project folder")
+        let choose = NSButton(title: tr("Choose…"), target: nil, action: nil); choose.bezelStyle = .rounded
         let chooser = ProjectChooser(field: project); choose.target = chooser; choose.action = #selector(ProjectChooser.choose)
-        let name = NSTextField(string: ""); name.placeholderString = "Session name, e.g. Auth refactoring"
+        let name = NSTextField(string: ""); name.placeholderString = tr("Session name, e.g. Auth refactoring")
         let picker = NSPopUpButton()
         for a in accounts.sorted(by: { ($0.status == "ready" ? 0 : 1) < ($1.status == "ready" ? 0 : 1) }) {
             picker.addItem(withTitle: "\(a.name) — \(statusText(a))"); picker.lastItem?.representedObject = a.id
@@ -525,17 +536,17 @@ final class ClaudeAccountsWindow: NSWindowController {
             title.widthAnchor.constraint(equalToConstant: 64).isActive = true
             let r = NSStackView(views: [title] + views); r.alignment = .centerY; return r
         }
-        let form = NSStackView(views: [row("Project", [project, choose]), row("Name", [name]), row("Account", [picker])])
+        let form = NSStackView(views: [row(tr("Project"), [project, choose]), row(tr("Name"), [name]), row(tr("Account"), [picker])])
         form.orientation = .vertical; form.alignment = .leading; form.spacing = 8
         form.frame = NSRect(x: 0, y: 0, width: 420, height: 96)
         project.widthAnchor.constraint(equalToConstant: 260).isActive = true
         name.widthAnchor.constraint(equalToConstant: 344).isActive = true
-        alert.accessoryView = form; alert.addButton(withTitle: "Start"); alert.addButton(withTitle: "Cancel")
+        alert.accessoryView = form; alert.addButton(withTitle: tr("Start")); alert.addButton(withTitle: tr("Cancel"))
         alert.window.initialFirstResponder = lastProject.isEmpty ? project : name
         let response = withExtendedLifetime(chooser) { alert.runModal() }
         guard response == .alertFirstButtonReturn, let accountID = picker.selectedItem?.representedObject as? String else { return }
         let path = project.stringValue.trimmingCharacters(in: .whitespaces)
-        let title = name.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ? "New session" : name.stringValue
+        let title = name.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ? tr("New session") : name.stringValue
         lastProject = path
         work(on: nil) { try $0.createSession(name: title, project: path, account: accountID) } done: { [weak self] in self?.openSession($0, on: nil) }
     }
@@ -545,7 +556,7 @@ final class ClaudeAccountsWindow: NSWindowController {
     @objc private func stop(_ sender: NSButton) {
         guard let s = session(sender.identifier?.rawValue), let id = s.physicalID else { return }
         work(on: s.id) { manager in try manager.adapter.stopProcess(id, store: manager.store) } done: { [weak self] in
-            self?.say("Claude stopped. Session preserved.", on: s.id)
+            self?.say(tr("Claude stopped. Session preserved."), on: s.id)
         }
     }
 
@@ -556,9 +567,9 @@ final class ClaudeAccountsWindow: NSWindowController {
 
     private func handoff(_ session: ManagedSession, to account: Account) {
         selectedSessionID = session.id
-        let alert = NSAlert(); alert.messageText = "Continue \(session.name) with \(account.name)?"
-        alert.informativeText = "Claude will stop, save a transcript snapshot, and fork the conversation using this account. Git files remain in the current working tree."
-        alert.addButton(withTitle: "Continue"); alert.addButton(withTitle: "Cancel")
+        let alert = NSAlert(); alert.messageText = tr("Continue %@ with %@?", session.name, account.name)
+        alert.informativeText = tr("Claude will stop, save a transcript snapshot, and fork the conversation using this account. Git files remain in the current working tree.")
+        alert.addButton(withTitle: tr("Continue")); alert.addButton(withTitle: tr("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         work(on: session.id) { try $0.continueSession(logical: session.id, account: account.id) } done: { [weak self] in self?.openSession($0, on: session.id) }
     }
@@ -566,8 +577,8 @@ final class ClaudeAccountsWindow: NSWindowController {
     @objc private func readiness(_ sender: NSMenuItem) {
         guard let (sid, aid) = ids(sender), let s = session(sid), let a = account(aid) else { return }
         selectedSessionID = sid
-        work(on: sid) { manager in try manager.adapter.readiness(a, project: s.project, store: manager.store).map { "\($0.name): \($0.status)" }.joined(separator: " · ") } done: { [weak self] in
-            self?.say("Readiness for \(a.name): " + ($0.isEmpty ? "nothing to check" : $0), on: sid)
+        work(on: sid) { manager in try manager.adapter.readiness(a, project: s.project, store: manager.store).map { "\($0.displayName): \($0.displayStatus)" }.joined(separator: " · ") } done: { [weak self] in
+            self?.say(tr("Readiness for %@: ", a.name) + ($0.isEmpty ? tr("nothing to check") : $0), on: sid)
         }
     }
 
@@ -575,15 +586,15 @@ final class ClaudeAccountsWindow: NSWindowController {
         guard let s = session(sender.representedObject as? String) else { return }
         work(on: s.id) { manager -> String in
             let locks = try manager.store.rows("SELECT physical_id FROM session_locks WHERE logical_id=?", [s.id])
-            guard let id = locks.first?["physical_id"] else { return "No pending launch." }
-            try manager.cancelLaunch(id); return "Pending launch cancelled. You can retry Continue."
+            guard let id = locks.first?["physical_id"] else { return tr("No pending launch.") }
+            try manager.cancelLaunch(id); return tr("Pending launch cancelled. You can retry Continue.")
         } done: { [weak self] in self?.say($0, on: s.id) }
     }
 
     @objc private func recoverStopped(_ sender: NSMenuItem) {
         guard let s = session(sender.representedObject as? String), let id = s.physicalID else { return }
         work(on: s.id) { manager in try manager.recoverStoppedSession(id) } done: { [weak self] in
-            self?.say("Stopped session recovered. You can continue.", on: s.id)
+            self?.say(tr("Stopped session recovered. You can continue."), on: s.id)
         }
     }
 
@@ -594,10 +605,10 @@ final class ClaudeAccountsWindow: NSWindowController {
     }
 
     private func openSession(_ path: String, on target: String?) {
-        if NSWorkspace.shared.open(URL(fileURLWithPath: path)) { say("Terminal opened. Waiting for Claude SessionStart…", on: target) }
+        if NSWorkspace.shared.open(URL(fileURLWithPath: path)) { say(tr("Terminal opened. Waiting for Claude SessionStart…"), on: target) }
         else {
             let id = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
-            try? SessionManager(store: store).cancelLaunch(id); say("Terminal could not open. Launch cancelled.", on: target, error: true)
+            try? SessionManager(store: store).cancelLaunch(id); say(tr("Terminal could not open. Launch cancelled."), on: target, error: true)
         }
     }
 
@@ -629,11 +640,11 @@ final class ClaudeAccountsWindow: NSWindowController {
     var islandSummary: String? {
         guard let status = islandStatus else { return nil }
         if status.limitReached {
-            return "\(status.account) limit reached\(status.standby.map { " · Continue with \($0) →" } ?? "")"
+            return tr("%@ limit reached", status.account) + (status.standby.map { tr(" · Continue with %@ →", $0) } ?? "")
         }
-        let value = status.percent.map { " · \(Int($0))%\(status.stale ? " (last known)" : "")" } ?? " · usage unknown"
-        if !status.stale, (status.percent ?? 0) >= 95, let ready = status.standby { return status.account + value + " · \(ready) auth ready" }
-        return status.account + value + (status.restored ? " · Session restored" : "")
+        let value = status.percent.map { " · \(Int($0))%" + (status.stale ? tr(" (last known)") : "") } ?? tr(" · usage unknown")
+        if !status.stale, (status.percent ?? 0) >= 95, let ready = status.standby { return status.account + value + tr(" · %@ auth ready", ready) }
+        return status.account + value + (status.restored ? tr(" · Session restored") : "")
     }
     /// Name of the account the active session runs on, if any.
     var activeAccountName: String? {

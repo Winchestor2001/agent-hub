@@ -95,6 +95,7 @@ public struct LineDiff: Sendable, Equatable {
     }
 
     public var summary: String {
-        "+\(added) line\(added == 1 ? "" : "s"), −\(removed) line\(removed == 1 ? "" : "s")"
+        (added == 1 ? tr("+%@ line", added) : tr("+%@ lines", added)) + ", "
+            + (removed == 1 ? tr("−%@ line", removed) : tr("−%@ lines", removed))
     }
 }

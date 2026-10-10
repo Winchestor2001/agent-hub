@@ -297,7 +297,7 @@ public final class SessionManager {
                 guard try store.rows("SELECT * FROM session_locks WHERE owner_account=?", [args[3]]).isEmpty else { throw SessionError.locked }
                 let account = try store.account(args[3])
                 _ = try manager.adapter.getVersion()
-                print("Sign in to \(account.name). This account uses its own Claude configuration and Keychain identity.")
+                print(tr("Sign in to %@. This account uses its own Claude configuration and Keychain identity.", account.name))
                 _ = try manager.adapter.startProcess(arguments: ["auth", "login", "--claudeai"], account: account, project: account.configDir) { _ in }
                 _ = try manager.adapter.checkAuthentication(account, store: store)
             default:
@@ -308,7 +308,7 @@ public final class SessionManager {
             }
         } catch {
             // Never print raw errors originating from JSON, URLs or subprocesses.
-            let safe = (error as? SessionError)?.rawValue ?? SessionError.launchFailed.rawValue
+            let safe = ((error as? SessionError) ?? .launchFailed).message
             FileHandle.standardError.write(Data((safe + "\n").utf8))
             exit(1)
         }

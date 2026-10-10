@@ -2,7 +2,7 @@ import Foundation
 import CSQLite
 import Darwin
 
-public enum SessionError: String, Error, LocalizedError {
+public enum SessionError: String, Error, LocalizedError, CaseIterable {
     case cliMissing = "Claude CLI missing. Install Claude Code and refresh."
     case unsupported = "Claude CLI lacks required resume/fork/hooks capabilities."
     case authentication = "Target account is not independently authenticated with a Claude subscription."
@@ -23,7 +23,9 @@ public enum SessionError: String, Error, LocalizedError {
     case launchFailed = "Resume/fork failed or SessionStart not confirmed. Original session preserved."
     case limitReached = "Target account also reached its limit. Check usage and reset time."
     case storage = "Session database operation failed."
-    public var errorDescription: String? { rawValue }
+    /// The English raw value is stored in the database; this is what the user reads.
+    public var message: String { tr(rawValue) }
+    public var errorDescription: String? { message }
 }
 public struct Account: Sendable {
     public let id: String

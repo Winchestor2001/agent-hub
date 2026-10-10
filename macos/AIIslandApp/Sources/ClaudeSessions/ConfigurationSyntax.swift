@@ -8,7 +8,7 @@ public struct ConfigurationSyntaxError: Error, Sendable, Equatable, CustomString
     /// UTF-16 offset of the problem, for selecting it in a text view.
     public let offset: Int
 
-    public var description: String { "line \(line), column \(column): \(message)" }
+    public var description: String { tr("line %@, column %@: %@", line, column, message) }
 }
 
 /// Syntax checks run before AI Island writes `settings.json`, `.claude.json`
@@ -31,7 +31,7 @@ public enum ConfigurationSyntax {
             parser.skipJSONWhitespace()
             try parser.jsonValue(depth: 0)
             parser.skipJSONWhitespace()
-            if !parser.atEnd { throw parser.error("Unexpected \(parser.describeCurrent()) after the JSON value") }
+            if !parser.atEnd { throw parser.error(tr("Unexpected %@ after the JSON value", parser.describeCurrent())) }
             return nil
         } catch let error as ConfigurationSyntaxError {
             return error
@@ -70,10 +70,10 @@ private struct Parser {
     }
 
     func describeCurrent() -> String {
-        guard let current else { return "end of file" }
+        guard let current else { return tr("end of file") }
         switch current {
-        case "\n": return "line break"
-        case "\t": return "tab"
+        case "\n": return tr("line break")
+        case "\t": return tr("tab")
         default: return "'\(Character(current))'"
         }
     }
@@ -107,8 +107,8 @@ private struct Parser {
     }
 
     mutating func jsonValue(depth: Int) throws {
-        guard depth < 512 else { throw error("JSON is nested too deeply") }
-        guard let current else { throw error("Expected a value, found end of file") }
+        guard depth < 512 else { throw error(tr("JSON is nested too deeply")) }
+        guard let current else { throw error(tr("Expected a value, found end of file")) }
         switch current {
         case "{":
             index += 1
@@ -116,21 +116,21 @@ private struct Parser {
             if self.current == "}" { index += 1; return }
             while true {
                 guard self.current == "\"" else {
-                    throw error("Expected a quoted property name, found \(describeCurrent())")
+                    throw error(tr("Expected a quoted property name, found %@", describeCurrent()))
                 }
                 try jsonString()
                 skipJSONWhitespace()
-                try expect(":", "Expected ':' after the property name, found \(describeCurrent())")
+                try expect(":", tr("Expected ':' after the property name, found %@", describeCurrent()))
                 skipJSONWhitespace()
                 try jsonValue(depth: depth + 1)
                 skipJSONWhitespace()
                 if self.current == "," {
                     index += 1
                     skipJSONWhitespace()
-                    if self.current == "}" { throw error("Trailing comma before '}' is not allowed in JSON") }
+                    if self.current == "}" { throw error(tr("Trailing comma before '}' is not allowed in JSON")) }
                     continue
                 }
-                try expect("}", "Expected ',' or '}' in the object, found \(describeCurrent())")
+                try expect("}", tr("Expected ',' or '}' in the object, found %@", describeCurrent()))
                 return
             }
         case "[":
@@ -143,24 +143,24 @@ private struct Parser {
                 if self.current == "," {
                     index += 1
                     skipJSONWhitespace()
-                    if self.current == "]" { throw error("Trailing comma before ']' is not allowed in JSON") }
+                    if self.current == "]" { throw error(tr("Trailing comma before ']' is not allowed in JSON")) }
                     continue
                 }
-                try expect("]", "Expected ',' or ']' in the array, found \(describeCurrent())")
+                try expect("]", tr("Expected ',' or ']' in the array, found %@", describeCurrent()))
                 return
             }
         case "\"":
             try jsonString()
         case "t":
-            try expect("true", "Expected a value, found \(describeCurrent())")
+            try expect("true", tr("Expected a value, found %@", describeCurrent()))
         case "f":
-            try expect("false", "Expected a value, found \(describeCurrent())")
+            try expect("false", tr("Expected a value, found %@", describeCurrent()))
         case "n":
-            try expect("null", "Expected a value, found \(describeCurrent())")
+            try expect("null", tr("Expected a value, found %@", describeCurrent()))
         case "-", "0"..."9":
             try jsonNumber()
         default:
-            throw error("Expected a value, found \(describeCurrent())")
+            throw error(tr("Expected a value, found %@", describeCurrent()))
         }
     }
 
@@ -177,42 +177,42 @@ private struct Parser {
                 guard let escape = self.current else { break }
                 if escape == "u" {
                     for offset in 1...4 where !(peek(offset)?.properties.isASCIIHexDigit ?? false) {
-                        throw error("Invalid \\u escape; expected four hex digits")
+                        throw error(tr("Invalid \\u escape; expected four hex digits"))
                     }
                     index += 5
                 } else if "\"\\/bfnrt".unicodeScalars.contains(escape) {
                     index += 1
                 } else {
-                    throw error("Invalid escape '\\\(Character(escape))' in string")
+                    throw error(tr("Invalid escape '\\%@' in string", Character(escape)))
                 }
             case "\n", "\r":
-                throw error("Line break inside a string; use \\n instead")
+                throw error(tr("Line break inside a string; use \\n instead"))
             default:
-                if current.value < 0x20 { throw error("Control character inside a string") }
+                if current.value < 0x20 { throw error(tr("Control character inside a string")) }
                 index += 1
             }
         }
-        throw error("Unterminated string", at: start)
+        throw error(tr("Unterminated string"), at: start)
     }
 
     mutating func jsonNumber() throws {
         if current == "-" { index += 1 }
-        guard let first = current, ("0"..."9").contains(first) else { throw error("Expected a digit in the number") }
+        guard let first = current, ("0"..."9").contains(first) else { throw error(tr("Expected a digit in the number")) }
         if first == "0" {
             index += 1
-            if let next = current, ("0"..."9").contains(next) { throw error("Numbers cannot have leading zeros") }
+            if let next = current, ("0"..."9").contains(next) { throw error(tr("Numbers cannot have leading zeros")) }
         } else {
             while let digit = current, ("0"..."9").contains(digit) { index += 1 }
         }
         if current == "." {
             index += 1
-            guard let digit = current, ("0"..."9").contains(digit) else { throw error("Expected a digit after the decimal point") }
+            guard let digit = current, ("0"..."9").contains(digit) else { throw error(tr("Expected a digit after the decimal point")) }
             while let digit = current, ("0"..."9").contains(digit) { index += 1 }
         }
         if current == "e" || current == "E" {
             index += 1
             if current == "+" || current == "-" { index += 1 }
-            guard let digit = current, ("0"..."9").contains(digit) else { throw error("Expected a digit in the exponent") }
+            guard let digit = current, ("0"..."9").contains(digit) else { throw error(tr("Expected a digit in the exponent")) }
             while let digit = current, ("0"..."9").contains(digit) { index += 1 }
         }
     }
@@ -227,7 +227,7 @@ private struct Parser {
         guard current == "#" else { return }
         while let current, current != "\n" {
             if current != "\t", current.value < 0x20 || current.value == 0x7F, current != "\r" {
-                throw error("Control character inside a comment")
+                throw error(tr("Control character inside a comment"))
             }
             index += 1
         }
@@ -247,7 +247,7 @@ private struct Parser {
         try skipTOMLComment()
         if current == "\r" { index += 1 }
         guard atEnd || current == "\n" else {
-            throw error("Expected the end of the line, found \(describeCurrent())")
+            throw error(tr("Expected the end of the line, found %@", describeCurrent()))
         }
     }
 
@@ -261,12 +261,12 @@ private struct Parser {
                 let start = index
                 let key = try tomlKey()
                 skipTOMLSpaces()
-                try expect("=", "Expected '=' after the key, found \(describeCurrent())")
+                try expect("=", tr("Expected '=' after the key, found %@", describeCurrent()))
                 skipTOMLSpaces()
                 try tomlValue()
                 let path = (tomlTable + key).joined(separator: "\u{1F}")
                 guard tomlKeys.insert(path).inserted else {
-                    throw error("Duplicate key '\(key.joined(separator: "."))'", at: start)
+                    throw error(tr("Duplicate key '%@'", key.joined(separator: ".")), at: start)
                 }
             }
             try expectTOMLLineEnd()
@@ -280,7 +280,7 @@ private struct Parser {
         skipTOMLSpaces()
         let key = try tomlKey()
         skipTOMLSpaces()
-        try expect(isArray ? "]]" : "]", "Expected '\(isArray ? "]]" : "]")' to close the table header, found \(describeCurrent())")
+        try expect(isArray ? "]]" : "]", tr("Expected '%@' to close the table header, found %@", isArray ? "]]" : "]", describeCurrent()))
         let path = key.joined(separator: "\u{1F}")
         if isArray {
             // Each [[array]] element starts a fresh table.
@@ -288,7 +288,7 @@ private struct Parser {
             tomlTables = tomlTables.filter { !$0.hasPrefix(path + "\u{1F}") }
         } else {
             guard tomlTables.insert(path).inserted, !tomlKeys.contains(path) else {
-                throw error("Table [\(key.joined(separator: "."))] is defined more than once", at: start)
+                throw error(tr("Table [%@] is defined more than once", key.joined(separator: ".")), at: start)
             }
         }
         tomlTable = key
@@ -297,7 +297,7 @@ private struct Parser {
     mutating func tomlKey() throws -> [String] {
         var parts: [String] = []
         while true {
-            guard let current else { throw error("Expected a key, found end of file") }
+            guard let current else { throw error(tr("Expected a key, found end of file")) }
             if current == "\"" {
                 parts.append(try tomlBasicString())
             } else if current == "'" {
@@ -310,7 +310,7 @@ private struct Parser {
                     bare.unicodeScalars.append(scalar)
                     index += 1
                 }
-                guard !bare.isEmpty else { throw error("Expected a key, found \(describeCurrent())") }
+                guard !bare.isEmpty else { throw error(tr("Expected a key, found %@", describeCurrent())) }
                 parts.append(bare)
             }
             skipTOMLSpaces()
@@ -321,7 +321,7 @@ private struct Parser {
     }
 
     mutating func tomlValue() throws {
-        guard let current else { throw error("Expected a value, found end of file") }
+        guard let current else { throw error(tr("Expected a value, found end of file")) }
         switch current {
         case "\"":
             if starts(with: "\"\"\"") { try tomlMultilineString(quote: "\"") } else { _ = try tomlBasicString() }
@@ -337,7 +337,7 @@ private struct Parser {
                     index += 1
                     try skipTOMLBlank()
                 } else if self.current != "]" {
-                    throw error("Expected ',' or ']' in the array, found \(describeCurrent())")
+                    throw error(tr("Expected ',' or ']' in the array, found %@", describeCurrent()))
                 }
             }
             index += 1
@@ -350,11 +350,11 @@ private struct Parser {
                 let start = index
                 let key = try tomlKey()
                 skipTOMLSpaces()
-                try expect("=", "Expected '=' after the key, found \(describeCurrent())")
+                try expect("=", tr("Expected '=' after the key, found %@", describeCurrent()))
                 skipTOMLSpaces()
                 try tomlValue()
                 guard keys.insert(key.joined(separator: "\u{1F}")).inserted else {
-                    throw error("Duplicate key '\(key.joined(separator: "."))'", at: start)
+                    throw error(tr("Duplicate key '%@'", key.joined(separator: ".")), at: start)
                 }
                 skipTOMLSpaces()
                 if self.current == "," {
@@ -362,7 +362,7 @@ private struct Parser {
                     skipTOMLSpaces()
                     continue
                 }
-                try expect("}", "Expected ',' or '}' in the inline table, found \(describeCurrent())")
+                try expect("}", tr("Expected ',' or '}' in the inline table, found %@", describeCurrent()))
                 return
             }
         default:
@@ -392,7 +392,7 @@ private struct Parser {
             }
         }
         guard !token.isEmpty else {
-            throw error("Expected a value, found \(describeCurrent())")
+            throw error(tr("Expected a value, found %@", describeCurrent()))
         }
         let patterns = [
             #"^(true|false)$"#,
@@ -406,8 +406,8 @@ private struct Parser {
             #"^\d{2}:\d{2}:\d{2}(\.\d+)?$"#,
         ]
         guard patterns.contains(where: { token.range(of: $0, options: .regularExpression) != nil }) else {
-            let hint = token.first?.isLetter == true ? " (strings must be quoted)" : ""
-            throw error("Invalid value '\(token)'\(hint)", at: start)
+            let hint = token.first?.isLetter == true ? tr(" (strings must be quoted)") : ""
+            throw error(tr("Invalid value '%@'%@", token, hint), at: start)
         }
     }
 
@@ -423,29 +423,29 @@ private struct Parser {
             case "\\":
                 try tomlEscape()
             case "\n", "\r":
-                throw error("Line break inside a string; use \"\"\" for multi-line strings")
+                throw error(tr("Line break inside a string; use \"\"\" for multi-line strings"))
             default:
-                if current != "\t", current.value < 0x20 || current.value == 0x7F { throw error("Control character inside a string") }
+                if current != "\t", current.value < 0x20 || current.value == 0x7F { throw error(tr("Control character inside a string")) }
                 value.unicodeScalars.append(current)
                 index += 1
             }
         }
-        throw error("Unterminated string", at: start)
+        throw error(tr("Unterminated string"), at: start)
     }
 
     mutating func tomlEscape() throws {
         index += 1
-        guard let escape = current else { throw error("Unterminated escape sequence") }
+        guard let escape = current else { throw error(tr("Unterminated escape sequence")) }
         let hexCount = escape == "u" ? 4 : escape == "U" ? 8 : 0
         if hexCount > 0 {
             for offset in 1...hexCount where !(peek(offset)?.properties.isASCIIHexDigit ?? false) {
-                throw error("Invalid \\\(Character(escape)) escape; expected \(hexCount) hex digits")
+                throw error(tr("Invalid \\%@ escape; expected %@ hex digits", Character(escape), hexCount))
             }
             index += hexCount + 1
         } else if "btnfr\"\\e".unicodeScalars.contains(escape) {
             index += 1
         } else {
-            throw error("Invalid escape '\\\(Character(escape))' in string")
+            throw error(tr("Invalid escape '\\%@' in string", Character(escape)))
         }
     }
 
@@ -455,11 +455,11 @@ private struct Parser {
         var value = ""
         while let current {
             if current == "'" { index += 1; return value }
-            if current == "\n" || current == "\r" { throw error("Line break inside a literal string; use ''' for multi-line strings") }
+            if current == "\n" || current == "\r" { throw error(tr("Line break inside a literal string; use ''' for multi-line strings")) }
             value.unicodeScalars.append(current)
             index += 1
         }
-        throw error("Unterminated string", at: start)
+        throw error(tr("Unterminated string"), at: start)
     }
 
     mutating func tomlMultilineString(quote: Unicode.Scalar) throws {
@@ -487,6 +487,6 @@ private struct Parser {
             }
             index += 1
         }
-        throw error("Unterminated multi-line string", at: start)
+        throw error(tr("Unterminated multi-line string"), at: start)
     }
 }

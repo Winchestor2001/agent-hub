@@ -118,9 +118,20 @@ windows (Settings, the file editor, or Claude Accounts & Sessions) is in front:
 | ⌘Q | Quit AI Island, island included. Unsaved editor changes are offered for Save, Discard, or Cancel first; Cancel keeps the app running. |
 | ⌘, | Open Settings |
 | ⌘R | Refresh configuration |
-| ⌘Z / ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A | Undo, redo, cut, copy, paste, and select all in text fields and the editor |
+| ⌘X, ⌘C, ⌘V, ⌘A | Cut, copy, paste, and select all in text fields and the editor |
+| ⌘Z / ⇧⌘Z | Undo and redo in text fields (the file editor has no undo history) |
 
 The menu bar item's **Quit AI Island** does the same as ⌘Q.
+
+## Interface language
+
+The interface is in Uzbek (Latin). Every visible string is written in English in
+the code as `tr("…")` and translated from the table in
+`Sources/ClaudeSessions/Localization.swift`; a missing entry falls back to
+English. Model keys, identifiers, stored values, file paths, and the `cca` CLI
+stay in English. To add another language, add a case to `Language`, give it its
+own table, and set `Language.current`. `LocalizationTests` checks that every
+`tr` string has a translation and that placeholders match.
 
 ## Verification
 

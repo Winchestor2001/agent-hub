@@ -12,6 +12,12 @@ public struct Readiness: Sendable {
     public let name: String
     public let status: String
     public var ready: Bool { status == "OK" }
+    /// Names and statuses are stored in English; these are shown to the user.
+    public var displayName: String { Readiness.display(name: name) }
+    public var displayStatus: String { tr(status) }
+    public static func display(name: String) -> String {
+        name.hasPrefix("MCP: ") ? "MCP: " + name.dropFirst(5) : tr(name)
+    }
 }
 public protocol ClaudeCodeAdapter {
     func getVersion() throws -> String

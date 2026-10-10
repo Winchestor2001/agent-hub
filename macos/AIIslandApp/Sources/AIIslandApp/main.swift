@@ -306,10 +306,10 @@ private enum SettingsArea: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .overview: "Overview"
+        case .overview: tr("Overview")
         case .codex: "Codex"
         case .claude: "Claude"
-        case .accounts: "Accounts"
+        case .accounts: tr("Accounts")
         }
     }
 
@@ -332,10 +332,12 @@ private enum SettingsArea: Int, CaseIterable {
 }
 
 private struct ConfigurationCategory {
+    /// English; also the card identifier and the backup folder name.
     let title: String
     let detail: String
     let symbol: String
     let paths: [URL]
+    var displayTitle: String { tr(title) }
 }
 
 private final class ConfigurationCardButton: NSButton {
@@ -354,8 +356,8 @@ private struct ProviderSnapshot {
     var isInstalled: Bool { !paths.isEmpty }
 
     var stateText: String {
-        guard isInstalled else { return "Not detected" }
-        return "\(detectedFiles) managed file\(detectedFiles == 1 ? "" : "s")"
+        guard isInstalled else { return tr("Not detected") }
+        return detectedFiles == 1 ? tr("%@ managed file", detectedFiles) : tr("%@ managed files", detectedFiles)
     }
 }
 
@@ -428,7 +430,7 @@ private final class SettingsSidebarController: NSObject, NSTableViewDataSource, 
         table.style = .sourceList
         table.rowSizeStyle = .medium
         table.identifier = NSUserInterfaceItemIdentifier("settings-sidebar")
-        table.setAccessibilityLabel("Settings sections")
+        table.setAccessibilityLabel(tr("Settings sections"))
         table.dataSource = self
         table.delegate = self
     }
@@ -512,7 +514,7 @@ private func makeDiffPreview(_ diff: LineDiff) -> NSScrollView {
 }
 
 @MainActor
-private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSplitViewDelegate, NSTextViewDelegate {
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSplitViewDelegate, NSTextViewDelegate, NSMenuItemValidation {
     private let island = IslandPanel()
     private let compactContent = NSView()
     private let statusPopover = NSPopover()
@@ -554,11 +556,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var configurationSavedContent: String?
     private var askAboutUnsavedConfiguration: (URL) -> UnsavedConfigurationChoice = { file in
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(file.lastPathComponent)?"
-        alert.informativeText = "Your edits will be lost if you don't save them."
-        alert.addButton(withTitle: "Save…")
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = tr("Save changes to %@?", file.lastPathComponent)
+        alert.informativeText = tr("Your edits will be lost if you don't save them.")
+        alert.addButton(withTitle: tr("Save…"))
+        alert.addButton(withTitle: tr("Discard"))
+        alert.addButton(withTitle: tr("Cancel"))
         switch alert.runModal() {
         case .alertFirstButtonReturn: return .save
         case .alertSecondButtonReturn: return .discard
@@ -567,11 +569,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
     private var confirmConfigurationSave: (LineDiff) -> Bool = { diff in
         let alert = NSAlert()
-        alert.messageText = "Review changes"
-        alert.informativeText = "\(diff.summary). A timestamped backup will be saved before this file is updated."
+        alert.messageText = tr("Review changes")
+        alert.informativeText = tr("%@. A timestamped backup will be saved before this file is updated.", diff.summary)
         alert.accessoryView = makeDiffPreview(diff)
-        alert.addButton(withTitle: "Save with backup")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: tr("Save with backup"))
+        alert.addButton(withTitle: tr("Cancel"))
         return alert.runModal() == .alertFirstButtonReturn
     }
     /// Shown when the draft fails the syntax check. Returns true only when the
@@ -581,16 +583,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = canOverride
-            ? "\(file.lastPathComponent) may not be valid \(format)"
-            : "\(file.lastPathComponent) is not valid \(format)"
-        alert.informativeText = "Line \(error.line), column \(error.column): \(error.message)."
-            + (canOverride ? " Saving it may break the tool that reads this file." : " The file was not saved.")
+            ? tr("%@ may not be valid %@", file.lastPathComponent, format)
+            : tr("%@ is not valid %@", file.lastPathComponent, format)
+        alert.informativeText = tr("Line %@, column %@: %@.", error.line, error.column, error.message)
+            + (canOverride ? tr(" Saving it may break the tool that reads this file.") : tr(" The file was not saved."))
         if canOverride {
-            alert.addButton(withTitle: "Keep Editing")
-            alert.addButton(withTitle: "Save Anyway")
+            alert.addButton(withTitle: tr("Keep Editing"))
+            alert.addButton(withTitle: tr("Save Anyway"))
             return alert.runModal() == .alertSecondButtonReturn
         }
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: tr("OK"))
         alert.runModal()
         return false
     }
@@ -689,13 +691,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             var buttons: [NSButton] { allViews(content).compactMap { $0 as? NSButton } }
             var menuItems: [String] { buttons.compactMap { ($0 as? NSPopUpButton)?.itemTitles }.flatMap { $0 } }
             check(labels.contains("Claude A") && labels.contains("Claude B"), "Each account has its own card")
-            check(labels.contains { $0.contains("96%") && $0.contains("resets") }, "Usage and reset render on the account card")
+            check(labels.contains { $0.contains(tr("%@% of 5-hour limit used", 96)) && $0.contains(tr(" · resets %@", "")) }, "Usage and reset render on the account card")
             check(labels.contains { $0.contains("Auth refactoring") } && labels.contains { $0.contains("Claude A") && $0.contains("feature/auth") },
                   "Session card shows project, name, account and branch")
-            check(buttons.filter { $0.title == "Check" }.count == 2 && ["Rename…", "Sign in again…", "Remove…"].allSatisfy(menuItems.contains),
+            check(buttons.filter { $0.title == tr("Check") }.count == 2 && [tr("Rename…"), tr("Sign in again…"), tr("Remove…")].allSatisfy(menuItems.contains),
                   "Each account card has its own check and management actions")
-            check(buttons.contains { $0.title == "Add account" && !$0.isEnabled }, "Add account is disabled at the two-account limit")
-            check(buttons.contains { $0.title == "Continue with…" } && menuItems.contains("Claude B — Ready"),
+            check(buttons.contains { $0.title == tr("Add account") && !$0.isEnabled }, "Add account is disabled at the two-account limit")
+            check(buttons.contains { $0.title == tr("Continue with…") } && menuItems.contains("Claude B — \(tr("Ready"))"),
                   "Continue menu lists the other account and its state")
             func detailViews(_ root: NSView) -> (toggle: NSButton?, texts: [NSTextView]) {
                 let views = allViews(root)
@@ -705,11 +707,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             var detailParts = detailViews(content)
             check(detailParts.toggle?.state == .off && detailParts.toggle?.bezelStyle == .disclosure
                   && detailParts.texts.count == 2 && detailParts.texts.allSatisfy { $0.isHiddenOrHasHiddenAncestor && $0.string.isEmpty }
-                  && labels.contains("History & diagnostics — academy-backend · Auth refactoring"),
+                  && labels.contains(tr("History & diagnostics") + " — academy-backend · Auth refactoring"),
                   "History and diagnostics start collapsed under a disclosure and are not loaded")
             detailParts.toggle?.performClick(nil); content.layoutSubtreeIfNeeded()
             let texts = detailParts.texts.filter { !$0.isHiddenOrHasHiddenAncestor }.map(\.string)
-            check(texts.contains { $0.contains("handoff completed") } && detailsExpanded,
+            check(texts.contains { $0.contains(tr("handoff completed")) } && detailsExpanded,
                   "Expanding shows history from SQLite events and remembers the choice")
             check(texts.contains { $0.contains("CLAUDE_CONFIG_DIR") && $0.contains(claude) }, "Diagnostics contain session identities")
             let reopened = try ClaudeAccountsWindow(root: root, detailsPreference: detailsPreference)
@@ -732,18 +734,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             func rename(_ account: String, to name: String) {
                 claudeAccounts?.promptName = { _ in name }
                 let item = buttons.compactMap { ($0 as? NSPopUpButton)?.menu?.items }.flatMap { $0 }
-                    .first { $0.title == "Rename…" && ($0.representedObject as? String) == (account == "Claude A" ? a.id : b.id) }
+                    .first { $0.title == tr("Rename…") && ($0.representedObject as? String) == (account == "Claude A" ? a.id : b.id) }
                 if let item, let action = item.action { NSApp.sendAction(action, to: item.target, from: item) }
                 content.layoutSubtreeIfNeeded()
             }
             rename("Claude A", to: "Claude A")
-            check(cardNotice("Claude A")?.stringValue == "Account renamed." && cardNotice("Claude B") == nil
-                  && !labels.contains { $0.contains("renamed") && $0 != "Account renamed." },
+            check(cardNotice("Claude A")?.stringValue == tr("Account renamed.") && cardNotice("Claude B") == nil
+                  && labels.filter { $0 == tr("Account renamed.") }.count == 1,
                   "A successful action reports on its own account card")
             rename("Claude B", to: "  ")
             let errorNotice = cardNotice("Claude B")
-            check(errorNotice?.stringValue == SessionError.accountName.rawValue && errorNotice?.textColor == .systemRed
-                  && errorNotice?.superview?.subviews.contains { ($0 as? NSImageView)?.image?.accessibilityDescription == "Error" } == true
+            check(errorNotice?.stringValue == SessionError.accountName.message && errorNotice?.textColor == .systemRed
+                  && errorNotice?.superview?.subviews.contains { ($0 as? NSImageView)?.image?.accessibilityDescription == tr("Error") } == true
                   && cardNotice("Claude A") == nil,
                   "An error reports on its account card with a warning icon, replacing the earlier result")
             claudeAccounts?.promptName = nil
@@ -762,14 +764,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             }
             updateNotchContent(); collapseIsland()
             compactContent.layoutSubtreeIfNeeded()
-            check(island.frame.width == Self.expandedIslandWidth && claudeAccounts?.islandSummary?.contains("Claude B auth ready") == true,
+            check(island.frame.width == Self.expandedIslandWidth && claudeAccounts?.islandSummary?.contains(tr(" · %@ auth ready", "Claude B")) == true,
                   "Island expands to \(Int(Self.expandedIslandWidth))pt and shows warning and standby account")
             var details = islandDetails()
-            check(details.account == "Claude A" && details.state == "96% used"
+            check(details.account == "Claude A" && details.state == tr("%@% used", 96)
                   && details.labels.allSatisfy { $0.maximumNumberOfLines == 1 && $0.frame.height <= 16
                       && compactContent.bounds.contains($0.convert($0.bounds, to: compactContent)) },
                   "Expanded island shows account and state on single lines inside the island")
-            check(details.button.map { $0.attributedTitle.string == "Continue with Claude B →" && !$0.isBordered
+            check(details.button.map { $0.attributedTitle.string == tr("Continue with %@ →", "Claude B") && !$0.isBordered
                       && $0.action == #selector(continueClaudeAccount)
                       && compactContent.bounds.contains($0.convert($0.bounds, to: compactContent)) } == true,
                   "Near the limit with a ready account, a borderless Continue pill is offered")
@@ -794,7 +796,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let popoverView = makeStatusPopoverView(currentPopoverModel).view
             let popoverLabels = allViews(popoverView).compactMap { ($0 as? NSTextField)?.stringValue }
             let popoverButtons = allViews(popoverView).compactMap { $0 as? NSButton }
-            check(popoverButtons.map(\.toolTip) == ["Refresh limits", "Manage AI Island", "Update Claude Code and Codex CLI"]
+            check(popoverButtons.map(\.toolTip) == [tr("Refresh limits"), tr("Manage AI Island"), tr("Update Claude Code and Codex CLI")]
                   && popoverButtons.allSatisfy { $0.title.isEmpty && $0.image != nil },
                   "Popover actions are icon buttons: Refresh, Settings, Update (no Accounts)")
             var updateOpened: URL?
@@ -809,9 +811,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 popoverView.cacheDisplay(in: popoverView.bounds, to: bitmap)
                 try bitmap.representation(using: .png, properties: [:])?.write(to: report.deletingPathExtension().appendingPathExtension("popover.png"))
             }
-            check(popoverLabels.contains("Default") && popoverLabels.contains("Claude A · now") && popoverLabels.contains("Claude B")
-                  && popoverLabels.contains { $0.hasPrefix("Ready") } && popoverLabels.contains { $0.hasPrefix("5H · 96% used") }
-                  && popoverLabels.contains { $0.hasPrefix("5H · 12% used") },
+            check(popoverLabels.contains(tr("Default")) && popoverLabels.contains("Claude A" + tr(" · now")) && popoverLabels.contains("Claude B")
+                  && popoverLabels.contains { $0.hasPrefix(tr("Ready")) } && popoverLabels.contains { $0.hasPrefix(tr("%@ · %@% used", tr("5H"), 96)) }
+                  && popoverLabels.contains { $0.hasPrefix(tr("%@ · %@% used", tr("5H"), 12)) },
                   "Claude card lists Default and every account, marking the one in use")
             let orange = NSColor(calibratedRed: 1, green: 0.57, blue: 0.20, alpha: 1)
             // Provider identity lives in the logo; the ring itself is colored by limit level.
@@ -822,23 +824,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                   "Claude ring follows the limit-level color rule (\(Int((claudeRing?.progress ?? 0) * 100))%)")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'100',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); updateNotchContent(); collapseIsland()
-            check(claudeAccounts?.islandSummary?.contains("Continue with Claude B") == true, "Limit reached exposes manual continuation")
+            check(claudeAccounts?.islandSummary?.contains(tr(" · Continue with %@ →", "Claude B")) == true, "Limit reached exposes manual continuation")
             details = islandDetails()
-            check(details.state == "Limit reached" && details.button != nil, "Limit reached shows the state and the Continue pill")
+            check(details.state == tr("Limit reached") && details.button != nil, "Limit reached shows the state and the Continue pill")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'40',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); updateNotchContent(); collapseIsland()
             details = islandDetails()
-            check(details.state == "40% used" && details.button == nil && island.frame.width == Self.expandedIslandWidth,
+            check(details.state == tr("%@% used", 40) && details.button == nil && island.frame.width == Self.expandedIslandWidth,
                   "With headroom, the expanded island has no Continue pill")
             try store.execute("UPDATE accounts SET status='signed out' WHERE id=?", [b.id])
             try store.renameAccount(b.id, name: "Work")
             claudeAccounts?.refresh(); content.layoutSubtreeIfNeeded()
-            check(labels.contains("Work") && labels.contains { $0.hasPrefix("Signed out") } && buttons.contains { $0.title == "Sign in…" },
+            check(labels.contains("Work") && labels.contains { $0.hasPrefix(tr("Signed out")) } && buttons.contains { $0.title == tr("Sign in…") },
                   "Renamed, signed-out account offers Sign in…")
             try store.execute("INSERT INTO usage_snapshots(account_id,percent,checked_at,window) VALUES(?,'97',?,'five_hour')", [a.id, store.now])
             claudeAccounts?.refresh(); updateNotchContent(); collapseIsland()
             details = islandDetails()
-            check(details.state == "97% used" && details.button == nil,
+            check(details.state == tr("%@% used", 97) && details.button == nil,
                   "Near the limit without a ready account, no Continue pill is offered")
             for size in [NSSize(width: 760, height: 780), NSSize(width: 1000, height: 850)] {
                 window.setContentSize(size); content.layoutSubtreeIfNeeded()
@@ -857,18 +859,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             remover.discardDirectory = { try FileManager.default.removeItem(at: $0) }
             try remover.removeAccount(b.id)
             claudeAccounts?.refresh(); content.layoutSubtreeIfNeeded()
-            check(!labels.contains("Work") && buttons.contains { $0.title == "Add account" && $0.isEnabled }, "Removing an unused account frees a slot")
+            check(!labels.contains("Work") && buttons.contains { $0.title == tr("Add account") && $0.isEnabled }, "Removing an unused account frees a slot")
             check((try? remover.removeAccount(a.id)) == nil && labels.contains("Claude A"), "An account with session history is kept")
             var opened: [URL] = []
             claudeAccounts?.promptName = { _ in "  Side  " }
             claudeAccounts?.openFile = { opened.append($0); return true }
-            if let add = buttons.first(where: { $0.title == "Add account" }) { add.performClick(nil) }
+            if let add = buttons.first(where: { $0.title == tr("Add account") }) { add.performClick(nil) }
             content.layoutSubtreeIfNeeded()
             let added = try store.accounts().first { $0.name == "Side" }
             let script = opened.first.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
             check(added != nil && labels.contains("Side") && opened.count == 1 && opened[0].pathExtension == "command"
                   && script.contains(added?.id ?? "-") && script.contains("--claude-login")
-                  && !buttons.contains { $0.title == "Add account" && $0.isEnabled },
+                  && !buttons.contains { $0.title == tr("Add account") && $0.isEnabled },
                   "Add account names the account and immediately opens its sign-in")
             claudeAccounts?.window?.close()
         } catch { checks.append("FAIL: accounts regression: \((error as? SessionError)?.rawValue ?? "unexpected error")") }
@@ -978,9 +980,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         // Stop polling so the rendering checks below control the snapshot alone.
         usageRefreshTimer?.invalidate()
         (usageTickInterval, codexRefreshInterval) = defaultIntervals
-        check(labels.contains { $0.hasPrefix("5H · 55% used") && $0.hasSuffix("· last known") },
+        check(labels.contains { $0.hasPrefix(tr("%@ · %@% used", tr("5H"), 55)) && $0.hasSuffix(tr(" · last known")) },
               "Claude card shows the cached 5H window marked as last known")
-        check(labels.contains("7D · not available"), "Missing Claude 7D window shows not available next to the known 5H")
+        check(labels.contains(tr("%@ · not available", tr("7D"))), "Missing Claude 7D window shows not available next to the known 5H")
         if claudeAccounts?.islandUsage == nil {
             check(rings.contains { abs($0.progress - 0.55) < 0.001 }, "Claude ring shows the cached 5H window")
         }
@@ -991,14 +993,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let claudeLabels = statusPopover.contentViewController.map {
             allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
         } ?? []
-        check(claudeLabels.contains("Limits not available yet") && !claudeLabels.contains { $0.hasSuffix("LIMIT UNAVAILABLE") },
+        check(claudeLabels.contains(tr("Limits not available yet")) && !claudeLabels.contains { $0.hasSuffix("LIMIT UNAVAILABLE") },
               "Claude card without any window shows one quiet line, without waiting for Codex")
         updateNotchContent()
         if claudeAccounts?.islandUsage == nil, let claude = islandCell(.claude) {
             // A configured Claude without any recorded usage once rendered a full bar.
             check(claude.bar.progress == nil && claude.ring.isUnknown && !claude.ring.isLoading,
                   "Unknown Claude usage is not drawn as a full or empty bar")
-            check(claude.ring.toolTip?.contains("limits unknown") == true,
+            check(claude.ring.toolTip?.hasPrefix(tr("%@ · limits unknown: %@", "Claude", "")) == true,
                   "Claude island tooltip explains why usage is unknown")
         }
         let lastCodexUsage = codexUsage
@@ -1006,7 +1008,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         updateNotchContent()
         if let codex = islandCell(.codex) {
             check(codex.ring.isUnknown && !codex.ring.isLoading && codex.bar.progress == nil && codex.number.stringValue == "—"
-                  && codex.ring.toolTip?.contains("limits unknown") == true,
+                  && codex.ring.toolTip?.hasPrefix(tr("%@ · limits unknown: %@", "Codex", "")) == true,
                   "Codex island shows unknown with a reason after a request returns no limits")
         }
         codexUsage = CodexUsageSnapshot(primary: CodexUsageWindow(usedPercent: 0, resetsAt: nil),
@@ -1026,7 +1028,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                                 secondary: CodexUsageWindow(usedPercent: percent, resetsAt: nil))
                 updateUsageViews()
                 let popoverBar = statusPopover.contentViewController.flatMap { controller -> NSView? in
-                    let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · \(percent)% used") == true }
+                    let caption = allViews(controller.view).first { ($0 as? NSTextField)?.stringValue.hasPrefix(tr("%@ · %@% used", tr("5H"), percent)) == true }
                     guard let stack = caption?.superview as? NSStackView,
                           let index = stack.arrangedSubviews.firstIndex(where: { $0 === caption }),
                           stack.arrangedSubviews.indices.contains(index + 1) else { return nil }
@@ -1057,7 +1059,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                   && codex.bar.progress.map { abs($0 - 0.95) < 0.001 } == true && codex.bar.accent == .systemRed
                   && codex.ring.isCritical,
                   "Ring and number show 5H (10%), the bar shows 7D (95%, red), and the critical 7D raises the ! badge")
-            check(codex.ring.toolTip == "Codex · Ring: 5H 10% used · Bar: 7D 95% used",
+            check(codex.ring.toolTip == tr("%@ · Ring: 5H %@ · Bar: 7D %@", "Codex", tr("%@% used", 10), tr("%@% used", 95)),
                   "Island tooltip names which window the ring and the bar show")
         } else {
             check(false, "Codex island cell is rendered for mixed windows")
@@ -1076,7 +1078,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         // VoiceOver reads each cell as one sentence, with the level in words.
         if let codex = islandCell(.codex), let cell = codex.ring.superview {
             check(cell.isAccessibilityElement() && cell.accessibilityRole() == .staticText
-                  && cell.accessibilityLabel() == "Codex, 5-hour limit 100% used, near limit, 7-day limit 72% used, high"
+                  && cell.accessibilityLabel() == ["Codex", tr("%@ limit %@% used", tr("5-hour"), 100), tr("near limit"),
+                                                     tr("%@ limit %@% used", tr("7-day"), 72), tr("high")].joined(separator: ", ")
                   && cell.accessibilityChildren()?.isEmpty != false
                   && codex.ring.isCritical && !codex.ring.isWarning,
                   "VoiceOver reads the Codex cell as one sentence with both windows and their levels")
@@ -1086,17 +1089,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         check(compactContent.isAccessibilityElement() && compactContent.accessibilityRole() == .group
               && compactContent.accessibilityLabel() == "AI Island"
-              && compactContent.accessibilityCustomActions()?.first?.name == "Show or hide limits card",
+              && compactContent.accessibilityCustomActions()?.first?.name == tr("Show or hide limits card"),
               "The island is a named group with an action that shows the limits card")
         let popoverViews = statusPopover.contentViewController.map { allViews($0.view) } ?? []
         let cardLabels = popoverViews.filter { $0.accessibilityRole() == .group && $0.isAccessibilityElement() }
             .compactMap { $0.accessibilityLabel() }
         let buttonLabels = popoverViews.compactMap { $0 as? NSButton }.compactMap { $0.accessibilityLabel() }
-        check(cardLabels.contains("Codex limits") && cardLabels.contains("Claude limits")
-              && ["Refresh limits", "Manage AI Island", "Update Claude Code and Codex CLI"].allSatisfy(buttonLabels.contains),
+        check(cardLabels.contains(tr("%@ limits", "Codex")) && cardLabels.contains(tr("%@ limits", "Claude"))
+              && [tr("Refresh limits"), tr("Manage AI Island"), tr("Update Claude Code and Codex CLI")].allSatisfy(buttonLabels.contains),
               "Popover cards and buttons are named for VoiceOver")
-        check(popoverViews.contains { ($0 as? NSTextField)?.stringValue.hasPrefix("5H · 100% used · near limit") == true }
-              && popoverViews.contains { ($0 as? NSTextField)?.stringValue.hasPrefix("7D · 72% used · high") == true },
+        check(popoverViews.contains { ($0 as? NSTextField)?.stringValue.hasPrefix(tr("%@ · %@% used", tr("5H"), 100) + " · " + tr("near limit")) == true }
+              && popoverViews.contains { ($0 as? NSTextField)?.stringValue.hasPrefix(tr("%@ · %@% used", tr("7D"), 72) + " · " + tr("high")) == true },
               "Popover names the high and near-limit levels in words, not only in color")
         // Increase Contrast: dim text near-opaque, stronger tracks and borders; fills unchanged.
         let normalBorder = compactContent.layer?.borderColor.flatMap { NSColor(cgColor: $0) }?.alphaComponent ?? 0
@@ -1106,7 +1109,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         updateUsageViews()
         if let codex = islandCell(.codex) {
             let contrastBorder = compactContent.layer?.borderColor.flatMap { NSColor(cgColor: $0) }?.alphaComponent ?? 0
-            let subtitle = popoverFields().first { $0.stringValue == "Click the island or outside to close" }
+            let subtitle = popoverFields().first { $0.stringValue == tr("Click the island or outside to close") }
             check(codex.ring.highContrast && codex.bar.highContrast && (codex.number.textColor?.alphaComponent ?? 0) >= 0.9
                   && (subtitle?.textColor?.alphaComponent ?? 0) >= 0.9 && contrastBorder > normalBorder,
                   "Increase Contrast strengthens dim text, tracks and borders")
@@ -1125,19 +1128,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                         secondary: CodexUsageWindow(usedPercent: 72, resetsAt: sevenDayReset))
         updateUsageViews()
         var fields = popoverFields()
-        let fiveHourCaption = fields.first { $0.stringValue.hasPrefix("5H · 40% used") }
-        let sevenDayCaption = fields.first { $0.stringValue.hasPrefix("7D · 72% used") }
-        check(fiveHourCaption?.stringValue == "5H · 40% used · resets in 2h 15m"
-              && sevenDayCaption?.stringValue == "7D · 72% used · high · resets in 3d 4h",
+        let fiveHourCaption = fields.first { $0.stringValue.hasPrefix(tr("%@ · %@% used", tr("5H"), 40)) }
+        let sevenDayCaption = fields.first { $0.stringValue.hasPrefix(tr("%@ · %@% used", tr("7D"), 72)) }
+        check(fiveHourCaption?.stringValue == tr("%@ · %@% used", tr("5H"), 40) + tr(" · resets in %@", tr("%@h %@m", 2, 15).replacingOccurrences(of: " ", with: "\u{00A0}"))
+              && sevenDayCaption?.stringValue == tr("%@ · %@% used", tr("7D"), 72) + " · " + tr("high") + tr(" · resets in %@", tr("%@d %@h", 3, 4).replacingOccurrences(of: " ", with: "\u{00A0}")),
               "Popover shows the time left until each window resets")
+        if let view = statusPopover.contentViewController?.view, let five = fiveHourCaption, let seven = sevenDayCaption {
+            view.layoutSubtreeIfNeeded()
+            let card = allViews(view).first { $0.layer?.cornerRadius == 13 && seven.isDescendant(of: $0) }
+            let needed = seven.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: seven.frame.width, height: 1_000)).height ?? .infinity
+            check(seven.frame.height > five.frame.height * 1.5 && needed <= seven.frame.height + 1
+                  && card.map { $0.bounds.contains(seven.convert(seven.bounds, to: $0)) } == true,
+                  "A caption too long for one line wraps to a second line inside its card instead of cutting off the reset time")
+        } else {
+            check(false, "A caption too long for one line wraps to a second line inside its card instead of cutting off the reset time")
+        }
         let year = String(Calendar.current.component(.year, from: Date(timeIntervalSince1970: sevenDayReset)))
-        check(fiveHourCaption?.toolTip == Self.resetTooltip(fiveHourReset) && fiveHourCaption?.toolTip?.hasPrefix("Resets at ") == true
+        check(fiveHourCaption?.toolTip == Self.resetTooltip(fiveHourReset) && fiveHourCaption?.toolTip?.hasPrefix(tr("Resets at %@", "")) == true
               && fiveHourCaption?.toolTip?.contains(year) == false && sevenDayCaption?.toolTip?.contains(year) == true,
               "The absolute reset time is in the tooltip, with the date when it is days away")
         let texts = fields.map(\.stringValue)
-        let captions = texts.filter { $0.hasPrefix("5H · ") || $0.hasPrefix("7D · ") }
-        check(texts.contains("Live AI limits") && !captions.isEmpty
-              && captions.allSatisfy { $0.contains(" used") || $0.hasSuffix(" not available") }
+        let captions = texts.filter { $0.hasPrefix(tr("5H") + " · ") || $0.hasPrefix(tr("7D") + " · ") }
+        check(texts.contains(tr("Live AI limits")) && !captions.isEmpty
+              && captions.allSatisfy { $0.contains(tr("%@% used", "")) || $0.hasSuffix(tr("%@ · not available", "")) }
               && !texts.contains { $0.contains("USED") || $0.contains("UNAVAILABLE") || $0.contains("RESET") || $0 == "LIVE AI LIMITS" },
               "Popover captions are in plain case")
         check(fields.allSatisfy { $0.font?.isFixedPitch == false }, "Popover text uses the proportional system font")
@@ -1155,7 +1168,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         updateUsageViews()
         let updatedButtons = statusPopover.contentViewController.map { allViews($0.view).compactMap { $0 as? NSButton } } ?? []
         check(statusPopover.contentViewController === shownController && fiveHourCaption?.window != nil
-              && fiveHourCaption?.stringValue == "5H · 41% used · resets in 2h 15m"
+              && fiveHourCaption?.stringValue == tr("%@ · %@% used", tr("5H"), 41) + tr(" · resets in %@", tr("%@h %@m", 2, 15).replacingOccurrences(of: " ", with: "\u{00A0}"))
               && fiveHourCaption?.toolTip == Self.resetTooltip(fiveHourReset)
               && !popoverButtons.isEmpty && updatedButtons.count == popoverButtons.count
               && zip(updatedButtons, popoverButtons).allSatisfy { $0 === $1 && $0.toolTip == $1.toolTip },
@@ -1175,7 +1188,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         updateUsageViews()
         check(statusPopover.contentViewController !== shownController, "A change in rows (Codex windows gone) rebuilds the popover")
         fields = popoverFields()
-        check(fields.contains { $0.stringValue == "Limits not available yet" } && !fields.contains { $0.stringValue.hasSuffix("LIMIT UNAVAILABLE") },
+        check(fields.contains { $0.stringValue == tr("Limits not available yet") } && !fields.contains { $0.stringValue.hasSuffix("LIMIT UNAVAILABLE") },
               "Codex without any window shows one quiet line instead of a row per window")
         if let view = statusPopover.contentViewController?.view {
             view.layoutSubtreeIfNeeded()
@@ -1184,7 +1197,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         isCodexUsageLoading = true
         updateUsageViews()
-        check(popoverFields().contains { $0.stringValue == "Loading limits…" }, "Codex shows Loading limits… before the first answer")
+        check(popoverFields().contains { $0.stringValue == tr("Loading limits…") }, "Codex shows Loading limits… before the first answer")
         isCodexUsageLoading = false
         prefersReducedMotion = defaultReducedMotion
         codexUsage = lastCodexUsage
@@ -1204,7 +1217,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let subtitles = statusPopover.contentViewController.map {
             allViews($0.view).compactMap { ($0 as? NSTextField)?.stringValue }
         } ?? []
-        check(statusPopover.isShown && subtitles.contains("Click the island or outside to close")
+        check(statusPopover.isShown && subtitles.contains(tr("Click the island or outside to close"))
               && !subtitles.contains { $0.contains("Hover") },
               "Island click opens the card and the subtitle describes click-only behavior")
         pressIsland(); toggleExpanded()
@@ -1414,7 +1427,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             editor.insertText("\nRegression draft (not saved)", replacementRange: editor.selectedRange())
                             let draft = editor.string
                             try require(draft != original && window.isDocumentEdited
-                                        && configurationStatus?.stringValue.hasPrefix("Edited") == true,
+                                        && configurationStatus?.stringValue.hasPrefix(tr("Edited")) == true,
                                         "Unsaved edit is not marked in the window and status")
                             var asked = 0
                             askAboutUnsavedConfiguration = { _ in asked += 1; return .cancel }
@@ -1432,6 +1445,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             Self.pressCommand("a", keyCode: 0, in: window)
                             try require(editor.selectedRange() == NSRange(location: 0, length: (draft as NSString).length),
                                         "Command-A did not select all editor text")
+                            NSApp.mainMenu?.update()
+                            let undoItem = NSApp.mainMenu?.items.flatMap { $0.submenu?.items ?? [] }
+                                .first { $0.action == #selector(undoInFrontWindow) }
+                            try require(undoItem?.title == tr("Undo") && undoItem?.isEnabled == (editor.undoManager?.canUndo == true),
+                                        "Undo menu item lost its translated title or does not follow the editor's undo state")
                             editor.setSelectedRange(NSRange(location: 0, length: 0))
                             var reviewed = false, syntaxProblem: (error: ConfigurationSyntaxError, canOverride: Bool)?
                             confirmConfigurationSave = { _ in reviewed = true; return false }
@@ -1451,7 +1469,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                 // The appended plain-text line is invalid in both formats.
                                 guard let problem = syntaxProblem else { throw RegressionFailure(message: "⌘S saved invalid \(format) without a syntax check") }
                                 try require(editor.selectedRange().location == problem.error.offset
-                                            && configurationStatus?.stringValue.hasPrefix("Syntax error · line \(problem.error.line)") == true,
+                                            && configurationStatus?.stringValue == tr("Syntax error · %@", problem.error),
                                             "Syntax error position is not selected or not shown in the status")
                                 try require((try? String(contentsOf: file, encoding: .utf8)) == original, "Invalid draft wrote the file")
                                 if format == "json" {
@@ -1525,12 +1543,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             func shortcut(_ key: String, _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem? {
                 menuItems.first { $0.keyEquivalent == key && $0.keyEquivalentModifierMask == modifiers }
             }
-            try require(shortcut("q")?.title == "Quit AI Island" && shortcut("q")?.action == #selector(NSApplication.terminate(_:))
-                        && shortcut("w")?.title == "Close Window" && shortcut("w")?.action == #selector(NSWindow.performClose(_:))
+            try require(shortcut("q")?.title == tr("Quit AI Island") && shortcut("q")?.action == #selector(NSApplication.terminate(_:))
+                        && shortcut("w")?.title == tr("Close Window") && shortcut("w")?.action == #selector(NSWindow.performClose(_:))
                         && !menuItems.contains { $0.title.contains("Close Settings") },
                         "Menu names do not match their actions (Quit AI Island ⌘Q, Close Window ⌘W)")
             try require(["Undo": shortcut("z"), "Redo": shortcut("z", [.command, .shift]), "Cut": shortcut("x"),
-                         "Copy": shortcut("c"), "Paste": shortcut("v"), "Select All": shortcut("a")].allSatisfy { $0.value?.title == $0.key },
+                         "Copy": shortcut("c"), "Paste": shortcut("v"), "Select All": shortcut("a")].allSatisfy { $0.value?.title == tr($0.key) },
                         "Edit menu shortcuts are missing")
             checks.append("PASS: menu has Quit AI Island ⌘Q, Close Window ⌘W and standard Edit shortcuts")
             openSettings()
@@ -1595,23 +1613,37 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return item
         }
         submenu("AI Island", [
-            item("Open Settings…", #selector(openSettings), ","),
-            item("Claude Accounts & Sessions…", #selector(openClaudeAccounts), ""),
-            item("Refresh configuration", #selector(refreshInventory), "r"),
+            item(tr("Open Settings…"), #selector(openSettings), ","),
+            item(tr("Claude Accounts & Sessions…"), #selector(openClaudeAccounts), ""),
+            item(tr("Refresh configuration"), #selector(refreshInventory), "r"),
             .separator(),
-            item("Quit AI Island", #selector(NSApplication.terminate(_:)), "q"),
+            item(tr("Quit AI Island"), #selector(NSApplication.terminate(_:)), "q"),
         ])
-        submenu("File", [item("Close Window", #selector(NSWindow.performClose(_:)), "w")])
-        submenu("Edit", [
-            item("Undo", Selector(("undo:")), "z"),
-            item("Redo", Selector(("redo:")), "z", [.command, .shift]),
+        submenu(tr("File"), [item(tr("Close Window"), #selector(NSWindow.performClose(_:)), "w")])
+        submenu(tr("Edit"), [
+            item(tr("Undo"), #selector(undoInFrontWindow), "z"),
+            item(tr("Redo"), #selector(redoInFrontWindow), "z", [.command, .shift]),
             .separator(),
-            item("Cut", #selector(NSText.cut(_:)), "x"),
-            item("Copy", #selector(NSText.copy(_:)), "c"),
-            item("Paste", #selector(NSText.paste(_:)), "v"),
-            item("Select All", #selector(NSText.selectAll(_:)), "a"),
+            item(tr("Cut"), #selector(NSText.cut(_:)), "x"),
+            item(tr("Copy"), #selector(NSText.copy(_:)), "c"),
+            item(tr("Paste"), #selector(NSText.paste(_:)), "v"),
+            item(tr("Select All"), #selector(NSText.selectAll(_:)), "a"),
         ])
         NSApp.mainMenu = menu
+    }
+
+    // AppKit retitles the standard undo:/redo: items in English ("Undo Typing");
+    // these actions do the same through the front window and keep the translated titles.
+    @objc private func undoInFrontWindow(_ sender: Any?) { NSApp.keyWindow?.firstResponder?.undoManager?.undo() }
+    @objc private func redoInFrontWindow(_ sender: Any?) { NSApp.keyWindow?.firstResponder?.undoManager?.redo() }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        let undoManager = NSApp.keyWindow?.firstResponder?.undoManager
+        switch item.action {
+        case #selector(undoInFrontWindow): return undoManager?.canUndo == true
+        case #selector(redoInFrontWindow): return undoManager?.canRedo == true
+        default: return true
+        }
     }
 
     private func buildStatusItem() {
@@ -1619,12 +1651,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         item.button?.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "AI Island")
         item.button?.title = " AI"
         let menu = NSMenu(title: "AI Island")
-        menu.addItem(NSMenuItem(title: "Show / hide island", action: #selector(toggleIsland), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Open Settings…", action: #selector(openSettings), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Claude Accounts & Sessions…", action: #selector(openClaudeAccounts), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Refresh configuration", action: #selector(refreshInventory), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("Show / hide island"), action: #selector(toggleIsland), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("Open Settings…"), action: #selector(openSettings), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("Claude Accounts & Sessions…"), action: #selector(openClaudeAccounts), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("Refresh configuration"), action: #selector(refreshInventory), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit AI Island", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("Quit AI Island"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
         item.menu = menu
     }
 
@@ -1650,9 +1682,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         compactContent.setAccessibilityElement(true)
         compactContent.setAccessibilityRole(.group)
         compactContent.setAccessibilityLabel("AI Island")
-        compactContent.setAccessibilityHelp("Live AI limits. Click to show or hide the limits card.")
+        compactContent.setAccessibilityHelp(tr("Live AI limits. Click to show or hide the limits card."))
         compactContent.setAccessibilityCustomActions([
-            NSAccessibilityCustomAction(name: "Show or hide limits card", target: self, selector: #selector(toggleLimitsCardForAccessibility)),
+            NSAccessibilityCustomAction(name: tr("Show or hide limits card"), target: self, selector: #selector(toggleLimitsCardForAccessibility)),
         ])
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(accessibilityDisplayOptionsChanged),
@@ -1751,8 +1783,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     static func levelWord(percent: Double) -> String? {
         switch UsageLevel(percent: percent) {
         case .normal: nil
-        case .warning: "high"
-        case .critical: "near limit"
+        case .warning: tr("high")
+        case .critical: tr("near limit")
         }
     }
 
@@ -1960,17 +1992,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func apply(_ status: ClaudeAccountsWindow.IslandStatus, toolTip: String?, to views: IslandSessionViews) {
         let state: (text: String, color: NSColor) = if status.limitReached {
-            ("Limit reached", .systemRed)
+            (tr("Limit reached"), .systemRed)
         } else if let percent = status.percent {
-            ("\(Int(percent))% used" + (status.stale ? " · last known" : status.restored ? " · restored" : ""),
+            (tr("%@% used", Int(percent)) + (status.stale ? tr(" · last known") : status.restored ? tr(" · restored") : ""),
              status.stale ? quietText(0.55) : usageColor(accent: quietText(0.7), percent: percent))
         } else {
-            ("Usage unknown" + (status.restored ? " · restored" : ""), quietText(0.55))
+            (tr("Usage unknown") + (status.restored ? tr(" · restored") : ""), quietText(0.55))
         }
         views.account.show(status.account, color: .white)
         views.state.show(state.text, color: state.color)
         if let button = views.button, let standby = status.standby {
-            let title = "Continue with \(standby) →"
+            let title = tr("Continue with %@ →", standby)
             if button.attributedTitle.string != title {
                 button.attributedTitle = NSAttributedString(string: title, attributes: [
                     .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: accentColor(for: .claude),
@@ -2000,25 +2032,25 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let windows = IslandWindows(fiveHour: codexUsage?.primary.map { Double($0.usedPercent) },
                                         sevenDay: codexUsage?.secondary.map { Double($0.usedPercent) })
             if windows.hasAny { return .known(windows) }
-            if CodexUsageReader.executable == nil { return .unknown(reason: "Codex CLI not found") }
+            if CodexUsageReader.executable == nil { return .unknown(reason: tr("Codex CLI not found")) }
             if !didFinishCodexUsageRequest { return .loading }
-            return .unknown(reason: "Codex did not report limits")
+            return .unknown(reason: tr("Codex did not report limits"))
         case .claude:
             if let windows = claudeIslandWindows { return .known(windows) }
-            if ClaudeAuthReader.executable == nil { return .unknown(reason: "Claude CLI not found") }
-            return .unknown(reason: "no usage recorded yet — limits appear after Claude's next response")
+            if ClaudeAuthReader.executable == nil { return .unknown(reason: tr("Claude CLI not found")) }
+            return .unknown(reason: tr("no usage recorded yet — limits appear after Claude's next response"))
         }
     }
 
     private func islandToolTip(for provider: Provider, usage: IslandUsage) -> String {
         switch usage {
         case .loading:
-            return "\(provider.rawValue) · loading limits…"
+            return tr("%@ · loading limits…", provider.rawValue)
         case .unknown(let reason):
-            return "\(provider.rawValue) · limits unknown: \(reason)"
+            return tr("%@ · limits unknown: %@", provider.rawValue, reason)
         case .known(let windows):
-            func describe(_ percent: Double?) -> String { percent.map { "\(Int($0.rounded()))% used" } ?? "unknown" }
-            let legend = "\(provider.rawValue) · Ring: 5H \(describe(windows.fiveHour)) · Bar: 7D \(describe(windows.sevenDay))"
+            func describe(_ percent: Double?) -> String { percent.map { tr("%@% used", Int($0.rounded())) } ?? tr("unknown") }
+            let legend = tr("%@ · Ring: 5H %@ · Bar: 7D %@", provider.rawValue, describe(windows.fiveHour), describe(windows.sevenDay))
             guard provider == .claude else { return legend }
             return ([legend, claudeAccounts?.islandSummary, claudeUsageSummary].compactMap { $0 }).joined(separator: "\n")
         }
@@ -2028,16 +2060,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func islandAccessibilityLabel(for provider: Provider, usage: IslandUsage) -> String {
         switch usage {
         case .loading:
-            return "\(provider.rawValue), loading limits"
+            return tr("%@, loading limits", provider.rawValue)
         case .unknown(let reason):
-            return "\(provider.rawValue), limits unknown: \(reason)"
+            return tr("%@, limits unknown: %@", provider.rawValue, reason)
         case .known(let windows):
             func describe(_ title: String, _ percent: Double?) -> String {
-                guard let percent else { return "\(title) limit unknown" }
-                return (["\(title) limit \(Int(percent.rounded()))% used", Self.levelWord(percent: percent)]
+                guard let percent else { return tr("%@ limit unknown", title) }
+                return ([tr("%@ limit %@% used", title, Int(percent.rounded())), Self.levelWord(percent: percent)]
                     .compactMap { $0 }).joined(separator: ", ")
             }
-            return [provider.rawValue, describe("5-hour", windows.fiveHour), describe("7-day", windows.sevenDay)]
+            return [provider.rawValue, describe(tr("5-hour"), windows.fiveHour), describe(tr("7-day"), windows.sevenDay)]
                 .joined(separator: ", ")
         }
     }
@@ -2238,10 +2270,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             var shape: String {
                 switch self {
                 case .source: "source"
-                case .usage(_, _, _, let bar): bar == nil ? "line" : "bar"
+                case .usage(let caption, _, _, let bar): (bar == nil ? "line" : "bar") + (Self.wraps(caption) ? " wrapped" : "")
                 case .note: "note"
                 case .gap: "gap"
                 }
+            }
+            /// Usage captions wrap to a second line instead of cutting off the reset time;
+            /// a change in line count rebuilds the popover so the card height follows.
+            static let captionWidth: CGFloat = 296
+            static var captionFont: NSFont { .monospacedDigitSystemFont(ofSize: 11, weight: .medium) }
+            static func wraps(_ caption: String) -> Bool {
+                (caption as NSString).size(withAttributes: [.font: captionFont]).width > captionWidth - 4
             }
         }
         struct Card: Equatable {
@@ -2266,15 +2305,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let accent = accentColor(for: provider)
             var items: [PopoverModel.Item] = []
             if provider == .codex {
-                items = usageWindowItems([("5H", codexUsage?.primary), ("7D", codexUsage?.secondary)], accent: accent,
+                items = usageWindowItems([(tr("5H"), codexUsage?.primary), (tr("7D"), codexUsage?.secondary)], accent: accent,
                                          loading: isCodexUsageLoading && codexUsage == nil)
             } else {
                 let current = currentClaudeSource
                 for (index, source) in claudeSources.enumerated() {
                     if index > 0 { items.append(.gap) }
-                    items.append(.source(title: source.name + (source.name == current?.name ? " · now" : ""), detail: source.detail))
-                    items += usageWindowItems([("5H", source.fiveHour), ("7D", source.sevenDay)], accent: accent,
-                                              suffix: source.stale ? " · last known" : "")
+                    items.append(.source(title: source.name + (source.name == current?.name ? tr(" · now") : ""), detail: source.detail))
+                    items += usageWindowItems([(tr("5H"), source.fiveHour), (tr("7D"), source.sevenDay)], accent: accent,
+                                              suffix: source.stale ? tr(" · last known") : "")
                 }
                 if let summary = claudeAccounts?.islandSummary {
                     items.append(.note(summary, color: accent.withAlphaComponent(0.9)))
@@ -2331,10 +2370,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         stack.edgeInsets = NSEdgeInsets(top: 18, left: 16, bottom: 16, right: 16)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        let heading = NSTextField(labelWithString: "Live AI limits")
+        let heading = NSTextField(labelWithString: tr("Live AI limits"))
         heading.font = .systemFont(ofSize: 14, weight: .bold)
         heading.textColor = .white
-        let subtitle = NSTextField(labelWithString: "Click the island or outside to close")
+        let subtitle = NSTextField(labelWithString: tr("Click the island or outside to close"))
         subtitle.font = .systemFont(ofSize: 12, weight: .medium)
         subtitle.textColor = quietText(0.62)
         stack.addArrangedSubview(heading)
@@ -2347,9 +2386,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let actions = NSStackView()
         actions.orientation = .horizontal
         actions.spacing = 8
-        for (symbol, tip, action) in [("arrow.clockwise", "Refresh limits", #selector(refreshAndReopenPopover)),
-                                      ("gearshape", "Manage AI Island", #selector(openSettingsFromPopover)),
-                                      ("arrow.down.circle", "Update Claude Code and Codex CLI", #selector(updateCLIs))] {
+        for (symbol, tip, action) in [("arrow.clockwise", tr("Refresh limits"), #selector(refreshAndReopenPopover)),
+                                      ("gearshape", tr("Manage AI Island"), #selector(openSettingsFromPopover)),
+                                      ("arrow.down.circle", tr("Update Claude Code and Codex CLI"), #selector(updateCLIs))] {
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?
                 .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold)) ?? NSImage()
             let button = NSButton(image: image, target: self, action: action)
@@ -2386,7 +2425,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         card.layer?.borderColor = hairline(0.42, accent).cgColor
         card.setAccessibilityElement(true)
         card.setAccessibilityRole(.group)
-        card.setAccessibilityLabel("\(provider.rawValue) limits")
+        card.setAccessibilityLabel(tr("%@ limits", provider.rawValue))
 
         let dot = NSTextField(labelWithString: model.detected ? "●" : "○")
         dot.textColor = accent
@@ -2402,7 +2441,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         var content: [NSView] = [topRow]
         // File counts live in Settings; the card is about limits only.
         if !model.detected {
-            let state = NSTextField(labelWithString: "Not detected")
+            let state = NSTextField(labelWithString: tr("Not detected"))
             state.font = .systemFont(ofSize: 13, weight: .semibold)
             state.textColor = quietText(0.78)
             content.append(state)
@@ -2446,11 +2485,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             header.widthAnchor.constraint(equalToConstant: 296).isActive = true
             return ([header], [title, detail])
         case .usage(_, _, _, let bar):
-            let caption = NSTextField(labelWithString: "")
-            caption.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-            caption.lineBreakMode = .byTruncatingTail
+            let caption = NSTextField(wrappingLabelWithString: "")
+            caption.font = PopoverModel.Item.captionFont
+            caption.maximumNumberOfLines = 2
+            caption.cell?.truncatesLastVisibleLine = true
+            caption.preferredMaxLayoutWidth = PopoverModel.Item.captionWidth
+            caption.isSelectable = false
             guard bar != nil else { return ([caption], [caption]) }
-            let barView = UsageBarView(width: 296, height: 6, trackAlpha: 0.13)
+            let barView = UsageBarView(width: PopoverModel.Item.captionWidth, height: 6, trackAlpha: 0.13)
             return ([caption, barView], [caption, barView])
         case .note:
             let caption = NSTextField(labelWithString: "")
@@ -2497,7 +2539,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         var sources: [ClaudeSource] = []
         if claudeLoggedIn != false || claudeUsage != nil {
-            sources.append(ClaudeSource(name: "Default", detail: "claude · ~/.claude", fiveHour: window(claudeUsage?.fiveHour),
+            sources.append(ClaudeSource(name: tr("Default"), detail: "claude · ~/.claude", fiveHour: window(claudeUsage?.fiveHour),
                                         sevenDay: window(claudeUsage?.sevenDay), updated: claudeUsage?.capturedAt, stale: claudeUsage?.stale ?? false))
         }
         for row in claudeAccounts?.usageRows ?? [] {
@@ -2525,7 +2567,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let sources = claudeSources
         let candidates = [currentClaudeSource,
                           claudeAccounts?.activeAccountName.flatMap { name in sources.first { $0.name == name } },
-                          sources.first { $0.name == "Default" }]
+                          sources.first { $0.name == tr("Default") }]
         return candidates.lazy.compactMap { source in
             source.map { IslandWindows(fiveHour: $0.fiveHour.map { Double($0.usedPercent) },
                                        sevenDay: $0.sevenDay.map { Double($0.usedPercent) }) }
@@ -2534,8 +2576,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private var claudeUsageSummary: String? {
         let lines = claudeSources.map { source in
-            let parts = [("5H", source.fiveHour), ("7D", source.sevenDay)].compactMap { title, w in w.map { "\(title) \($0.usedPercent)%" } }
-            return "\(source.name): " + (parts.isEmpty ? source.detail : parts.joined(separator: " · ")) + (source.name == currentClaudeSource?.name ? " (now)" : "")
+            let parts = [(tr("5H"), source.fiveHour), (tr("7D"), source.sevenDay)].compactMap { title, w in w.map { "\(title) \($0.usedPercent)%" } }
+            return "\(source.name): " + (parts.isEmpty ? source.detail : parts.joined(separator: " · ")) + (source.name == currentClaudeSource?.name ? tr(" (now)") : "")
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
@@ -2552,18 +2594,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                   suffix: String = "", loading: Bool = false) -> [PopoverModel.Item] {
         let quiet = quietText(0.55)
         guard windows.contains(where: { $0.window != nil }) else {
-            return [.usage(caption: loading ? "Loading limits…" : "Limits not available yet", color: quiet, toolTip: nil, bar: nil)]
+            return [.usage(caption: loading ? tr("Loading limits…") : tr("Limits not available yet"), color: quiet, toolTip: nil, bar: nil)]
         }
         return windows.map { title, window in
             guard let window else {
-                return .usage(caption: "\(title) · not available", color: quiet, toolTip: nil,
+                return .usage(caption: tr("%@ · not available", title), color: quiet, toolTip: nil,
                               bar: PopoverModel.Bar(progress: 0.02, accent: accent.withAlphaComponent(0.45)))
             }
-            var text = "\(title) · \(window.usedPercent)% used"
+            var text = tr("%@ · %@% used", title, window.usedPercent)
             if let word = Self.levelWord(percent: Double(window.usedPercent)) { text += " · \(word)" }
             if let resetsAt = window.resetsAt {
                 let left = ResetCountdown.text(until: resetsAt, now: Date().timeIntervalSince1970)
-                text += left == "now" ? " · resets now" : " · resets in \(left)"
+                // A wrapped caption keeps "3 kun 4 soat" together on one line.
+                text += left == tr("now") ? tr(" · resets now") : tr(" · resets in %@", left.replacingOccurrences(of: " ", with: "\u{00A0}"))
             }
             return .usage(caption: text + suffix, color: accent.withAlphaComponent(0.94), toolTip: window.resetsAt.map(Self.resetTooltip),
                           bar: PopoverModel.Bar(progress: CGFloat(window.usedPercent) / 100,
@@ -2575,9 +2618,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     static func resetTooltip(_ resetsAt: TimeInterval) -> String {
         let date = Date(timeIntervalSince1970: resetsAt)
         let formatter = DateFormatter()
+        formatter.locale = Language.current.locale
         formatter.timeStyle = .short
         formatter.dateStyle = date.timeIntervalSinceNow > 86_400 ? .medium : .none
-        return "Resets at \(formatter.string(from: date))"
+        return tr("Resets at %@", formatter.string(from: date))
     }
 
     /// Runs each CLI's own updater (it knows whether it came from Homebrew, npm or a native install).
@@ -2587,15 +2631,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     for cli in claude codex; do
       echo
       if command -v "$cli" >/dev/null 2>&1; then
-        echo "==> Updating $cli ($("$cli" --version 2>/dev/null | head -1))"
-        "$cli" update || echo "$cli update failed."
-        echo "==> $cli is now $("$cli" --version 2>/dev/null | head -1)"
+        echo "==> \(tr("Updating %@", "$cli")) ($("$cli" --version 2>/dev/null | head -1))"
+        "$cli" update || echo "\(tr("%@ update failed.", "$cli"))"
+        echo "==> \(tr("%@ is now %@", "$cli", #"$("$cli" --version 2>/dev/null | head -1)"#))"
       else
-        echo "==> $cli not found, skipped."
+        echo "==> \(tr("%@ not found, skipped.", "$cli"))"
       fi
     done
     echo
-    echo "Done. You can close this window."
+    echo "\(tr("Done. You can close this window."))"
     """
     /// Regression hook: records the script instead of opening Terminal.
     var openUpdateScript: (URL) -> Bool = { NSWorkspace.shared.open($0) }
@@ -2605,8 +2649,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         do {
             try Data(Self.updateScript.utf8).write(to: url, options: .atomic)
             chmod(url.path, 0o700)
-            if !openUpdateScript(url) { presentConfigurationError("Terminal could not open the update script.") }
-        } catch { presentConfigurationError("Unable to prepare the CLI update.") }
+            if !openUpdateScript(url) { presentConfigurationError(tr("Terminal could not open the update script.")) }
+        } catch { presentConfigurationError(tr("Unable to prepare the CLI update.")) }
     }
 
     @objc private func refreshAndReopenPopover() {
@@ -2694,7 +2738,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         appName.setContentCompressionResistancePriority(.required, for: .vertical)
         appName.font = .monospacedSystemFont(ofSize: 13, weight: .bold)
         appName.textColor = .secondaryLabelColor
-        let appSubtitle = NSTextField(wrappingLabelWithString: "Global AI configuration")
+        let appSubtitle = NSTextField(wrappingLabelWithString: tr("Global AI configuration"))
         appSubtitle.font = .systemFont(ofSize: 18, weight: .bold)
         appSubtitle.maximumNumberOfLines = 2
         sidebarStack.addArrangedSubview(appName)
@@ -2746,7 +2790,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             backing: .buffered,
             defer: false
         )
-        window.title = "AI Island Settings"
+        window.title = tr("AI Island Settings")
         // AppDelegate retains and reuses this window after the close button.
         // AppKit's extra release on close would leave our stored reference dangling.
         window.isReleasedWhenClosed = false
@@ -2761,7 +2805,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     /// What actually happens on save and delete, shown under the Settings sidebar.
-    static let backupNote = "Before AI Island saves or deletes a file, it copies the current version to ~/Library/Application Support/AI Island/Backups."
+    static let backupNote = tr("Before AI Island saves or deletes a file, it copies the current version to ~/Library/Application Support/AI Island/Backups.")
 
     private func configureClaudeAccounts() {
         guard claudeAccounts == nil else { return }
@@ -2772,7 +2816,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 self?.collapseIsland()
             }
             claudeAccounts = controller
-        } catch { presentConfigurationError("Unable to open Claude session storage.") }
+        } catch { presentConfigurationError(tr("Unable to open Claude session storage.")) }
     }
 
     @objc private func continueClaudeAccount() {
@@ -2803,10 +2847,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         heading.font = .systemFont(ofSize: 28, weight: .bold)
         let subtitle: String
         switch selectedSettingsArea {
-        case .overview: subtitle = "A single control center for your local AI tooling."
-        case .accounts: subtitle = "Claude accounts, their status and current usage."
-        case .codex: subtitle = "Global configuration discovered in ~/.codex"
-        case .claude: subtitle = claudeLoggedIn == false ? "Claude is signed out and hidden from the island." : "Global configuration discovered in ~/.claude"
+        case .overview: subtitle = tr("A single control center for your local AI tooling.")
+        case .accounts: subtitle = tr("Claude accounts, their status and current usage.")
+        case .codex: subtitle = tr("Global configuration discovered in ~/.codex")
+        case .claude: subtitle = claudeLoggedIn == false ? tr("Claude is signed out and hidden from the island.") : tr("Global configuration discovered in ~/.claude")
         }
         let subheading = NSTextField(labelWithString: subtitle)
         subheading.font = .systemFont(ofSize: 14, weight: .medium)
@@ -2819,7 +2863,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 stack.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -(stack.edgeInsets.left + stack.edgeInsets.right)).isActive = true
             }
-            let manage = NSButton(title: "Manage Accounts & Sessions…", target: self, action: #selector(openClaudeAccounts))
+            let manage = NSButton(title: tr("Manage Accounts & Sessions…"), target: self, action: #selector(openClaudeAccounts))
             manage.identifier = NSUserInterfaceItemIdentifier("accounts-manage")
             stack.addArrangedSubview(manage)
         } else if let provider = selectedSettingsArea.provider {
@@ -2833,8 +2877,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 let snapshot = snapshots.first(where: { $0.provider == provider }) ?? ConfigInventory.snapshot(for: provider)
                 let visible = provider != .claude || claudeLoggedIn != false
                 let detailText = visible
-                    ? "\(snapshot.stateText) · visible on island"
-                    : "Signed out · hidden from island"
+                    ? tr("%@ · visible on island", snapshot.stateText)
+                    : tr("Signed out · hidden from island")
                 let card = overviewCard(provider: provider, detail: detailText)
                 stack.addArrangedSubview(card)
                 card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -(stack.edgeInsets.left + stack.edgeInsets.right)).isActive = true
@@ -2864,10 +2908,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         detail.font = .systemFont(ofSize: 12, weight: .medium)
         detail.textColor = .secondaryLabelColor
         detail.lineBreakMode = .byTruncatingTail
-        let windows = [("5H", source.fiveHour), ("7D", source.sevenDay)].compactMap { title, window in
+        let windows = [(tr("5H"), source.fiveHour), (tr("7D"), source.sevenDay)].compactMap { title, window in
             window.map { "\(title) \($0.usedPercent)%" }
         }
-        let usageText = windows.isEmpty ? "Usage unknown" : windows.joined(separator: " · ") + (source.stale ? " · last known" : "")
+        let usageText = windows.isEmpty ? tr("Usage unknown") : windows.joined(separator: " · ") + (source.stale ? tr(" · last known") : "")
         let usage = NSTextField(labelWithString: usageText)
         usage.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         usage.textColor = windows.isEmpty || source.stale ? .secondaryLabelColor : .labelColor
@@ -2924,10 +2968,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func configurationCard(_ category: ConfigurationCategory, provider: Provider) -> NSView {
         let accent = accentColor(for: provider)
         let fileCount = managedFiles(in: category).count
-        let status = fileCount > 0 ? "\(fileCount) FILE\(fileCount == 1 ? "" : "S")" : "NOT CONFIGURED"
+        let status = fileCount == 0 ? tr("NOT CONFIGURED") : fileCount == 1 ? tr("%@ FILE", fileCount) : tr("%@ FILES", fileCount)
         let card = ConfigurationCardButton(title: "", target: self, action: #selector(openConfigurationCategory(_:)))
         card.identifier = NSUserInterfaceItemIdentifier("\(provider.rawValue)::\(category.title)")
-        card.toolTip = "Click to manage \(category.title)"
+        card.toolTip = tr("Click to manage %@", category.displayTitle)
         card.isBordered = false
         card.alignment = .left
         card.bezelStyle = .regularSquare
@@ -2938,12 +2982,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         card.layer?.borderColor = accent.withAlphaComponent(0.28).cgColor
         card.heightAnchor.constraint(equalToConstant: 66).isActive = true
 
-        let icon = NSImageView(image: NSImage(systemSymbolName: category.symbol, accessibilityDescription: category.title) ?? NSImage())
+        let icon = NSImageView(image: NSImage(systemSymbolName: category.symbol, accessibilityDescription: category.displayTitle) ?? NSImage())
         icon.contentTintColor = accent
         icon.translatesAutoresizingMaskIntoConstraints = false
-        let title = NSTextField(labelWithString: category.title)
+        let title = NSTextField(labelWithString: category.displayTitle)
         title.font = .systemFont(ofSize: 15, weight: .bold)
-        let detail = NSTextField(labelWithString: category.detail)
+        let detail = NSTextField(labelWithString: tr(category.detail))
         detail.font = .systemFont(ofSize: 12, weight: .medium)
         detail.textColor = .secondaryLabelColor
         let labels = NSStackView(views: [title, detail])
@@ -2976,7 +3020,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let area: SettingsArea = provider == .codex ? .codex : .claude
         let button = ConfigurationCardButton(title: "", target: self, action: #selector(openProviderSettings(_:)))
         button.identifier = NSUserInterfaceItemIdentifier(provider.rawValue)
-        button.toolTip = "Open \(provider.rawValue) settings"
+        button.toolTip = tr("Open %@ settings", provider.rawValue)
         button.isBordered = false
         button.bezelStyle = .regularSquare
         button.wantsLayer = true
@@ -2985,7 +3029,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         button.layer?.borderWidth = 1
         button.layer?.borderColor = accentColor(for: provider).withAlphaComponent(0.28).cgColor
         button.heightAnchor.constraint(equalToConstant: 76).isActive = true
-        button.setAccessibilityLabel("Open \(area.title) settings")
+        button.setAccessibilityLabel(tr("Open %@ settings", area.title))
 
         let accent = accentColor(for: provider)
         let icon = NSImageView(image: NSImage(systemSymbolName: provider == .codex ? "circle.hexagongrid.fill" : "sparkle", accessibilityDescription: provider.rawValue) ?? NSImage())
@@ -3002,7 +3046,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         labels.alignment = .leading
         labels.spacing = 4
         labels.translatesAutoresizingMaskIntoConstraints = false
-        let status = NSTextField(labelWithString: provider == .claude && claudeLoggedIn == false ? "HIDDEN" : "OPEN SETTINGS  ›")
+        let status = NSTextField(labelWithString: provider == .claude && claudeLoggedIn == false ? tr("HIDDEN") : tr("OPEN SETTINGS  ›"))
         status.font = .monospacedSystemFont(ofSize: 10, weight: .bold)
         status.textColor = accent
         status.translatesAutoresizingMaskIntoConstraints = false
@@ -3043,7 +3087,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         activeConfigurationFile = nil
         buildConfigurationWindowIfNeeded()
         configurationSearch?.stringValue = ""
-        configurationWindow?.title = "\(provider.rawValue) · \(category.title)"
+        configurationWindow?.title = "\(provider.rawValue) · \(category.displayTitle)"
         refreshConfigurationFiles()
         configurationWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -3056,14 +3100,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         split.dividerStyle = .thin
         let filePanel = NSView(frame: NSRect(x: 0, y: 0, width: 230, height: 620))
         filePanel.autoresizingMask = [.height]
-        let fileCount = NSTextField(labelWithString: "Files")
+        let fileCount = NSTextField(labelWithString: tr("Files"))
         fileCount.font = .systemFont(ofSize: 12, weight: .semibold)
         fileCount.textColor = .secondaryLabelColor
         fileCount.translatesAutoresizingMaskIntoConstraints = false
         configurationFileCount = fileCount
-        let newFile = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "New file") ?? NSImage(), target: self, action: #selector(createConfigurationFile))
+        let newFile = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: tr("New file")) ?? NSImage(), target: self, action: #selector(createConfigurationFile))
         newFile.bezelStyle = .rounded
-        newFile.toolTip = "Create a file in this category"
+        newFile.toolTip = tr("Create a file in this category")
         newFile.widthAnchor.constraint(equalToConstant: 40).isActive = true
         newFile.heightAnchor.constraint(equalToConstant: 40).isActive = true
         configurationNewFileButton = newFile
@@ -3072,7 +3116,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         listHeader.alignment = .centerY
         listHeader.translatesAutoresizingMaskIntoConstraints = false
         let search = NSSearchField()
-        search.placeholderString = "Search files or skills"
+        search.placeholderString = tr("Search files or skills")
         search.sendsSearchStringImmediately = true
         search.target = self
         search.action = #selector(filterConfigurationFiles)
@@ -3086,7 +3130,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         listScroll.translatesAutoresizingMaskIntoConstraints = false
         let table = NSTableView()
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("file"))
-        column.title = "Files"
+        column.title = tr("Files")
         column.width = 250
         column.minWidth = 150
         table.addTableColumn(column)
@@ -3148,18 +3192,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         editorScroll.documentView = editor
         configurationEditor = editor
 
-        let status = NSTextField(labelWithString: "Select a configuration file")
+        let status = NSTextField(labelWithString: tr("Select a configuration file"))
         status.font = .systemFont(ofSize: 11, weight: .medium)
         status.textColor = .secondaryLabelColor
         status.translatesAutoresizingMaskIntoConstraints = false
         configurationStatus = status
         status.lineBreakMode = .byTruncatingMiddle
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let fileTitle = NSTextField(labelWithString: "Select a file")
+        let fileTitle = NSTextField(labelWithString: tr("Select a file"))
         fileTitle.font = .systemFont(ofSize: 18, weight: .semibold)
         fileTitle.lineBreakMode = .byTruncatingMiddle
         fileTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let fileSubtitle = NSTextField(labelWithString: "Choose a file from the sidebar to edit")
+        let fileSubtitle = NSTextField(labelWithString: tr("Choose a file from the sidebar to edit"))
         fileSubtitle.font = .systemFont(ofSize: 11, weight: .medium)
         fileSubtitle.textColor = .secondaryLabelColor
         fileSubtitle.lineBreakMode = .byTruncatingMiddle
@@ -3175,21 +3219,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         heading.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
         fileTitle.widthAnchor.constraint(equalTo: heading.widthAnchor).isActive = true
         fileSubtitle.widthAnchor.constraint(equalTo: heading.widthAnchor).isActive = true
-        let deleteFile = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete file") ?? NSImage(), target: self, action: #selector(deleteConfigurationFile))
+        let deleteFile = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: tr("Delete file")) ?? NSImage(), target: self, action: #selector(deleteConfigurationFile))
         deleteFile.bezelStyle = .rounded
         deleteFile.contentTintColor = .systemRed
-        deleteFile.toolTip = "Delete selected file (confirmation required)"
+        deleteFile.toolTip = tr("Delete selected file (confirmation required)")
         deleteFile.isEnabled = false
         deleteFile.widthAnchor.constraint(equalToConstant: 40).isActive = true
         deleteFile.heightAnchor.constraint(equalToConstant: 40).isActive = true
         configurationDeleteButton = deleteFile
-        let save = NSButton(title: "Review & Save", target: self, action: #selector(saveConfigurationFile))
+        let save = NSButton(title: tr("Review & Save"), target: self, action: #selector(saveConfigurationFile))
         save.bezelStyle = .rounded
         save.contentTintColor = .controlAccentColor
         save.isEnabled = false
         save.keyEquivalent = "s"
         save.keyEquivalentModifierMask = .command
-        save.toolTip = "Review and save with a backup (⌘S)"
+        save.toolTip = tr("Review and save with a backup (⌘S)")
         save.heightAnchor.constraint(equalToConstant: 40).isActive = true
         configurationSaveButton = save
         deleteFile.setContentHuggingPriority(.required, for: .horizontal)
@@ -3315,8 +3359,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let query = configurationSearch?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         configurationFiles = allConfigurationFiles.filter { query.isEmpty || displayedFilePath($0).localizedCaseInsensitiveContains(query) }
         configurationFileCount?.stringValue = query.isEmpty
-            ? "\(configurationFiles.count) file\(configurationFiles.count == 1 ? "" : "s")"
-            : "\(configurationFiles.count) of \(allConfigurationFiles.count) files"
+            ? (configurationFiles.count == 1 ? tr("%@ file", 1) : tr("%@ files", configurationFiles.count))
+            : tr("%@ of %@ files", configurationFiles.count, allConfigurationFiles.count)
         isUpdatingConfigurationTable = true
         table.deselectAll(nil)
         table.reloadData()
@@ -3335,9 +3379,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             configurationWindow?.isDocumentEdited = false
             configurationEditor?.string = ""
             configurationEditor?.isEditable = false
-            configurationFileTitle?.stringValue = "No files yet"
-            configurationFileSubtitle?.stringValue = "Create a file to configure this category"
-            configurationStatus?.stringValue = "No configuration file selected"
+            configurationFileTitle?.stringValue = tr("No files yet")
+            configurationFileSubtitle?.stringValue = tr("Create a file to configure this category")
+            configurationStatus?.stringValue = tr("No configuration file selected")
             configurationSaveButton?.isEnabled = false
             configurationDeleteButton?.isEnabled = false
         }
@@ -3412,15 +3456,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     private func configurationSummary(for file: URL, content: String) -> String {
-        "\(file.pathExtension.uppercased()) · \(content.components(separatedBy: "\n").count) lines · UTF-8"
+        tr("%@ · %@ lines · UTF-8", file.pathExtension.uppercased(), content.components(separatedBy: "\n").count)
     }
 
     private func updateConfigurationEditedState() {
         let edited = hasUnsavedConfigurationChanges
         configurationWindow?.isDocumentEdited = edited
         if edited {
-            configurationStatus?.stringValue = "Edited · unsaved changes · ⌘S to review and save"
-        } else if configurationStatus?.stringValue.hasPrefix("Edited") == true,
+            configurationStatus?.stringValue = tr("Edited · unsaved changes · ⌘S to review and save")
+        } else if configurationStatus?.stringValue.hasPrefix(tr("Edited")) == true,
                   let file = activeConfigurationFile, let saved = configurationSavedContent {
             configurationStatus?.stringValue = configurationSummary(for: file, content: saved)
         }
@@ -3457,9 +3501,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         configurationFileSubtitle?.toolTip = file.path
         guard let data = try? Data(contentsOf: file), data.count <= 1_000_000,
               let content = String(data: data, encoding: .utf8) else {
-            configurationEditor?.string = "This file cannot be displayed as editable UTF-8 text."
+            configurationEditor?.string = tr("This file cannot be displayed as editable UTF-8 text.")
             configurationEditor?.isEditable = false
-            configurationStatus?.stringValue = "Read-only · this file is not editable UTF-8 text"
+            configurationStatus?.stringValue = tr("Read-only · this file is not editable UTF-8 text")
             configurationSaveButton?.isEnabled = false
             configurationDeleteButton?.isEnabled = false
             activeConfigurationFile = nil
@@ -3480,15 +3524,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     @objc private func createConfigurationFile() {
         guard let category = activeConfigurationCategory,
               category.paths.contains(where: { $0.pathExtension.isEmpty }) else {
-            presentConfigurationError("New files can only be created inside a managed Skills, Agents, Rules, Commands, or Hooks folder.")
+            presentConfigurationError(tr("New files can only be created inside a managed Skills, Agents, Rules, Commands, or Hooks folder."))
             return
         }
         guard resolveUnsavedConfigurationChanges() else { return }
         let alert = NSAlert()
-        alert.messageText = "New \(category.title) file"
-        alert.informativeText = "Use letters, numbers, dots, underscores, or dashes. The file remains inside this configuration category."
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = tr("New %@ file", category.displayTitle)
+        alert.informativeText = tr("Use letters, numbers, dots, underscores, or dashes. The file remains inside this configuration category.")
+        alert.addButton(withTitle: tr("Create"))
+        alert.addButton(withTitle: tr("Cancel"))
         let nameField = NSTextField(string: "new-item.md")
         nameField.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
         alert.accessoryView = nameField
@@ -3504,7 +3548,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             refreshConfigurationFiles()
             loadConfigurationFile(file)
         } catch {
-            presentConfigurationError("Could not create the file.")
+            presentConfigurationError(tr("Could not create the file."))
         }
     }
 
@@ -3529,7 +3573,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let location = NSRange(location: min(error.offset, (newContent as NSString).length), length: 0)
             editor.setSelectedRange(location)
             editor.scrollRangeToVisible(location)
-            configurationStatus?.stringValue = "Syntax error · \(error)"
+            configurationStatus?.stringValue = tr("Syntax error · %@", error)
             // JSON readers reject any error outright; the TOML check is structural, so it only warns.
             let canOverride = file.pathExtension.lowercased() == "toml"
             guard presentConfigurationSyntaxProblem(error, file, canOverride), canOverride else { return false }
@@ -3539,12 +3583,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             try backupConfigurationFile(file)
             try newContent.write(to: file, atomically: true, encoding: .utf8)
             configurationSavedContent = newContent
-            configurationStatus?.stringValue = "Saved with backup · \(file.path)"
+            configurationStatus?.stringValue = tr("Saved with backup · %@", file.path)
             updateConfigurationEditedState()
             refreshInventory()
             return true
         } catch {
-            presentConfigurationError("Could not save this file. The original was not replaced.")
+            presentConfigurationError(tr("Could not save this file. The original was not replaced."))
             return false
         }
     }
@@ -3552,10 +3596,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     @objc private func deleteConfigurationFile() {
         guard let file = activeConfigurationFile, isManagedConfigurationFile(file) else { return }
         let alert = NSAlert()
-        alert.messageText = "Delete \(file.lastPathComponent)?"
-        alert.informativeText = "A backup will be saved first. This cannot be undone from AI Island."
-        alert.addButton(withTitle: "Delete with backup")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = tr("Delete %@?", file.lastPathComponent)
+        alert.informativeText = tr("A backup will be saved first. This cannot be undone from AI Island.")
+        alert.addButton(withTitle: tr("Delete with backup"))
+        alert.addButton(withTitle: tr("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             try backupConfigurationFile(file)
@@ -3563,7 +3607,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             refreshConfigurationFiles()
             refreshInventory()
         } catch {
-            presentConfigurationError("Could not delete this file.")
+            presentConfigurationError(tr("Could not delete this file."))
         }
     }
 
@@ -3599,7 +3643,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = message
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: tr("OK"))
         alert.runModal()
     }
 }

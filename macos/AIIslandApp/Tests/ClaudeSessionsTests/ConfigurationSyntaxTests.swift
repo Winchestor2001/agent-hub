@@ -29,23 +29,23 @@ final class ConfigurationSyntaxTests: XCTestCase {
     }
 
     func testJSONTrailingComma() {
-        assertError(ConfigurationSyntax.validateJSON("{\n  \"a\": 1,\n}"), line: 3, column: 1, contains: "Trailing comma")
+        assertError(ConfigurationSyntax.validateJSON("{\n  \"a\": 1,\n}"), line: 3, column: 1, contains: "oldidan vergul")
     }
 
     func testJSONMissingComma() {
-        assertError(ConfigurationSyntax.validateJSON("{\n  \"a\": 1\n  \"b\": 2\n}"), line: 3, column: 3, contains: "Expected ',' or '}'")
+        assertError(ConfigurationSyntax.validateJSON("{\n  \"a\": 1\n  \"b\": 2\n}"), line: 3, column: 3, contains: "',' yoki '}' kutilgan")
     }
 
     func testJSONUnquotedKeyAndComment() {
-        assertError(ConfigurationSyntax.validateJSON("{ model: 1 }"), line: 1, column: 3, contains: "quoted property name")
-        assertError(ConfigurationSyntax.validateJSON("{\n// note\n}"), line: 2, column: 1, contains: "quoted property name")
+        assertError(ConfigurationSyntax.validateJSON("{ model: 1 }"), line: 1, column: 3, contains: "Qoʻshtirnoqli xossa nomi")
+        assertError(ConfigurationSyntax.validateJSON("{\n// note\n}"), line: 2, column: 1, contains: "Qoʻshtirnoqli xossa nomi")
     }
 
     func testJSONUnterminatedStringAndTrailingText() {
-        assertError(ConfigurationSyntax.validateJSON("{\"a\": \"b}"), line: 1, column: 7, contains: "Unterminated string")
-        assertError(ConfigurationSyntax.validateJSON("{}\nRegression draft"), line: 2, column: 1, contains: "after the JSON value")
-        assertError(ConfigurationSyntax.validateJSON(""), line: 1, column: 1, contains: "end of file")
-        assertError(ConfigurationSyntax.validateJSON("{\"a\": 01}"), line: 1, column: 8, contains: "leading zeros")
+        assertError(ConfigurationSyntax.validateJSON("{\"a\": \"b}"), line: 1, column: 7, contains: "Yopilmagan satr")
+        assertError(ConfigurationSyntax.validateJSON("{}\nRegression draft"), line: 2, column: 1, contains: "JSON qiymatidan keyin")
+        assertError(ConfigurationSyntax.validateJSON(""), line: 1, column: 1, contains: "fayl oxiri")
+        assertError(ConfigurationSyntax.validateJSON("{\"a\": 01}"), line: 1, column: 8, contains: "boshida nol")
     }
 
     // MARK: TOML
@@ -88,28 +88,28 @@ final class ConfigurationSyntaxTests: XCTestCase {
     }
 
     func testTOMLUnquotedString() {
-        assertError(ConfigurationSyntax.validateTOML("model = gpt-5\n"), line: 1, column: 9, contains: "strings must be quoted")
+        assertError(ConfigurationSyntax.validateTOML("model = gpt-5\n"), line: 1, column: 9, contains: "qoʻshtirnoqda boʻlishi kerak")
     }
 
     func testTOMLMissingEqualsAndUnclosedHeader() {
-        assertError(ConfigurationSyntax.validateTOML("a = 1\nmodel \"x\""), line: 2, column: 7, contains: "Expected '='")
-        assertError(ConfigurationSyntax.validateTOML("[mcp_servers.docs\ncommand = \"npx\""), line: 1, column: 18, contains: "close the table header")
+        assertError(ConfigurationSyntax.validateTOML("a = 1\nmodel \"x\""), line: 2, column: 7, contains: "'=' kutilgan")
+        assertError(ConfigurationSyntax.validateTOML("[mcp_servers.docs\ncommand = \"npx\""), line: 1, column: 18, contains: "sarlavhasini yopish")
     }
 
     func testTOMLUnterminatedStringsAndArrays() {
-        assertError(ConfigurationSyntax.validateTOML("a = \"open\nb = 1"), line: 1, column: 10, contains: "Line break inside a string")
-        assertError(ConfigurationSyntax.validateTOML("a = \"\"\"never closed"), line: 1, column: 5, contains: "Unterminated multi-line")
-        assertError(ConfigurationSyntax.validateTOML("a = [1, 2\nb = 3"), line: 2, column: 1, contains: "Expected ',' or ']'")
+        assertError(ConfigurationSyntax.validateTOML("a = \"open\nb = 1"), line: 1, column: 10, contains: "Satr ichida qator uzilishi")
+        assertError(ConfigurationSyntax.validateTOML("a = \"\"\"never closed"), line: 1, column: 5, contains: "Yopilmagan koʻp qatorli")
+        assertError(ConfigurationSyntax.validateTOML("a = [1, 2\nb = 3"), line: 2, column: 1, contains: "',' yoki ']' kutilgan")
     }
 
     func testTOMLDuplicates() {
-        assertError(ConfigurationSyntax.validateTOML("a = 1\na = 2"), line: 2, column: 1, contains: "Duplicate key 'a'")
-        assertError(ConfigurationSyntax.validateTOML("[x]\na = 1\n[x]\nb = 2"), line: 3, column: 1, contains: "more than once")
+        assertError(ConfigurationSyntax.validateTOML("a = 1\na = 2"), line: 2, column: 1, contains: "Takroriy kalit: 'a'")
+        assertError(ConfigurationSyntax.validateTOML("[x]\na = 1\n[x]\nb = 2"), line: 3, column: 1, contains: "bir necha marta")
         XCTAssertNil(ConfigurationSyntax.validateTOML("[x]\na = 1\n[y]\na = 2"))
     }
 
     func testTOMLTextAfterValue() {
-        assertError(ConfigurationSyntax.validateTOML("a = 1 2"), line: 1, column: 7, contains: "end of the line")
+        assertError(ConfigurationSyntax.validateTOML("a = 1 2"), line: 1, column: 7, contains: "Qator oxiri")
     }
 
     func testOtherExtensionsAreNotChecked() {
