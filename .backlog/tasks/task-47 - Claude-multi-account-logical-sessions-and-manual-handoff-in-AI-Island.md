@@ -1,11 +1,11 @@
 ---
 id: TASK-47
 title: Claude multi-account logical sessions and manual handoff in AI Island
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-10-07 07:58'
-updated_date: '2026-10-08 18:54'
+updated_date: '2026-10-11 07:09'
 labels: []
 dependencies: []
 type: feature
@@ -22,8 +22,8 @@ Keep two Claude Pro identities isolated while continuing a local project convers
 <!-- AC:BEGIN -->
 - [x] #1 Two independently authenticated config directories with no credentials copied or persisted by the manager
 - [x] #2 SQLite logical and physical sessions, manual fork handoff, durable locks, git snapshots and history
-- [ ] #3 Accounts, project session controls, readiness, usage and safe diagnostics in native UI and island
-- [ ] #4 Failure and isolation regression tests pass; real A to B to A continuation verified with two signed-in accounts
+- [x] #3 Accounts, project session controls, readiness, usage and safe diagnostics in native UI and island
+- [x] #4 Failure and isolation regression tests pass; real A to B to A continuation verified with two signed-in accounts
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -46,4 +46,12 @@ Keep two Claude Pro identities isolated while continuing a local project convers
 - Qolgani: AC#3 (native oyna va island UI qo'lda ko'rish) va AC#4 (ikki haqiqiy Claude akkaunt bilan A->B->A) foydalanuvchi login qilishini talab qiladi.
 
 2026-10-08: Foydalanuvchi akkauntlar orasida o'tishni terminalda 'cca' (TASK-50) orqali muvaffaqiyatli sinadi. AI Island 'Continue with…' orqali qo'lda tekshiruv (AC#3, AC#4) hali qilinmagan — foydalanuvchi keyinroq sinaydi.
+
+2026-10-11: Foydalanuvchi AI Island'da 'Continue with…' orqali ikki haqiqiy Claude akkaunti bilan A->B->A davomini qoʻlda sinadi va ishlaganini tasdiqladi (AC#3, AC#4). Native UI va orol TASK-53 doirasida release ilovada skrinshotlar bilan koʻrib chiqilgan (TASK-53.12, 53.13, 53.16). swift test 60/60, accounts regressiyasi 35 PASS.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Ikki Claude Pro akkaunti alohida config papkalarda, credential nusxalanmagan holda ishlaydi. SQLite logical/physical sessiyalar, qoʻlda fork handoff, doimiy locklar, git snapshot va tarix qoʻshildi; Accounts oynasi, sessiya boshqaruvi, readiness, usage va diagnostika native UI hamda orolga integratsiya qilindi. Tekshiruv: swift test 60/60, izolyatsiya/xato regressiyalari va accounts regressiyasi (35) PASS; foydalanuvchi ikki haqiqiy akkaunt bilan A->B->A davomini AI Island orqali qoʻlda tasdiqladi.
+<!-- SECTION:FINAL_SUMMARY:END -->
