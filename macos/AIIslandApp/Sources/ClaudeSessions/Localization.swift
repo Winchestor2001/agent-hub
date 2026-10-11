@@ -7,7 +7,7 @@ import Foundation
 public enum Language: Sendable {
     case english, uzbek
 
-    public static let current: Language = .uzbek
+    public static let current: Language = .english
 
     var table: [String: String] {
         switch self {

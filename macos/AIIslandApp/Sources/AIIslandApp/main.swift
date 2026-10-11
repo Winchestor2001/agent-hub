@@ -1139,7 +1139,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             view.layoutSubtreeIfNeeded()
             let card = allViews(view).first { $0.layer?.cornerRadius == 13 && seven.isDescendant(of: $0) }
             let needed = seven.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: seven.frame.width, height: 1_000)).height ?? .infinity
-            check(seven.frame.height > five.frame.height * 1.5 && needed <= seven.frame.height + 1
+            // Whether the caption needs a second line depends on the interface language.
+            let fitsOneLine = (seven.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: 10_000, height: 1_000)).width ?? .infinity) <= seven.frame.width
+            check((fitsOneLine || seven.frame.height > five.frame.height * 1.5) && needed <= seven.frame.height + 1
                   && card.map { $0.bounds.contains(seven.convert(seven.bounds, to: $0)) } == true,
                   "A caption too long for one line wraps to a second line inside its card instead of cutting off the reset time")
         } else {

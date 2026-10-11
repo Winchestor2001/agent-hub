@@ -56,7 +56,8 @@ final class LocalizationTests: XCTestCase {
 
     func testMissingTranslationFallsBackToEnglish() {
         XCTAssertEqual(tr("No such interface text %@", 7), "No such interface text 7")
-        XCTAssertEqual(tr("Settings"), "Sozlamalar")
+        XCTAssertEqual(tr("Settings"), "Settings")  // The interface is English.
+        XCTAssertEqual(Localization.uzbek["Settings"], "Sozlamalar")
     }
 
     func testEveryInterfaceStringHasATranslation() {
@@ -76,7 +77,7 @@ final class LocalizationTests: XCTestCase {
     func testTranslatedValuesFromDataHaveTranslations() {
         for error in SessionError.allCases {
             XCTAssertNotNil(Localization.uzbek[error.rawValue], "Missing Uzbek text for \(error)")
-            XCTAssertNotEqual(error.message, error.rawValue)
+            XCTAssertEqual(error.message, tr(error.rawValue))
         }
         // Readiness names and statuses, and history event kinds, are stored in English.
         var stored: [String] = ["Project skills", "Agents", "Project config", "Project MCP declarations"]
