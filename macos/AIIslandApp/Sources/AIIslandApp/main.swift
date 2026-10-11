@@ -805,6 +805,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let updateText = updateOpened.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
             check(updateOpened?.pathExtension == "command" && updateText.contains("for cli in claude codex") && updateText.contains("\"$cli\" update"),
                   "Update opens a Terminal script that updates Claude Code and Codex")
+            check(updateText.contains("*/Caskroom/*/*)") && updateText.contains("brew upgrade --cask \"$cask\""),
+                  "Update upgrades a Homebrew cask install with brew instead of the CLI's own updater")
             let popoverWindow = NSWindow(contentRect: popoverView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             popoverWindow.contentView = popoverView; popoverView.layoutSubtreeIfNeeded()
             if let bitmap = popoverView.bitmapImageRepForCachingDisplay(in: popoverView.bounds) {
@@ -2624,15 +2626,30 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return tr("Resets at %@", formatter.string(from: date))
     }
 
-    /// Runs each CLI's own updater (it knows whether it came from Homebrew, npm or a native install).
+    /// Upgrades a Homebrew cask install with brew (`claude update` only prints the brew command),
+    /// otherwise runs the CLI's own updater (npm or a native install).
     static let updateScript = """
     #!/bin/sh
     # AI Island: update Claude Code and Codex CLI.
+    PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+    # Prints the Homebrew cask that owns the CLI, e.g. claude-code@latest.
+    cask_of() {
+      real=$(realpath "$(command -v "$1")" 2>/dev/null) || return 1
+      case "$real" in
+        */Caskroom/*/*) rest=${real#*/Caskroom/}; echo "${rest%%/*}" ;;
+        *) return 1 ;;
+      esac
+    }
     for cli in claude codex; do
       echo
       if command -v "$cli" >/dev/null 2>&1; then
         echo "==> \(tr("Updating %@", "$cli")) ($("$cli" --version 2>/dev/null | head -1))"
-        "$cli" update || echo "\(tr("%@ update failed.", "$cli"))"
+        if cask=$(cask_of "$cli") && command -v brew >/dev/null 2>&1; then
+          echo "    \(tr("via Homebrew: %@", "brew upgrade --cask $cask"))"
+          brew upgrade --cask "$cask" || echo "\(tr("%@ update failed.", "$cli"))"
+        else
+          "$cli" update || echo "\(tr("%@ update failed.", "$cli"))"
+        fi
         echo "==> \(tr("%@ is now %@", "$cli", #"$("$cli" --version 2>/dev/null | head -1)"#))"
       else
         echo "==> \(tr("%@ not found, skipped.", "$cli"))"

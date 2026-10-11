@@ -246,6 +246,7 @@ public enum Localization {
         " · resets in %@": " · yangilanishiga %@",
         "Resets at %@": "Yangilanish vaqti: %@",
         "Updating %@": "%@ yangilanmoqda",
+        "via Homebrew: %@": "Homebrew orqali: %@",
         "%@ update failed.": "%@ yangilanmadi.",
         "%@ is now %@": "%@ versiyasi endi: %@",
         "%@ not found, skipped.": "%@ topilmadi, oʻtkazib yuborildi.",
