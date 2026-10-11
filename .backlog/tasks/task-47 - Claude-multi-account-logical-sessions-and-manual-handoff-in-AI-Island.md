@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-10-07 07:58'
-updated_date: '2026-10-07 11:01'
+updated_date: '2026-10-08 18:54'
 labels: []
 dependencies: []
 type: feature
@@ -44,4 +44,6 @@ Keep two Claude Pro identities isolated while continuing a local project convers
 - AC#2 dalili: testLiveFixtureForkAtoBtoAWithHooksAndDirtyGit (SQLite logical/physical, 2 ta completed handoff, git branch/HEAD o'zgarmaydi, locklar bo'shatiladi), testProjectReservationIsDurableAcrossConnections, testOSLockExcludesAnotherOwner, testFailedForkRestoresSourcePointerAndRetainsSnapshot, testStopLiveProcessWaitsForRunnerAndReleasesLock.
 - .gitignore'ga macos/AIIslandApp/.build/ qo'shildi; build-ai-island-app.sh dist/ yo'q bo'lsa yaratadi; sh scripts/build-ai-island-app.sh OK.
 - Qolgani: AC#3 (native oyna va island UI qo'lda ko'rish) va AC#4 (ikki haqiqiy Claude akkaunt bilan A->B->A) foydalanuvchi login qilishini talab qiladi.
+
+2026-10-08: Foydalanuvchi akkauntlar orasida o'tishni terminalda 'cca' (TASK-50) orqali muvaffaqiyatli sinadi. AI Island 'Continue with…' orqali qo'lda tekshiruv (AC#3, AC#4) hali qilinmagan — foydalanuvchi keyinroq sinaydi.
 <!-- SECTION:NOTES:END -->
