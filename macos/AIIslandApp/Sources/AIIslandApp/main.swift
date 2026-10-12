@@ -2269,7 +2269,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.contentTintColor = accent
         let resource = provider == .codex ? "codex" : "claude"
-        if let url = Bundle.module.url(forResource: resource, withExtension: "svg"),
+        if let url = Self.resourceBundle?.url(forResource: resource, withExtension: "svg", subdirectory: "Resources"),
            let image = NSImage(contentsOf: url) {
             image.isTemplate = true
             imageView.image = image
@@ -2281,6 +2281,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         imageView.toolTip = provider.rawValue
         return imageView
     }
+
+    /// SwiftPM's generated `Bundle.module` traps unless the resource bundle sits
+    /// at the .app root or at the absolute build path baked in at compile time,
+    /// which breaks as soon as the repository moves. The packaged app ships the
+    /// bundle in Contents/Resources; only `swift run` falls back to `Bundle.module`.
+    private static let resourceBundle: Bundle? = {
+        if let url = Bundle.main.url(forResource: "AIIslandApp_AIIslandApp", withExtension: "bundle") {
+            return Bundle(url: url)
+        }
+        return Bundle.main.bundleURL.pathExtension == "app" ? nil : Bundle.module
+    }()
 
     private func showStatusPopover() {
         guard !statusPopover.isShown else { return }

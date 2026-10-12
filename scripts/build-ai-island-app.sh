@@ -17,6 +17,9 @@ binary="$bin_dir/AIIslandApp"
 mkdir -p "$contents/MacOS"
 cp "$binary" "$contents/MacOS/AIIsland"
 chmod 755 "$contents/MacOS/AIIsland"
+# SwiftPM resources (brand SVGs); the app loads them from Contents/Resources.
+mkdir -p "$contents/Resources"
+cp -R "$bin_dir/AIIslandApp_AIIslandApp.bundle" "$contents/Resources/"
 
 /usr/bin/plutil -create xml1 "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Add :CFBundleDevelopmentRegion string en' "$contents/Info.plist"
