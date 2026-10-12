@@ -338,12 +338,87 @@ private struct ConfigurationCategory {
     let symbol: String
     let paths: [URL]
     var displayTitle: String { tr(title) }
+    /// Skills folders list one row per skill, with the skill's own files under it.
+    var groupsSkills: Bool { title == "Skills" }
 }
 
 private final class ConfigurationCardButton: NSButton {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let localPoint = convert(point, from: superview)
         return bounds.contains(localPoint) ? self : nil
+    }
+}
+
+/// File list that expands and collapses the selected skill with the arrow keys.
+private final class ConfigurationFileTableView: NSTableView {
+    /// Called with the selected row and true for → (expand), false for ← (collapse).
+    /// Returns true when the row was a skill and the key was handled.
+    var onDisclosureKey: ((Int, Bool) -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        let expand: Bool? = switch event.keyCode {
+        case 124: true
+        case 123: false
+        default: nil
+        }
+        if let expand, onDisclosureKey?(selectedRow, expand) == true { return }
+        super.keyDown(with: event)
+    }
+}
+
+private final class ConfigurationFileCell: NSTableCellView {
+    let disclosure = NSButton()
+    let title = NSTextField(labelWithString: "")
+    let path = NSTextField(labelWithString: "")
+    private let icon = NSImageView()
+    private var iconLeading: NSLayoutConstraint!
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        disclosure.isBordered = false
+        disclosure.imagePosition = .imageOnly
+        disclosure.contentTintColor = .secondaryLabelColor
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.lineBreakMode = .byTruncatingTail
+        path.font = .systemFont(ofSize: 11, weight: .regular)
+        path.textColor = .secondaryLabelColor
+        path.lineBreakMode = .byTruncatingMiddle
+        icon.contentTintColor = .labelColor.withAlphaComponent(0.65)
+        let labels = NSStackView(views: [title, path])
+        labels.orientation = .vertical
+        labels.alignment = .leading
+        labels.spacing = 2
+        for view in [disclosure, icon, labels] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        imageView = icon
+        textField = title
+        iconLeading = icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12)
+        NSLayoutConstraint.activate([
+            disclosure.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            disclosure.centerYAnchor.constraint(equalTo: centerYAnchor),
+            disclosure.widthAnchor.constraint(equalToConstant: 18),
+            disclosure.heightAnchor.constraint(equalToConstant: 18),
+            iconLeading,
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 18),
+            icon.heightAnchor.constraint(equalToConstant: 18),
+            labels.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10),
+            labels.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            labels.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// `grouped` leaves room for the disclosure chevron; `depth` 1 indents a skill's file.
+    func configure(symbol: String, title: String, path: String, grouped: Bool, depth: Int) {
+        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        self.title.stringValue = title
+        self.path.stringValue = path
+        self.path.isHidden = path.isEmpty
+        iconLeading.constant = grouped ? 30 + CGFloat(depth) * 18 : 12
     }
 }
 
@@ -538,8 +613,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return .standard
     }()
     private var configurationTable: NSTableView?
-    private var configurationFiles: [URL] = []
+    private var configurationRows: [ConfigurationRow] = []
+    /// The file each visible row opens, in row order.
+    private var configurationFiles: [URL] { configurationRows.map(\.file) }
     private var allConfigurationFiles: [URL] = []
+    /// Set while a Skills category is open; groups its files by skill.
+    private var configurationSkillTree: SkillTree?
+    private var expandedSkillFolders: Set<String> = []
     private var configurationFileCount: NSTextField?
     private var configurationSearch: NSSearchField?
     private var configurationFileTitle: NSTextField?
@@ -1339,7 +1419,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                         try require(configurationWindow?.isVisible == true, "Editor did not reopen")
                         let count = managedFiles().count
                         let listed = configurationTable?.numberOfRows ?? -1
-                        try require(count == listed, "File count differs from list")
+                        try require(allConfigurationFiles.count == count && configurationRows.count == listed, "File count differs from list")
+                        if let tree = configurationSkillTree {
+                            try require(listed == tree.skills.count + tree.looseFiles.count && tree.fileCount == count,
+                                        "Skills list does not show one collapsed row per skill")
+                            if let row = configurationRows.firstIndex(where: { if case .skill(_, let files) = $0.kind { files > 1 } else { false } }),
+                               let table = configurationTable, let skill = configurationRows[row].skillFolder.flatMap({ folder in tree.skills.first { $0.folder == folder } }) {
+                                try require(setSkillExpanded(true, atRow: row) && table.numberOfRows == listed + skill.files.count
+                                            && configurationFiles[(row + 1)...].prefix(skill.files.count).elementsEqual(skill.files),
+                                            "Expanding a skill does not list its files under it")
+                                try require(setSkillExpanded(false, atRow: row) && table.numberOfRows == listed, "Collapsing a skill does not hide its files")
+                                checks.append("PASS skills: \(button.identifier?.rawValue ?? "unknown") — \(tree.skills.count) skills, \(count) files, \(skill.name) expands to \(skill.files.count)")
+                            }
+                        }
                         guard let table = configurationTable, let scroll = table.enclosingScrollView else {
                             throw RegressionFailure(message: "Missing file table")
                         }
@@ -1363,7 +1455,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             try await Task.sleep(for: .milliseconds(30))
                             table.scrollRowToVisible(0)
                             let visible = table.rows(in: scroll.documentVisibleRect).length
-                            if count > 10 { try require(visible >= 5, "Long file list shows fewer than five rows") }
+                            if listed > 10 { try require(visible >= 5, "Long file list shows fewer than five rows") }
                             let editorFrame = configurationEditor?.enclosingScrollView?.frame ?? .zero
                             checks.append("LAYOUT: \(button.identifier?.rawValue ?? "unknown") size=\(size) sidebar=\(scroll.frame) viewport=\(scroll.documentVisibleRect) editor=\(editorFrame) visible=\(visible)")
                             try require(editorFrame.width >= 200 && editorFrame.height >= 150, "Editor collapsed on resize")
@@ -1374,7 +1466,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                     try require(root.bounds.contains(action.convert(action.bounds, to: root)), "Editor action clipped on resize")
                                 }
                             }
-                            for index in Set([0, count / 2, count - 1]).sorted() where configurationFiles.indices.contains(index) {
+                            for index in Set([0, listed / 2, listed - 1]).sorted() where configurationFiles.indices.contains(index) {
                                 table.scrollRowToVisible(index)
                                 table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
                                 try await Task.sleep(for: .milliseconds(20))
@@ -1405,11 +1497,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                             if let first = allConfigurationFiles.first {
                                 search.stringValue = first.lastPathComponent
                                 NSApp.sendAction(search.action!, to: search.target, from: search)
-                                try require(!configurationFiles.isEmpty && configurationFiles.allSatisfy { displayedFilePath($0).localizedCaseInsensitiveContains(search.stringValue) }, "Search returned incorrect files")
+                                // A skill row may be listed only as the parent of a matching file.
+                                let query = search.stringValue
+                                try require(!configurationRows.isEmpty && configurationRows.indices.allSatisfy { index in
+                                    let row = configurationRows[index]
+                                    if displayedFilePath(row.file).localizedCaseInsensitiveContains(query) { return true }
+                                    guard case .skill = row.kind, configurationRows.indices.contains(index + 1) else { return false }
+                                    return configurationRows[index + 1].kind == .attached
+                                }, "Search returned incorrect files")
                             }
                             search.stringValue = ""
                             NSApp.sendAction(search.action!, to: search.target, from: search)
-                            try require(table.numberOfRows == count, "Clearing search did not restore files")
+                            try require(table.numberOfRows == listed, "Clearing search did not restore files")
                             try require(configurationEditor?.string == draft, "Clearing search discarded the editor draft")
                             configurationEditor?.string = original
                             checks.append("PASS search: \(button.identifier?.rawValue ?? "unknown") — filter, clear, preserve draft")
@@ -2986,8 +3085,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func configurationCard(_ category: ConfigurationCategory, provider: Provider) -> NSView {
         let accent = accentColor(for: provider)
-        let fileCount = managedFiles(in: category).count
-        let status = fileCount == 0 ? tr("NOT CONFIGURED") : fileCount == 1 ? tr("%@ FILE", fileCount) : tr("%@ FILES", fileCount)
+        let files = managedFiles(in: category)
+        let fileCount = files.count
+        var status = fileCount == 0 ? tr("NOT CONFIGURED") : fileCount == 1 ? tr("%@ FILE", fileCount) : tr("%@ FILES", fileCount)
+        if category.groupsSkills, fileCount > 0 {
+            let skillCount = SkillTree(files: files).skills.count
+            status = (skillCount == 1 ? tr("%@ SKILL", 1) : tr("%@ SKILLS", skillCount)) + " · " + status
+        }
         let card = ConfigurationCardButton(title: "", target: self, action: #selector(openConfigurationCategory(_:)))
         card.identifier = NSUserInterfaceItemIdentifier("\(provider.rawValue)::\(category.title)")
         card.toolTip = tr("Click to manage %@", category.displayTitle)
@@ -3147,7 +3251,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         listScroll.hasVerticalScroller = true
         listScroll.autohidesScrollers = true
         listScroll.translatesAutoresizingMaskIntoConstraints = false
-        let table = NSTableView()
+        let table = ConfigurationFileTableView()
+        table.onDisclosureKey = { [weak self] row, expand in self?.setSkillExpanded(expand, atRow: row) ?? false }
+        table.target = self
+        table.doubleAction = #selector(toggleSkillOnDoubleClick(_:))
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("file"))
         column.title = tr("Files")
         column.width = 250
@@ -3365,6 +3472,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func refreshConfigurationFiles() {
         allConfigurationFiles = managedFiles()
+        configurationSkillTree = activeConfigurationCategory?.groupsSkills == true ? SkillTree(files: allConfigurationFiles) : nil
+        // Keep the open file visible when it sits inside a skill.
+        if let file = activeConfigurationFile, let skill = configurationSkillTree?.skill(containing: file), file != skill.main {
+            expandedSkillFolders.insert(skill.folder.path)
+        }
         configurationNewFileButton?.isEnabled = activeConfigurationCategory?.paths.contains { $0.pathExtension.isEmpty } == true
         updateConfigurationFileList(selectFirst: true)
     }
@@ -3373,13 +3485,28 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         updateConfigurationFileList(selectFirst: false)
     }
 
+    private var configurationQuery: String {
+        configurationSearch?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
     private func updateConfigurationFileList(selectFirst: Bool) {
         guard let table = configurationTable else { return }
-        let query = configurationSearch?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        configurationFiles = allConfigurationFiles.filter { query.isEmpty || displayedFilePath($0).localizedCaseInsensitiveContains(query) }
-        configurationFileCount?.stringValue = query.isEmpty
-            ? (configurationFiles.count == 1 ? tr("%@ file", 1) : tr("%@ files", configurationFiles.count))
-            : tr("%@ of %@ files", configurationFiles.count, allConfigurationFiles.count)
+        let query = configurationQuery
+        if let tree = configurationSkillTree {
+            configurationRows = tree.rows(expanded: expandedSkillFolders, query: query, path: displayedFilePath)
+            let shown = configurationRows.filter { if case .skill = $0.kind { true } else { false } }.count
+            let files = tree.fileCount == 1 ? tr("%@ file", 1) : tr("%@ files", tree.fileCount)
+            configurationFileCount?.stringValue = query.isEmpty
+                ? (tree.skills.count == 1 ? tr("%@ skill", 1) : tr("%@ skills", tree.skills.count)) + " · " + files
+                : tr("%@ of %@ skills", shown, tree.skills.count)
+        } else {
+            configurationRows = allConfigurationFiles
+                .filter { query.isEmpty || displayedFilePath($0).localizedCaseInsensitiveContains(query) }
+                .map { ConfigurationRow(file: $0, kind: .file) }
+            configurationFileCount?.stringValue = query.isEmpty
+                ? (configurationRows.count == 1 ? tr("%@ file", 1) : tr("%@ files", configurationRows.count))
+                : tr("%@ of %@ files", configurationRows.count, allConfigurationFiles.count)
+        }
         isUpdatingConfigurationTable = true
         table.deselectAll(nil)
         table.reloadData()
@@ -3406,55 +3533,76 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
+    /// Expands or collapses the skill on `row`. Returns false when the row is not a skill
+    /// with files to show, or while a search decides which files are listed.
+    @discardableResult
+    private func setSkillExpanded(_ expand: Bool, atRow row: Int) -> Bool {
+        guard configurationQuery.isEmpty, configurationRows.indices.contains(row),
+              case .skill(let expanded, let fileCount) = configurationRows[row].kind, fileCount > 1,
+              let folder = configurationRows[row].skillFolder else { return false }
+        if expand != expanded {
+            if expand { expandedSkillFolders.insert(folder.path) } else { expandedSkillFolders.remove(folder.path) }
+            updateConfigurationFileList(selectFirst: false)
+        }
+        return true
+    }
+
+    @objc private func toggleSkillDisclosure(_ sender: NSButton) {
+        guard let row = configurationTable?.row(for: sender), configurationRows.indices.contains(row),
+              case .skill(let expanded, _) = configurationRows[row].kind else { return }
+        setSkillExpanded(!expanded, atRow: row)
+    }
+
+    @objc private func toggleSkillOnDoubleClick(_ sender: NSTableView) {
+        guard configurationRows.indices.contains(sender.clickedRow),
+              case .skill(let expanded, _) = configurationRows[sender.clickedRow].kind else { return }
+        setSkillExpanded(!expanded, atRow: sender.clickedRow)
+    }
+
     func numberOfRows(in tableView: NSTableView) -> Int {
-        configurationFiles.count
+        configurationRows.count
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        guard tableView === configurationTable, configurationRows.indices.contains(row) else { return tableView.rowHeight }
+        return configurationRows[row].kind == .attached ? 34 : 46
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard configurationFiles.indices.contains(row) else { return nil }
+        guard configurationRows.indices.contains(row) else { return nil }
         let identifier = NSUserInterfaceItemIdentifier("configuration-file-cell")
-        let cell: NSTableCellView
-        if let reused = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView {
-            cell = reused
-        } else {
-            cell = NSTableCellView()
+        let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? ConfigurationFileCell ?? {
+            let cell = ConfigurationFileCell(frame: .zero)
             cell.identifier = identifier
-            let label = NSTextField(labelWithString: "")
-            label.font = .systemFont(ofSize: 13, weight: .semibold)
-            label.lineBreakMode = .byTruncatingTail
-            label.translatesAutoresizingMaskIntoConstraints = false
-            let path = NSTextField(labelWithString: "")
-            path.tag = 2
-            path.font = .systemFont(ofSize: 11, weight: .regular)
-            path.textColor = .secondaryLabelColor
-            path.lineBreakMode = .byTruncatingMiddle
-            path.translatesAutoresizingMaskIntoConstraints = false
-            let icon = NSImageView(image: NSImage(systemSymbolName: "doc.text", accessibilityDescription: nil) ?? NSImage())
-            icon.contentTintColor = .labelColor.withAlphaComponent(0.65)
-            icon.translatesAutoresizingMaskIntoConstraints = false
-            cell.imageView = icon
-            cell.textField = label
-            cell.addSubview(icon)
-            cell.addSubview(label)
-            cell.addSubview(path)
-            NSLayoutConstraint.activate([
-                icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 12),
-                icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                icon.widthAnchor.constraint(equalToConstant: 18),
-                icon.heightAnchor.constraint(equalToConstant: 18),
-                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10),
-                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -12),
-                label.topAnchor.constraint(equalTo: cell.topAnchor, constant: 7),
-                path.leadingAnchor.constraint(equalTo: label.leadingAnchor),
-                path.trailingAnchor.constraint(equalTo: label.trailingAnchor),
-                path.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 3),
-            ])
+            cell.disclosure.target = self
+            cell.disclosure.action = #selector(toggleSkillDisclosure(_:))
+            return cell
+        }()
+        let item = configurationRows[row]
+        let grouped = configurationSkillTree != nil
+        cell.disclosure.isHidden = true
+        switch item.kind {
+        case .skill(let expanded, let fileCount):
+            let folder = item.skillFolder.map(displayedFilePath) ?? ""
+            let parent = (folder as NSString).deletingLastPathComponent
+            let count = fileCount == 1 ? tr("%@ file", 1) : tr("%@ files", fileCount)
+            cell.configure(symbol: "wand.and.stars", title: item.file.deletingLastPathComponent().lastPathComponent,
+                           path: parent.isEmpty ? count : "\(count) · \(parent)", grouped: true, depth: 0)
+            if fileCount > 1, configurationQuery.isEmpty {
+                cell.disclosure.isHidden = false
+                cell.disclosure.image = NSImage(systemSymbolName: expanded ? "chevron.down" : "chevron.right",
+                                                accessibilityDescription: expanded ? tr("Collapse") : tr("Expand"))
+                cell.disclosure.toolTip = expanded ? tr("Hide this skill's files") : tr("Show this skill's files")
+            }
+        case .attached:
+            let inside = item.skillFolder.map { String(item.file.path.dropFirst($0.path.count + 1)) } ?? item.file.lastPathComponent
+            cell.configure(symbol: "doc.text", title: item.file.lastPathComponent,
+                           path: (inside as NSString).deletingLastPathComponent, grouped: true, depth: 1)
+        case .file:
+            cell.configure(symbol: "doc.text", title: item.file.lastPathComponent, path: displayedFilePath(item.file),
+                           grouped: grouped, depth: 0)
         }
-        let file = configurationFiles[row]
-        cell.textField?.stringValue = file.lastPathComponent == "SKILL.md"
-            ? file.deletingLastPathComponent().lastPathComponent : file.lastPathComponent
-        (cell.viewWithTag(2) as? NSTextField)?.stringValue = displayedFilePath(file)
-        cell.toolTip = file.path
+        cell.toolTip = item.file.path
         return cell
     }
 
@@ -3547,25 +3695,46 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return
         }
         guard resolveUnsavedConfigurationChanges() else { return }
+        let root = writableConfigurationRoot(for: category)
         let alert = NSAlert()
-        alert.messageText = tr("New %@ file", category.displayTitle)
-        alert.informativeText = tr("Use letters, numbers, dots, underscores, or dashes. The file remains inside this configuration category.")
+        let nameField = NSTextField(string: "new-item.md")
+        if category.groupsSkills {
+            alert.messageText = tr("New skill or skill file")
+            alert.informativeText = tr("Type a skill name such as backend-style to create backend-style/SKILL.md, or a path such as backend-style/references/algorithms.md to add a file to a skill. Skill names use lowercase letters, numbers, and dashes.")
+            let selected = activeConfigurationFile.flatMap { configurationSkillTree?.skill(containing: $0) }
+            nameField.stringValue = selected.map { "\(displayedFilePath($0.main).dropLast(SkillTree.mainFileName.count))references/new-file.md" } ?? "my-skill"
+        } else {
+            alert.messageText = tr("New %@ file", category.displayTitle)
+            alert.informativeText = tr("Use letters, numbers, dots, underscores, or dashes. The file remains inside this configuration category.")
+        }
         alert.addButton(withTitle: tr("Create"))
         alert.addButton(withTitle: tr("Cancel"))
-        let nameField = NSTextField(string: "new-item.md")
-        nameField.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        nameField.frame = NSRect(x: 0, y: 0, width: 320, height: 24)
         alert.accessoryView = nameField
-        guard alert.runModal() == .alertFirstButtonReturn,
-              nameField.stringValue.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).range(of: "^[A-Za-z0-9._-]+$", options: String.CompareOptions.regularExpression) != nil else { return }
-        let name = nameField.stringValue.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        let root = writableConfigurationRoot(for: category)
-        let file = root.appendingPathComponent(name)
-        guard isManagedConfigurationFile(file), !FileManager.default.fileExists(atPath: file.path) else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let input = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let relativePath = category.groupsSkills
+            ? SkillTree.newItemPath(input)
+            : input.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression).map { _ in input }
+        guard let relativePath else {
+            presentConfigurationError(tr("“%@” is not a valid name for this category.", input))
+            return
+        }
+        let file = root.appendingPathComponent(relativePath)
+        guard isManagedConfigurationFile(file) else { return }
+        guard !FileManager.default.fileExists(atPath: file.path) else {
+            presentConfigurationError(tr("%@ already exists.", relativePath))
+            return
+        }
+        let isNewSkill = file.lastPathComponent == SkillTree.mainFileName && category.groupsSkills
         do {
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try "# \(name)\n".write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let content = isNewSkill ? SkillTree.template(name: file.deletingLastPathComponent().lastPathComponent) : "# \(file.lastPathComponent)\n"
+            try content.write(to: file, atomically: true, encoding: .utf8)
+            // Refreshing selects the active file, expanding its skill when needed.
+            activeConfigurationFile = file
             refreshConfigurationFiles()
-            loadConfigurationFile(file)
+            refreshInventory()
         } catch {
             presentConfigurationError(tr("Could not create the file."))
         }
