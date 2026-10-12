@@ -593,6 +593,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private let island = IslandPanel()
     private let compactContent = NSView()
     private let statusPopover = NSPopover()
+    /// Held for the app's lifetime: a status item that is not retained is
+    /// removed from the menu bar as soon as it is deallocated.
+    private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var settingsDetailView: NSView?
     private let settingsSidebar = SettingsSidebarController()
@@ -742,6 +745,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Opening AI Island again (Spotlight, Finder) brings back a hidden island.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !island.isVisible { island.orderFrontRegardless() }
+        return true
+    }
 
     private func runAccountsRegression(report: URL) async {
         var checks: [String] = []
@@ -1745,16 +1754,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         switch item.action {
         case #selector(undoInFrontWindow): return undoManager?.canUndo == true
         case #selector(redoInFrontWindow): return undoManager?.canRedo == true
+        case #selector(toggleIsland):
+            item.title = island.isVisible ? tr("Hide Island") : tr("Show Island")
+            return true
         default: return true
         }
     }
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = item
         item.button?.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "AI Island")
         item.button?.title = " AI"
         let menu = NSMenu(title: "AI Island")
-        menu.addItem(NSMenuItem(title: tr("Show / hide island"), action: #selector(toggleIsland), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("Hide Island"), action: #selector(toggleIsland), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: tr("Open Settings…"), action: #selector(openSettings), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: tr("Claude Accounts & Sessions…"), action: #selector(openClaudeAccounts), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: tr("Refresh configuration"), action: #selector(refreshInventory), keyEquivalent: ""))
@@ -1780,6 +1793,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         collapseIsland(animated: false)
         let compactRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleExpanded))
         compactContent.addGestureRecognizer(compactRecognizer)
+        let contextMenu = NSMenu(title: "AI Island")
+        contextMenu.addItem(NSMenuItem(title: tr("Hide Island"), action: #selector(toggleIsland), keyEquivalent: ""))
+        contextMenu.addItem(NSMenuItem(title: tr("Open Settings…"), action: #selector(openSettings), keyEquivalent: ""))
+        contextMenu.addItem(.separator())
+        contextMenu.addItem(NSMenuItem(title: tr("Quit AI Island"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+        compactContent.menu = contextMenu
         // VoiceOver: a named group with the provider cells inside, and an action
         // that does what a click does.
         compactContent.setAccessibilityElement(true)
@@ -1864,8 +1883,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         island.setFrameOrigin(NSPoint(x: visible.midX - 29, y: visible.maxY - 146))
     }
 
+    /// Hides the island (and its limits card) until it is shown again from the
+    /// menu bar item or by reopening the app; the hidden state is not persisted.
     @objc private func toggleIsland() {
-        island.isVisible ? island.orderOut(nil) : island.orderFrontRegardless()
+        if island.isVisible {
+            statusPopover.performClose(nil)
+            island.orderOut(nil)
+        } else {
+            island.orderFrontRegardless()
+        }
     }
 
     @objc private func refreshInventory() {
